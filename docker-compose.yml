@@ -1,0 +1,132 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agent-platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_platform
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agent -d agent_platform']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-platform-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # https://waha.devlike.pro/docs/how-to/install/
+  # WEBJS (Chromium) necesita más shm; sin eso el QR suele fallar con "detached Frame"
+  waha:
+    image: devlikeapro/waha
+    container_name: agent-platform-waha
+    restart: unless-stopped
+    shm_size: '2gb'
+    environment:
+      WHATSAPP_API_HOSTNAME: 0.0.0.0
+      WAHA_API_KEY: ${WAHA_API_KEY:-00000000000000000000000000000000}
+      # Siempre el hostname interno del compose (no host.docker.internal)
+      WHATSAPP_HOOK_URL: http://api:3001/api/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,session.status
+      # No reenviar estados/stories, grupos, canales ni listas de difusión
+      WAHA_SESSION_CONFIG_IGNORE_STATUS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_GROUPS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_CHANNELS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_BROADCAST: 'True'
+      WAHA_PRINT_QR: 'False'
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:-admin}
+      WHATSAPP_SWAGGER_USERNAME: ${WHATSAPP_SWAGGER_USERNAME:-admin}
+      WHATSAPP_SWAGGER_PASSWORD: ${WHATSAPP_SWAGGER_PASSWORD:-admin}
+      # Estabiliza Chromium en Docker (WEBJS)
+      WAHA_ZIPPED_SESSIONS: 'False'
+      WAHA_WEBJS_PUPPETEER_ARGS: '--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--single-process'
+    ports:
+      - '3002:3000'
+    volumes:
+      - waha_sessions:/app/.sessions
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: agent-platform-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_platform?schema=public
+      REDIS_URL: redis://redis:6379
+      API_URL: ${API_URL:-http://localhost:3001}
+      ADMIN_URL: ${ADMIN_URL:-http://localhost:3000}
+      # Dentro de la red Docker la API habla con el servicio "waha" (no localhost)
+      WAHA_BASE_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY:-00000000000000000000000000000000}
+      WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/api/oauth/google/callback}
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+        NEXT_PUBLIC_ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-admin-api-key}
+        NEXT_PUBLIC_ADMIN_EMAIL: ${NEXT_PUBLIC_ADMIN_EMAIL:-admin@negocio.local}
+    container_name: agent-platform-admin
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '3000:3000'
+
+volumes:
+  postgres_data:
+  redis_data:
+  waha_sessions:
