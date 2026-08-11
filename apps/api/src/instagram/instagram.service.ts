@@ -226,6 +226,62 @@ export class InstagramService {
     return { externalId: externalId || undefined };
   }
 
+  /** Publica foto al feed de Instagram desde URL pública (Cloudinary). */
+  async uploadFeedPhotoByUrl(params: {
+    businessId: string;
+    imageUrl: string;
+    caption: string;
+  }): Promise<{ externalId?: string; raw?: unknown }> {
+    const sessionId = await this.requireSession(params.businessId);
+    const body = new URLSearchParams({
+      url: params.imageUrl,
+      caption: params.caption ?? '',
+    });
+    const data = await this.requestJson<Record<string, unknown>>(
+      '/photo/upload/by/url',
+      { method: 'POST', sessionId, body, form: true },
+    );
+    return {
+      externalId: this.extractMediaId(data),
+      raw: data,
+    };
+  }
+
+  /** Publica foto a Stories desde URL pública. */
+  async uploadStoryByUrl(params: {
+    businessId: string;
+    imageUrl: string;
+    caption?: string;
+  }): Promise<{ externalId?: string; raw?: unknown }> {
+    const sessionId = await this.requireSession(params.businessId);
+    const body = new URLSearchParams({
+      url: params.imageUrl,
+      caption: params.caption ?? '',
+      as_video: 'false',
+    });
+    const data = await this.requestJson<Record<string, unknown>>(
+      '/story/upload/by/url',
+      { method: 'POST', sessionId, body, form: true },
+    );
+    return {
+      externalId: this.extractMediaId(data),
+      raw: data,
+    };
+  }
+
+  private extractMediaId(data: Record<string, unknown>): string | undefined {
+    if (data.pk != null) return String(data.pk);
+    if (data.id != null) return String(data.id);
+    if (data.code != null) return String(data.code);
+    const media = data.media;
+    if (media && typeof media === 'object') {
+      const m = media as Record<string, unknown>;
+      if (m.pk != null) return String(m.pk);
+      if (m.id != null) return String(m.id);
+    }
+    return undefined;
+  }
+
   async getAccountInfo(sessionId: string): Promise<Record<string, unknown>> {
     const data = await this.requestJson<Record<string, unknown>>('/account', {
       method: 'GET',

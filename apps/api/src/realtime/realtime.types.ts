@@ -6,6 +6,12 @@ export const REALTIME_EVENTS = {
   WHATSAPP_QR_UPDATED: 'whatsapp.qr.updated',
   INSTAGRAM_STATUS_CHANGED: 'instagram.status.changed',
   MESSAGE_STATUS_UPDATED: 'message.status.updated',
+  CONTENT_GENERATION_STARTED: 'content.generation.started',
+  CONTENT_GENERATION_COMPLETED: 'content.generation.completed',
+  CONTENT_GENERATION_FAILED: 'content.generation.failed',
+  CONTENT_PUBLISHING: 'content.publishing',
+  CONTENT_PUBLISHED: 'content.published',
+  CONTENT_UPDATED: 'content.updated',
 } as const;
 
 export type RealtimeEventName =

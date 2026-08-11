@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Conversation } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { AgentService } from '../ai/agents/agent.service';
@@ -6,6 +7,16 @@ import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
+import {
+  alternateWhatsAppExternalIds,
+  isWhatsAppLegacyPhoneId,
+  isWhatsAppLid,
+  phoneFromDisplayName,
+  phoneFromJid,
+  phonesLikelySame,
+  pickPreferredWhatsAppConversation,
+  resolveWhatsAppExternalId,
+} from './whatsapp-chat-id.util';
 
 @Injectable()
 export class WhatsAppWebhookService {
@@ -138,13 +149,19 @@ export class WhatsAppWebhookService {
 
     const selfChat = await this.isSelfChat(businessId, chatId);
     const from = fromRaw.replace(/@s\.whatsapp\.net$/i, '@c.us');
-    const phoneCandidate = this.phoneFromPayload(payload, chatId);
     const waConfig = await this.config.getForRuntime(businessId);
+    const ownerPhone =
+      this.waha.phoneFromMeId(waConfig?.meId) ||
+      waConfig?.displayPhoneNumber ||
+      null;
+    const phoneCandidate = this.phoneFromPayload(
+      payload,
+      chatId,
+      ownerPhone,
+    );
     const phone =
       phoneCandidate ||
-      (selfChat
-        ? this.waha.phoneFromMeId(waConfig?.meId) || chatId.replace(/@.+$/, '')
-        : chatId.replace(/@.+$/, ''));
+      (selfChat ? ownerPhone || null : null);
     const contactName = selfChat
       ? 'Yo'
       : typeof payload._data === 'object' &&
@@ -580,20 +597,29 @@ export class WhatsAppWebhookService {
   private phoneFromPayload(
     payload: Record<string, unknown>,
     chatId: string,
+    ownerPhone?: string | null,
   ): string | null {
-    if (chatId.endsWith('@c.us') && !chatId.startsWith('0@')) {
-      return chatId.replace(/@c\.us$/i, '');
+    const fromChatId = phoneFromJid(chatId);
+    if (fromChatId && fromChatId !== ownerPhone) return fromChatId;
+
+    const fromMe = Boolean(payload.fromMe);
+    const primary = fromMe ? payload.to : payload.from;
+    const secondary = fromMe ? payload.from : payload.to;
+    for (const value of [primary, secondary]) {
+      const phone = phoneFromJid(
+        typeof value === 'string' ? value : null,
+      );
+      if (phone && phone !== ownerPhone) return phone;
     }
-    for (const key of ['from', 'to'] as const) {
-      const value = payload[key];
-      if (
-        typeof value === 'string' &&
-        /@c\.us$/i.test(value) &&
-        !value.startsWith('0@')
-      ) {
-        return value.replace(/@c\.us$/i, '');
-      }
-    }
+
+    const notifyName =
+      typeof payload._data === 'object' &&
+      payload._data &&
+      'notifyName' in (payload._data as object)
+        ? String((payload._data as { notifyName?: string }).notifyName)
+        : null;
+    const fromName = phoneFromDisplayName(notifyName);
+    if (fromName && fromName !== ownerPhone) return fromName;
     return null;
   }
 
@@ -604,14 +630,19 @@ export class WhatsAppWebhookService {
     phone?: string,
     contactName?: string,
   ) {
-    const existing = await this.prisma.conversation.findFirst({
-      where: {
-        businessId,
-        channel: 'WHATSAPP',
-        OR: [{ externalId: chatId }, ...(phone ? [{ externalId: phone }] : [])],
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const waConfig = await this.config.getForRuntime(businessId);
+    const ownerPhone =
+      this.waha.phoneFromMeId(waConfig?.meId) ||
+      waConfig?.displayPhoneNumber ||
+      null;
+
+    const existing = await this.findExistingConversation(
+      businessId,
+      chatId,
+      phone,
+      contactName,
+      ownerPhone,
+    );
     if (existing) {
       const metaBase =
         existing.metadata && typeof existing.metadata === 'object'
@@ -629,7 +660,7 @@ export class WhatsAppWebhookService {
       return this.prisma.conversation.update({
         where: { id: existing.id },
         data: {
-          externalId: chatId,
+          externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
           contactPhone: phone ?? existing.contactPhone,
           contactName: contactName ?? existing.contactName,
           userId,
@@ -642,6 +673,38 @@ export class WhatsAppWebhookService {
               }
             : {}),
         },
+      }).then(async (updated) => {
+        if (isWhatsAppLid(updated.externalId)) {
+          const or: Array<Record<string, unknown>> = [];
+          if (updated.contactName && updated.contactName !== 'Yo') {
+            or.push({ contactName: updated.contactName });
+          }
+          if (updated.contactPhone) {
+            or.push({ contactPhone: updated.contactPhone });
+            or.push({
+              externalId: {
+                in: alternateWhatsAppExternalIds(updated.contactPhone),
+              },
+            });
+          }
+          if (or.length) {
+            await this.prisma.conversation.updateMany({
+              where: {
+                businessId,
+                channel: 'WHATSAPP',
+                id: { not: updated.id },
+                hiddenAt: null,
+                externalId: { endsWith: '@c.us' },
+                OR: or,
+              },
+              data: {
+                hiddenAt: new Date(),
+                status: 'CLOSED',
+              },
+            });
+          }
+        }
+        return updated;
       });
     }
 
@@ -661,5 +724,98 @@ export class WhatsAppWebhookService {
         contactName,
       },
     });
+  }
+
+  private async findExistingConversation(
+    businessId: string,
+    chatId: string,
+    phone: string | undefined,
+    contactName: string | undefined,
+    ownerPhone: string | null,
+  ): Promise<Conversation | null> {
+    const candidates: Conversation[] = [];
+    const push = (row: Conversation | null | undefined) => {
+      if (!row) return;
+      if (candidates.some((c) => c.id === row.id)) return;
+      candidates.push(row);
+    };
+
+    const byExternal = await this.prisma.conversation.findMany({
+      where: {
+        businessId,
+        channel: 'WHATSAPP',
+        externalId: { in: alternateWhatsAppExternalIds(chatId) },
+      },
+      orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+      take: 10,
+    });
+    byExternal.forEach(push);
+
+    if (phone && phone !== ownerPhone) {
+      const byPhone = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          OR: [
+            { contactPhone: phone },
+            { externalId: { in: alternateWhatsAppExternalIds(phone) } },
+          ],
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 10,
+      });
+      for (const row of byPhone) {
+        const stored = row.contactPhone || phoneFromJid(row.externalId);
+        if (!stored || phonesLikelySame(stored, phone)) push(row);
+      }
+
+      const legacy = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          externalId: { endsWith: '@c.us' },
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 200,
+      });
+      for (const row of legacy) {
+        const idPhone = phoneFromJid(row.externalId);
+        if (idPhone && phonesLikelySame(idPhone, phone)) push(row);
+      }
+    }
+
+    if (contactName && contactName !== 'Yo') {
+      const byName = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          contactName,
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 10,
+      });
+      byName.forEach(push);
+    }
+
+    for (const row of [...candidates]) {
+      if (
+        isWhatsAppLegacyPhoneId(row.externalId) &&
+        row.contactName &&
+        row.contactName !== 'Yo'
+      ) {
+        const lids = await this.prisma.conversation.findMany({
+          where: {
+            businessId,
+            channel: 'WHATSAPP',
+            contactName: row.contactName,
+            externalId: { contains: '@lid' },
+          },
+          take: 5,
+        });
+        lids.forEach(push);
+      }
+    }
+
+    return pickPreferredWhatsAppConversation(candidates, chatId);
   }
 }

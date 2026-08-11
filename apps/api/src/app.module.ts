@@ -21,6 +21,7 @@ import { InstagramModule } from './instagram/instagram.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { ContentModule } from './content/content.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -60,6 +61,7 @@ import { AppService } from './app.service';
     UsersModule,
     AnalyticsModule,
     ChatModule,
+    ContentModule,
   ],
   controllers: [AppController],
   providers: [

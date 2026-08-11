@@ -180,6 +180,12 @@ export function useRealtimeInvalidation() {
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     };
 
+    const invalidateContent = () => {
+      void queryClient.invalidateQueries({ queryKey: ['content-list'] });
+      void queryClient.invalidateQueries({ queryKey: ['content-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['content'] });
+    };
+
     socket.on('connect', () => {
       invalidateConversations();
       invalidateWhatsapp();
@@ -208,6 +214,12 @@ export function useRealtimeInvalidation() {
       },
     );
     socket.on('appointment.updated', invalidateCalendar);
+    socket.on('content.generation.started', invalidateContent);
+    socket.on('content.generation.completed', invalidateContent);
+    socket.on('content.generation.failed', invalidateContent);
+    socket.on('content.publishing', invalidateContent);
+    socket.on('content.published', invalidateContent);
+    socket.on('content.updated', invalidateContent);
     socket.on('realtime.event', (envelope: { event?: string }) => {
       if (!envelope?.event) return;
       if (
@@ -217,6 +229,7 @@ export function useRealtimeInvalidation() {
         invalidateConversations();
       }
       if (envelope.event.startsWith('whatsapp')) invalidateWhatsapp();
+      if (envelope.event.startsWith('content')) invalidateContent();
     });
 
     return () => {

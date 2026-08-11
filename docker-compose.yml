@@ -41,6 +41,8 @@ services:
     shm_size: '2gb'
     environment:
       WHATSAPP_API_HOSTNAME: 0.0.0.0
+      # NOWEB: Status funciona. WEBJS está roto (isStatusRankingEnabled).
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       WAHA_API_KEY: ${WAHA_API_KEY:-00000000000000000000000000000000}
       # Siempre el hostname interno del compose (no host.docker.internal)
       WHATSAPP_HOOK_URL: http://api:3001/api/webhooks/waha
@@ -104,6 +106,7 @@ services:
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY:-00000000000000000000000000000000}
       WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       INSTAGRAM_API_URL: http://instagram:8000
       INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/api/oauth/google/callback}

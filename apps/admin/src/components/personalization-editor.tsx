@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 
-type Tab = 'general' | 'negocio' | 'horarios' | 'servicios' | 'mensajes';
+type Tab = 'general' | 'negocio' | 'marca' | 'horarios' | 'servicios' | 'mensajes';
 
 interface AgentConfig {
   id: string;
@@ -31,6 +31,18 @@ interface ServiceRow {
   enabled: boolean;
 }
 
+interface BrandingConfig {
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  visualStyle?: string | null;
+  commercialTone?: string | null;
+  targetAudience?: string | null;
+  preferNotes?: string | null;
+  avoidNotes?: string | null;
+  additionalInstructions?: string | null;
+}
+
 interface BusinessDetail {
   id: string;
   name: string;
@@ -45,6 +57,7 @@ interface BusinessDetail {
   agentConfigs?: AgentConfig[];
   businessHours?: BusinessHour[];
   services?: ServiceRow[];
+  brandingConfig?: BrandingConfig | null;
 }
 
 const TONE_OPTIONS = [
@@ -94,6 +107,15 @@ export function PersonalizationEditor() {
   const [website, setWebsite] = useState('');
   const [hours, setHours] = useState<BusinessHour[]>([]);
   const [messages, setMessages] = useState<Record<string, string>>({});
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#2563eb');
+  const [secondaryColor, setSecondaryColor] = useState('#111827');
+  const [visualStyle, setVisualStyle] = useState('');
+  const [commercialTone, setCommercialTone] = useState('');
+  const [targetAudience, setTargetAudience] = useState('');
+  const [preferNotes, setPreferNotes] = useState('');
+  const [avoidNotes, setAvoidNotes] = useState('');
+  const [brandExtra, setBrandExtra] = useState('');
 
   useEffect(() => {
     if (!data) return;
@@ -107,6 +129,16 @@ export function PersonalizationEditor() {
     setMessages(
       (data.defaultMessages as Record<string, string> | null) ?? {},
     );
+    const brand = data.brandingConfig;
+    setLogoUrl(brand?.logoUrl ?? '');
+    setPrimaryColor(brand?.primaryColor ?? '#2563eb');
+    setSecondaryColor(brand?.secondaryColor ?? '#111827');
+    setVisualStyle(brand?.visualStyle ?? '');
+    setCommercialTone(brand?.commercialTone ?? '');
+    setTargetAudience(brand?.targetAudience ?? '');
+    setPreferNotes(brand?.preferNotes ?? '');
+    setAvoidNotes(brand?.avoidNotes ?? '');
+    setBrandExtra(brand?.additionalInstructions ?? '');
     if (data.businessHours?.length) {
       setHours(data.businessHours);
     } else {
@@ -176,18 +208,41 @@ export function PersonalizationEditor() {
     },
   });
 
+  const saveBranding = useMutation({
+    mutationFn: () =>
+      api('/admin/content/branding', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          logoUrl: logoUrl.trim() || null,
+          primaryColor: primaryColor.trim() || null,
+          secondaryColor: secondaryColor.trim() || null,
+          visualStyle: visualStyle.trim() || null,
+          commercialTone: commercialTone.trim() || null,
+          targetAudience: targetAudience.trim() || null,
+          preferNotes: preferNotes.trim() || null,
+          avoidNotes: avoidNotes.trim() || null,
+          additionalInstructions: brandExtra.trim() || null,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+    },
+  });
+
   function saveCurrent() {
     if (tab === 'general') saveAssistant.mutate();
-    else if (tab === 'negocio') saveProfile.mutate();
-    else if (tab === 'horarios') saveHours.mutate();
-    else if (tab === 'mensajes') saveMessages.mutate();
+    if (tab === 'negocio') saveProfile.mutate();
+    if (tab === 'marca') saveBranding.mutate();
+    if (tab === 'horarios') saveHours.mutate();
+    if (tab === 'mensajes') saveMessages.mutate();
   }
 
   const saving =
     saveAssistant.isPending ||
     saveProfile.isPending ||
     saveHours.isPending ||
-    saveMessages.isPending;
+    saveMessages.isPending ||
+    saveBranding.isPending;
 
   if (isLoading) {
     return <p className="text-sm text-muted">Cargando personalización…</p>;
@@ -224,6 +279,7 @@ export function PersonalizationEditor() {
           [
             ['general', 'General'],
             ['negocio', 'Negocio'],
+            ['marca', 'Marca'],
             ['horarios', 'Horarios'],
             ['servicios', 'Servicios'],
             ['mensajes', 'Mensajes'],
@@ -267,6 +323,106 @@ export function PersonalizationEditor() {
               className="w-full min-h-48 rounded-lg border border-line bg-panel px-3 py-2"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
+            />
+          </label>
+        </section>
+      ) : null}
+
+      {tab === 'marca' ? (
+        <section className="panel rounded-2xl p-5 grid gap-3 sm:grid-cols-2">
+          <p className="sm:col-span-2 text-sm text-muted">
+            Guía visual y comercial para el creador de contenido (imágenes y
+            copy).
+          </p>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">URL del logo</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://…"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Color primario</span>
+            <div className="flex gap-2 items-center">
+              <input
+                type="color"
+                className="h-10 w-12 rounded border border-line bg-panel"
+                value={primaryColor || '#2563eb'}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+              />
+              <input
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+              />
+            </div>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Color secundario</span>
+            <div className="flex gap-2 items-center">
+              <input
+                type="color"
+                className="h-10 w-12 rounded border border-line bg-panel"
+                value={secondaryColor || '#111827'}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+              />
+              <input
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+              />
+            </div>
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">Estilo visual</span>
+            <textarea
+              className="w-full min-h-20 rounded-lg border border-line bg-panel px-3 py-2"
+              value={visualStyle}
+              onChange={(e) => setVisualStyle(e.target.value)}
+              placeholder="Ej. limpio, fotográfico, tipografía bold…"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Tono comercial</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={commercialTone}
+              onChange={(e) => setCommercialTone(e.target.value)}
+              placeholder="cercano, premium, divertido…"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Público objetivo</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">Preferir</span>
+            <textarea
+              className="w-full min-h-20 rounded-lg border border-line bg-panel px-3 py-2"
+              value={preferNotes}
+              onChange={(e) => setPreferNotes(e.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">Evitar</span>
+            <textarea
+              className="w-full min-h-20 rounded-lg border border-line bg-panel px-3 py-2"
+              value={avoidNotes}
+              onChange={(e) => setAvoidNotes(e.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">Instrucciones adicionales</span>
+            <textarea
+              className="w-full min-h-20 rounded-lg border border-line bg-panel px-3 py-2"
+              value={brandExtra}
+              onChange={(e) => setBrandExtra(e.target.value)}
             />
           </label>
         </section>

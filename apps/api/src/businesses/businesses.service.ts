@@ -40,6 +40,8 @@ export class BusinessesService {
           },
         },
         automations: true,
+        brandingConfig: true,
+        socialContentConfig: true,
         _count: { select: { conversations: true } },
       },
     });

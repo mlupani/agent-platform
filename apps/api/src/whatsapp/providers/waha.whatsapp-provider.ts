@@ -278,6 +278,8 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
         headers: this.headers(apiKey),
         body: JSON.stringify({
           name: session,
+          engine:
+            this.env.get<string>('WHATSAPP_DEFAULT_ENGINE')?.trim() || 'NOWEB',
           config: {
             // Evitar webhooks de estados/stories, grupos, canales y listas de difusión
             ignore: {
@@ -285,6 +287,13 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
               groups: true,
               channels: true,
               broadcast: true,
+            },
+            // NOWEB: store requerido para Status y sync de chats
+            noweb: {
+              store: {
+                enabled: true,
+                fullSync: true,
+              },
             },
             webhooks: [
               {
@@ -488,6 +497,92 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     }
     const json = (await res.json()) as WahaChatMessage[];
     return Array.isArray(json) ? json : [];
+  }
+
+  async sendImageStatus(params: {
+    businessId: string;
+    imageUrl: string;
+    caption?: string;
+    mimetype?: string;
+    filename?: string;
+  }): Promise<{ externalId?: string; raw?: unknown }> {
+    const waConfig = await this.config.getForRuntime(params.businessId);
+    if (!waConfig?.enabled) {
+      throw new Error('WhatsApp no está habilitado para este negocio');
+    }
+
+    const baseUrl = this.resolveBaseUrl(waConfig.wahaBaseUrl);
+    const apiKey = await this.config.getWahaApiKey(params.businessId);
+    const session = waConfig.sessionName || 'default';
+    const mimetype = params.mimetype || 'image/jpeg';
+    const filename =
+      params.filename ||
+      `status.${mimetype.includes('png') ? 'png' : 'jpg'}`;
+
+    const res = await fetch(
+      `${baseUrl}/api/${encodeURIComponent(session)}/status/image`,
+      {
+        method: 'POST',
+        headers: this.headers(apiKey),
+        body: JSON.stringify({
+          file: {
+            mimetype,
+            url: params.imageUrl,
+            filename,
+          },
+          caption: params.caption?.trim() || undefined,
+          contacts: null,
+        }),
+      },
+    );
+
+    const text = await res.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      json = { raw: text };
+    }
+
+    if (!res.ok) {
+      const nested =
+        json.exception &&
+        typeof json.exception === 'object' &&
+        json.exception &&
+        'message' in json.exception
+          ? String((json.exception as { message: unknown }).message)
+          : '';
+      const raw =
+        nested ||
+        (typeof json.message === 'string' && json.message) ||
+        (typeof json.error === 'string' && json.error) ||
+        text ||
+        `WAHA status image failed (${res.status})`;
+
+      if (/isStatusRankingEnabled|StatusUtils|Status ranking/i.test(raw)) {
+        throw Object.assign(
+          new Error(
+            'WAHA (motor WEBJS) no puede publicar Status por un bug de WhatsApp Web. Reiniciá WAHA con WHATSAPP_DEFAULT_ENGINE=NOWEB y volvé a escanear el QR en Integraciones.',
+          ),
+          { status: res.status },
+        );
+      }
+
+      throw Object.assign(new Error(raw.slice(0, 500)), { status: res.status });
+    }
+
+    return {
+      externalId: this.normalizeMessageId(
+        (json.id as string | { id?: string; _serialized?: string } | undefined) ??
+          null,
+        typeof json.key === 'object' &&
+          json.key &&
+          'id' in (json.key as object)
+          ? String((json.key as { id?: unknown }).id ?? '')
+          : undefined,
+      ),
+      raw: json,
+    };
   }
 
   mapSessionStatus(sessionStatus?: string | null): string {

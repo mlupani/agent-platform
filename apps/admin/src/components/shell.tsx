@@ -60,6 +60,17 @@ const NAV = [
     ),
   },
   {
+    href: '/content',
+    label: 'Contenido',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M8 14l2.5-3 2 2.5L15.5 10 16 14" />
+        <circle cx="9" cy="8.5" r="1" />
+      </svg>
+    ),
+  },
+  {
     href: '/integrations',
     label: 'Integraciones',
     icon: (
@@ -83,9 +94,11 @@ function adminEmail() {
 function NavLinks({
   pathname,
   onNavigate,
+  contentBadge = 0,
 }: {
   pathname: string;
   onNavigate?: () => void;
+  contentBadge?: number;
 }) {
   return (
     <nav className="p-3 flex flex-col gap-1">
@@ -94,6 +107,8 @@ function NavLinks({
           item.href === '/'
             ? pathname === '/'
             : pathname.startsWith(item.href);
+        const badge =
+          item.href === '/content' && contentBadge > 0 ? contentBadge : 0;
         return (
           <Link
             key={item.href}
@@ -108,7 +123,15 @@ function NavLinks({
             <span className={active ? 'text-white' : 'text-muted'}>
               {item.icon}
             </span>
-            {item.label}
+            <span className="flex-1 truncate">{item.label}</span>
+            {badge > 0 ? (
+              <span
+                className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-semibold text-white tabular-nums"
+                aria-label={`${badge} sin publicar`}
+              >
+                {badge > 99 ? '99+' : badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -125,6 +148,14 @@ export function Shell({ children }: { children: ReactNode }) {
     queryFn: () => api<Business>('/admin/business'),
     staleTime: 60_000,
   });
+  const { data: contentSummary } = useQuery({
+    queryKey: ['content-summary'],
+    queryFn: () =>
+      api<{ drafts: number }>('/admin/content/summary'),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const contentBadge = contentSummary?.drafts ?? 0;
 
   const email = adminEmail();
   const initial = email.slice(0, 1).toUpperCase();
@@ -162,7 +193,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh grid lg:grid-cols-[240px_1fr] bg-ink">
       <aside className="hidden lg:flex lg:flex-col border-r border-line bg-panel">
         {brand}
-        <NavLinks pathname={pathname} />
+        <NavLinks pathname={pathname} contentBadge={contentBadge} />
       </aside>
 
       {menuOpen ? (
@@ -187,7 +218,11 @@ export function Shell({ children }: { children: ReactNode }) {
                 </svg>
               </button>
             </div>
-            <NavLinks pathname={pathname} onNavigate={() => setMenuOpen(false)} />
+            <NavLinks
+              pathname={pathname}
+              contentBadge={contentBadge}
+              onNavigate={() => setMenuOpen(false)}
+            />
           </aside>
         </div>
       ) : null}

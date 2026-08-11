@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Conversation } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
 import type {
@@ -6,6 +7,16 @@ import type {
   WahaChatOverview,
 } from './providers/waha.whatsapp-provider';
 import { WhatsAppConfigService } from './whatsapp-config.service';
+import {
+  alternateWhatsAppExternalIds,
+  isWhatsAppLid,
+  isWhatsAppLegacyPhoneId,
+  phoneFromDisplayName,
+  phoneFromJid,
+  phonesLikelySame,
+  pickPreferredWhatsAppConversation,
+  resolveWhatsAppExternalId,
+} from './whatsapp-chat-id.util';
 
 @Injectable()
 export class WahaConversationsSyncService {
@@ -178,6 +189,10 @@ export class WahaConversationsSyncService {
     }
 
     const selfIds = await this.resolveSelfChatIds(businessId);
+    const ownerPhone =
+      this.waha.phoneFromMeId(waConfig.meId) ||
+      waConfig.displayPhoneNumber ||
+      null;
 
     const agent = await this.prisma.agentConfig.findFirst({
       where: { businessId, isDefault: true },
@@ -189,18 +204,14 @@ export class WahaConversationsSyncService {
       if (!chatId) continue;
       if (this.shouldSkipChat(chatId, chat)) continue;
 
-      const phone =
-        this.phoneFromChat(chat, chatId) ||
-        (selfIds.has(chatId)
-          ? this.waha.phoneFromMeId(waConfig.meId)
-          : null);
       const selfChat = selfIds.has(chatId);
+      const phone =
+        this.phoneFromChat(chat, chatId, ownerPhone) ||
+        (selfChat ? ownerPhone : null);
       const name = selfChat
         ? 'Yo'
         : chat.name?.trim() || null;
-      const contactPhone = selfChat
-        ? this.waha.phoneFromMeId(waConfig.meId) || phone
-        : phone;
+      const contactPhone = selfChat ? ownerPhone || phone : phone;
       const last = chat.lastMessage;
       const preview = last ? this.messageContent(last) : null;
       // WhatsApp ordena por _chat.timestamp; lastMessage.timestamp a veces está stale/vacío
@@ -214,13 +225,13 @@ export class WahaConversationsSyncService {
           : 'CLIENT'
         : null;
 
-      const existing = await this.prisma.conversation.findFirst({
-        where: {
-          businessId,
-          channel: 'WHATSAPP',
-          externalId: chatId,
-        },
-      });
+      const existing = await this.findExistingConversation(
+        businessId,
+        chatId,
+        contactPhone,
+        name,
+        ownerPhone,
+      );
 
       const metadataBase =
         existing?.metadata && typeof existing.metadata === 'object'
@@ -252,7 +263,7 @@ export class WahaConversationsSyncService {
         await this.prisma.conversation.update({
           where: { id: existing.id },
           data: {
-            externalId: chatId,
+            externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
             contactName: name ?? existing.contactName,
             contactPhone: contactPhone ?? existing.contactPhone,
             contactAvatarUrl:
@@ -270,6 +281,13 @@ export class WahaConversationsSyncService {
             ...(reopen ? { status: 'AI' as const } : {}),
             metadata: nextMeta as object,
           },
+        });
+
+        await this.hideLegacyPhoneDuplicates(businessId, {
+          id: existing.id,
+          contactName: name ?? existing.contactName,
+          contactPhone: contactPhone ?? existing.contactPhone,
+          externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
         });
       } else {
         const user = await this.upsertUser(
@@ -370,24 +388,182 @@ export class WahaConversationsSyncService {
     return false;
   }
 
+  private async findExistingConversation(
+    businessId: string,
+    chatId: string,
+    phone: string | null,
+    contactName: string | null,
+    ownerPhone: string | null,
+  ): Promise<Conversation | null> {
+    const candidates: Conversation[] = [];
+    const push = (row: Conversation | null | undefined) => {
+      if (!row) return;
+      if (candidates.some((c) => c.id === row.id)) return;
+      candidates.push(row);
+    };
+
+    const byExternal = await this.prisma.conversation.findMany({
+      where: {
+        businessId,
+        channel: 'WHATSAPP',
+        externalId: { in: alternateWhatsAppExternalIds(chatId) },
+      },
+      orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+      take: 10,
+    });
+    byExternal.forEach(push);
+
+    if (phone && phone !== ownerPhone) {
+      const byPhone = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          OR: [
+            { contactPhone: phone },
+            { externalId: { in: alternateWhatsAppExternalIds(phone) } },
+          ],
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 10,
+      });
+      for (const row of byPhone) {
+        const stored = row.contactPhone || phoneFromJid(row.externalId);
+        if (!stored || phonesLikelySame(stored, phone)) push(row);
+      }
+
+      const legacy = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          externalId: { endsWith: '@c.us' },
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 200,
+      });
+      for (const row of legacy) {
+        const legacyPhone = phoneFromJid(row.externalId);
+        if (legacyPhone && phonesLikelySame(legacyPhone, phone)) push(row);
+      }
+    }
+
+    const namePhone = phoneFromDisplayName(contactName);
+    if (
+      namePhone &&
+      namePhone !== ownerPhone &&
+      (!phone || phonesLikelySame(namePhone, phone))
+    ) {
+      const byNamePhone = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          OR: [
+            { contactPhone: namePhone },
+            { externalId: { in: alternateWhatsAppExternalIds(namePhone) } },
+          ],
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 10,
+      });
+      byNamePhone.forEach(push);
+    }
+
+    if (contactName && contactName !== 'Yo') {
+      const byName = await this.prisma.conversation.findMany({
+        where: {
+          businessId,
+          channel: 'WHATSAPP',
+          contactName,
+        },
+        orderBy: [{ hiddenAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 10,
+      });
+      byName.forEach(push);
+    }
+
+    // Si solo encontramos @c.us, buscar @lid con el mismo nombre
+    for (const row of [...candidates]) {
+      if (
+        isWhatsAppLegacyPhoneId(row.externalId) &&
+        row.contactName &&
+        row.contactName !== 'Yo'
+      ) {
+        const lids = await this.prisma.conversation.findMany({
+          where: {
+            businessId,
+            channel: 'WHATSAPP',
+            contactName: row.contactName,
+            externalId: { contains: '@lid' },
+          },
+          take: 5,
+        });
+        lids.forEach(push);
+      }
+    }
+
+    return pickPreferredWhatsAppConversation(candidates, chatId);
+  }
+
+  private async hideLegacyPhoneDuplicates(
+    businessId: string,
+    keeper: {
+      id: string;
+      contactName: string | null;
+      contactPhone: string | null;
+      externalId: string | null;
+    },
+  ) {
+    if (!isWhatsAppLid(keeper.externalId)) return;
+    const or: Array<Record<string, unknown>> = [];
+    if (keeper.contactName && keeper.contactName !== 'Yo') {
+      or.push({ contactName: keeper.contactName });
+    }
+    if (keeper.contactPhone) {
+      or.push({ contactPhone: keeper.contactPhone });
+      or.push({
+        externalId: { in: alternateWhatsAppExternalIds(keeper.contactPhone) },
+      });
+    }
+    if (!or.length) return;
+
+    await this.prisma.conversation.updateMany({
+      where: {
+        businessId,
+        channel: 'WHATSAPP',
+        id: { not: keeper.id },
+        hiddenAt: null,
+        externalId: { endsWith: '@c.us' },
+        OR: or,
+      },
+      data: {
+        hiddenAt: new Date(),
+        status: 'CLOSED',
+      },
+    });
+  }
+
   private phoneFromChat(
     chat: WahaChatOverview,
     chatId: string,
+    ownerPhone?: string | null,
   ): string | null {
-    if (chatId.endsWith('@c.us') && !chatId.startsWith('0@')) {
-      return chatId.replace(/@c\.us$/i, '');
-    }
+    const fromChatId = phoneFromJid(chatId);
+    if (fromChatId && fromChatId !== ownerPhone) return fromChatId;
+
     const last = chat.lastMessage;
-    const candidates = [last?.from, last?.to];
-    for (const candidate of candidates) {
-      if (
-        typeof candidate === 'string' &&
-        /@c\.us$/i.test(candidate) &&
-        !candidate.startsWith('0@')
-      ) {
-        return candidate.replace(/@c\.us$/i, '');
+    if (last) {
+      // fromMe → el teléfono del contacto está en `to`, no en `from` (yo)
+      const counterpart = last.fromMe ? last.to : last.from;
+      const fromCounterpart = phoneFromJid(counterpart);
+      if (fromCounterpart && fromCounterpart !== ownerPhone) {
+        return fromCounterpart;
       }
+      const other = last.fromMe ? last.from : last.to;
+      const fromOther = phoneFromJid(other);
+      if (fromOther && fromOther !== ownerPhone) return fromOther;
     }
+
+    const fromName = phoneFromDisplayName(chat.name);
+    if (fromName && fromName !== ownerPhone) return fromName;
     return null;
   }
 
