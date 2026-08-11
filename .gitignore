@@ -6,6 +6,8 @@ coverage
 .env
 .env.local
 .env.*.local
+.env.production
+.env.production.local
 apps/api/src/generated
 apps/api/generated
 .turbo

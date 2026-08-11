@@ -1,0 +1,241 @@
+# Producción — Oracle Cloud Free Tier Ampere A1 (2 OCPU / 12 GB ARM)
+# o cualquier VPS x86/ARM con ≥8 GB RAM.
+#
+# Uso:
+#   1. Completá .env.production (dominios, secretos, ACME_EMAIL)
+#   2. DNS A: ADMIN_HOST y API_HOST → IP pública de la VM
+#   3. Firewall OCI: abrir TCP 80 y 443 (no hace falta 3000/3001)
+#   4. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Notas Oracle ARM:
+#   - WAHA_IMAGE por defecto: noweb-arm (NOWEB, sin Chromium)
+#   - En VPS x86: WAHA_IMAGE=devlikeapro/waha:noweb
+#   - No uses WEBJS aquí: pide ~2GB shm y más RAM
+
+name: agent-platform-prod
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: agent-platform-caddy
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_started
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST:?Set ADMIN_HOST e.g. admin.tudominio.com}
+      API_HOST: ${API_HOST:?Set API_HOST e.g. api.tudominio.com}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for Let's Encrypt}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agent-platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_platform}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-platform-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  # Oracle ARM → noweb-arm | VPS x86 → noweb
+  waha:
+    image: ${WAHA_IMAGE:-devlikeapro/waha:noweb-arm}
+    container_name: agent-platform-waha
+    restart: unless-stopped
+    environment:
+      WHATSAPP_API_HOSTNAME: 0.0.0.0
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
+      WAHA_API_KEY: ${WAHA_API_KEY:?Set WAHA_API_KEY in .env.production}
+      WHATSAPP_HOOK_URL: http://api:3001/api/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: message,message.any,message.ack,session.status
+      WAHA_SESSION_CONFIG_IGNORE_STATUS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_GROUPS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_CHANNELS: 'True'
+      WAHA_SESSION_CONFIG_IGNORE_BROADCAST: 'True'
+      WAHA_PRINT_QR: 'False'
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?Set WAHA_DASHBOARD_PASSWORD}
+      WHATSAPP_SWAGGER_USERNAME: ${WHATSAPP_SWAGGER_USERNAME:-admin}
+      WHATSAPP_SWAGGER_PASSWORD: ${WHATSAPP_SWAGGER_PASSWORD:?Set WHATSAPP_SWAGGER_PASSWORD}
+      WAHA_ZIPPED_SESSIONS: 'False'
+    volumes:
+      - waha_sessions:/app/.sessions
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  # Sin ports públicos. IPs de datacenter (Oracle) suelen ser flaggeadas por Instagram.
+  instagram:
+    image: subzeroid/aiograpi-rest:6.0.0
+    container_name: agent-platform-instagram
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: agent-platform-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      instagram:
+        condition: service_started
+      waha:
+        condition: service_started
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agent_platform}?schema=public
+      REDIS_URL: redis://redis:6379
+      API_URL: ${API_URL:?Set API_URL (https://api.tudominio.com)}
+      ADMIN_URL: ${ADMIN_URL:?Set ADMIN_URL (https://admin.tudominio.com)}
+      WAHA_BASE_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
+      INSTAGRAM_API_URL: http://instagram:8000
+      INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
+    # Solo red Docker; Caddy es la puerta pública (80/443)
+    expose:
+      - '3001'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL (https://api.tudominio.com/api)}
+        NEXT_PUBLIC_ADMIN_EMAIL: ${NEXT_PUBLIC_ADMIN_EMAIL:-admin@negocio.local}
+    container_name: agent-platform-admin
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    expose:
+      - '3000'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+volumes:
+  postgres_data:
+  redis_data:
+  waha_sessions:
+  caddy_data:
+  caddy_config:
