@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -37,7 +38,13 @@ export class ConversationsController {
     @Param('id') id: string,
     @Query('markRead') markRead?: string,
   ) {
-    return this.conversations.get(id, { markRead: markRead !== 'false' });
+    // Solo marcar leído con ?markRead=true explícito (el detalle ya no lo hace por defecto).
+    return this.conversations.get(id, { markRead: markRead === 'true' });
+  }
+
+  @Post(':id/read')
+  markRead(@Param('id') id: string) {
+    return this.conversations.markRead(id);
   }
 
   @Patch(':id/status')
@@ -62,6 +69,11 @@ export class ConversationsController {
   @Post(':id/close')
   close(@Param('id') id: string) {
     return this.conversations.close(id);
+  }
+
+  @Delete(':id')
+  hide(@Param('id') id: string) {
+    return this.conversations.hide(id);
   }
 
   @Post(':id/messages')

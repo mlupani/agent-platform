@@ -84,6 +84,14 @@ describe('AgentService', () => {
   };
   const promptBuilder = {
     buildFromContext: jest.fn(() => 'system prompt'),
+    buildCurrentDateTime: jest.fn(() => ({
+      date: '2026-08-11',
+      time: '12:00',
+      weekday: 'martes',
+      tomorrowDate: '2026-08-12',
+      tomorrowWeekday: 'miércoles',
+      timezone: 'America/Argentina/Buenos_Aires',
+    })),
     formatHours: jest.fn(() => 'Lunes: 09:00–18:00'),
     formatServices: jest.fn(() => '- Consulta (30 min)'),
   };
@@ -237,16 +245,33 @@ describe('AgentService', () => {
   });
 
   it('stops at maxSteps to avoid infinite loops', async () => {
-    (llm.chat as jest.Mock).mockResolvedValue({
-      content: null,
-      toolCalls: [
-        { id: 'call-x', name: 'getBusinessInformation', arguments: '{}' },
-      ],
-      usage: { inputTokens: 1, outputTokens: 1 },
-      model: 'gpt-4.1-mini',
-      finishReason: 'tool_calls',
-    });
-    tools.execute.mockResolvedValue({ success: true, data: {} });
+    (llm.chat as jest.Mock)
+      .mockResolvedValueOnce({
+        content: null,
+        toolCalls: [
+          { id: 'call-x', name: 'getBusinessInformation', arguments: '{}' },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1 },
+        model: 'gpt-4.1-mini',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: null,
+        toolCalls: [
+          { id: 'call-y', name: 'getBusinessInformation', arguments: '{}' },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1 },
+        model: 'gpt-4.1-mini',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: 'Acá va la info del negocio.',
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+        model: 'gpt-4.1-mini',
+        finishReason: 'stop',
+      });
+    tools.execute.mockResolvedValue({ success: true, data: { name: 'Demo' } });
 
     const result = await service.run({
       businessId: 'biz-1',
@@ -254,7 +279,61 @@ describe('AgentService', () => {
       message: 'loop',
     });
 
-    expect(llm.chat).toHaveBeenCalledTimes(3);
-    expect(result.message).toMatch(/límite de pasos/i);
+    // 1ª tool real + 2ª repetida corta el loop y fuerza respuesta sin tools
+    expect(tools.execute).toHaveBeenCalledTimes(1);
+    expect(result.message).toContain('Acá va la info del negocio.');
+  });
+
+  it('falls back to availability summary when the model never answers', async () => {
+    const previousMaxSteps = agentConfig.maxSteps;
+    const previousTools = agentConfig.enabledTools;
+    agentConfig.maxSteps = 1;
+    agentConfig.enabledTools = ['checkAvailability'];
+    (llm.chat as jest.Mock)
+      .mockResolvedValueOnce({
+        content: null,
+        toolCalls: [
+          {
+            id: 'call-av',
+            name: 'checkAvailability',
+            arguments: '{"date":"2026-08-11"}',
+          },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1 },
+        model: 'gpt-4.1-mini',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: null,
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+        model: 'gpt-4.1-mini',
+        finishReason: 'stop',
+      });
+    registry.getAvailableTools.mockReturnValue([
+      {
+        name: 'checkAvailability',
+        description: 'dispo',
+        schema: z.object({ date: z.string() }),
+      },
+    ]);
+    tools.execute.mockResolvedValue({
+      success: true,
+      data: {
+        date: '2026-08-11',
+        dayLabel: 'martes',
+        slots: [{ start: '09:00', end: '09:30' }],
+      },
+    });
+
+    const result = await service.run({
+      businessId: 'biz-1',
+      conversationId: 'conv-1',
+      message: 'hay turnos?',
+    });
+
+    expect(result.message).toMatch(/09:00|martes|horarios libres/i);
+    agentConfig.maxSteps = previousMaxSteps;
+    agentConfig.enabledTools = previousTools;
   });
 });

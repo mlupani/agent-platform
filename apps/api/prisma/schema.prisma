@@ -52,6 +52,7 @@ model Business {
   appointments    Appointment[]
   whatsappConfig  WhatsAppConfig?
   googleCalendarConfig GoogleCalendarConfig?
+  instagramConfig InstagramConfig?
 
   @@map("businesses")
 }
@@ -162,6 +163,7 @@ model Conversation {
   status             String    @default("AI")
   externalId         String?
   contactName        String?
+  contactUsername    String?
   contactPhone       String?
   contactAvatarUrl   String?
   unreadCount        Int       @default(0)
@@ -170,6 +172,8 @@ model Conversation {
   lastMessageSender  String?
   metadata           Json?
   summary            String?
+  /// Oculta de la bandeja (eliminar). Un mensaje nuevo del cliente la vuelve a mostrar.
+  hiddenAt           DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -181,6 +185,8 @@ model Conversation {
   @@index([businessId, status])
   @@index([businessId, userId])
   @@index([businessId, lastMessageAt])
+  @@index([businessId, channel, externalId])
+  @@index([businessId, hiddenAt])
   @@map("conversations")
 }
 
@@ -256,6 +262,26 @@ model GoogleCalendarConfig {
   updatedAt       DateTime  @updatedAt
 
   @@map("google_calendar_configs")
+}
+
+model InstagramConfig {
+  id              String    @id @default(uuid())
+  businessId      String    @unique
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// sessionid de aiograpi-rest (encriptado)
+  sessionIdEnc    String?
+  username        String?
+  /// pk / user_id de la cuenta conectada
+  userId          String?
+  enabled         Boolean   @default(false)
+  /// disconnected | connecting | connected | challenge | error
+  status          String    @default("disconnected")
+  lastError       String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("instagram_configs")
 }
 
 /// Cita local (fuente de verdad del negocio). Se sincroniza con Google Calendar si está conectado.

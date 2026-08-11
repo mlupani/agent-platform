@@ -38,6 +38,7 @@ export class ConversationsService {
     const conversations = await this.prisma.conversation.findMany({
       where: {
         businessId,
+        hiddenAt: null,
         ...(status ? { status } : {}),
       },
       orderBy: [{ lastMessageAt: { sort: 'desc', nulls: 'last' } }],
@@ -69,6 +70,9 @@ export class ConversationsService {
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
+    if (conversation.hiddenAt) {
+      throw new NotFoundException('Conversation not found');
+    }
 
     if (conversation.channel === 'WHATSAPP') {
       try {
@@ -92,12 +96,8 @@ export class ConversationsService {
     });
     if (!refreshed) throw new NotFoundException('Conversation not found');
 
-    if (options?.markRead && refreshed.unreadCount > 0) {
-      await this.prisma.conversation.update({
-        where: { id: refreshed.id },
-        data: { unreadCount: 0 },
-      });
-      refreshed.unreadCount = 0;
+    if (options?.markRead) {
+      await this.markReadById(businessId, refreshed.id, refreshed);
     }
 
     return {
@@ -107,6 +107,40 @@ export class ConversationsService {
       needsAttention:
         refreshed.status === 'WAITING_HUMAN' || refreshed.status === 'HUMAN',
     };
+  }
+
+  async markRead(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, businessId, hiddenAt: null },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    await this.markReadById(businessId, conversation.id, conversation);
+    return {
+      id: conversation.id,
+      unreadCount: 0,
+    };
+  }
+
+  private async markReadById(
+    businessId: string,
+    conversationId: string,
+    conversation: { unreadCount: number; status: string; lastMessageAt: Date | null; lastMessagePreview: string | null; lastMessageSender: string | null },
+  ) {
+    if (conversation.unreadCount <= 0) return;
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { unreadCount: 0 },
+    });
+    conversation.unreadCount = 0;
+    this.realtime.conversationUpdated(businessId, {
+      conversationId,
+      unreadCount: 0,
+      status: conversation.status,
+      lastMessageAt: conversation.lastMessageAt,
+      lastMessagePreview: conversation.lastMessagePreview,
+      lastMessageSender: conversation.lastMessageSender,
+    });
   }
 
   async pause(id: string) {
@@ -119,6 +153,40 @@ export class ConversationsService {
 
   async close(id: string) {
     return this.updateStatus(id, 'CLOSED', { reason: 'operator_closed' });
+  }
+
+  /** Oculta la conversación de la bandeja. El sync no la revive salvo mensaje nuevo del cliente. */
+  async hide(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, businessId, hiddenAt: null },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const updated = await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        hiddenAt: new Date(),
+        status: 'CLOSED',
+        unreadCount: 0,
+        metadata: {
+          ...((conversation.metadata &&
+          typeof conversation.metadata === 'object'
+            ? conversation.metadata
+            : {}) as object),
+          hiddenReason: 'operator_deleted',
+          hiddenAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    this.realtime.conversationUpdated(businessId, {
+      conversationId: updated.id,
+      status: updated.status,
+      hidden: true,
+    });
+
+    return { ok: true, id: updated.id };
   }
 
   async updateStatus(
@@ -260,14 +328,21 @@ export class ConversationsService {
 
   private displayName(conversation: {
     contactName?: string | null;
+    contactUsername?: string | null;
     contactPhone?: string | null;
     externalId?: string | null;
     user?: { name?: string | null; phone?: string | null } | null;
     id: string;
   }): string {
+    const username = conversation.contactUsername
+      ? conversation.contactUsername.startsWith('@')
+        ? conversation.contactUsername
+        : `@${conversation.contactUsername}`
+      : null;
     return (
       conversation.contactName ||
       conversation.user?.name ||
+      username ||
       conversation.contactPhone ||
       conversation.user?.phone ||
       conversation.externalId ||

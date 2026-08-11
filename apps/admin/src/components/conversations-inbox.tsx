@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { ChannelBadge } from '@/components/channel-icons';
 import type { Conversation, Message } from '@/lib/types';
 
 function initials(name: string) {
@@ -79,10 +80,12 @@ function matchesSearch(conversation: Conversation, query: string): boolean {
   const haystack = [
     conversation.displayName,
     conversation.contactName,
+    conversation.contactUsername,
     conversation.contactPhone,
     conversation.user?.name,
     conversation.user?.phone,
     conversation.externalId,
+    conversation.channel,
   ]
     .filter(Boolean)
     .join(' ')
@@ -125,7 +128,7 @@ export function ConversationsInbox() {
   const detailQuery = useQuery({
     queryKey: ['conversation', selectedId],
     queryFn: () =>
-      api<Conversation>(`/admin/conversations/${selectedId}?markRead=true`),
+      api<Conversation>(`/admin/conversations/${selectedId}`),
     enabled: Boolean(selectedId),
     refetchInterval: false,
   });
@@ -136,7 +139,8 @@ export function ConversationsInbox() {
         if (filter === 'attention') return Boolean(item.needsAttention);
         if (filter === 'ai') return item.status === 'AI';
         if (filter === 'closed') return item.status === 'CLOSED';
-        return true;
+        // "Todas": activas (cerradas van al filtro Cerradas)
+        return item.status !== 'CLOSED';
       })
       .filter((item) => matchesSearch(item, search))
       .sort((a, b) => activityTs(b) - activityTs(a));
@@ -151,11 +155,44 @@ export function ConversationsInbox() {
     [selected?.messages],
   );
 
+  // Marcar leído al abrir / cuando llegan mensajes con el chat abierto
   useEffect(() => {
-    if (selectedId) {
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    }
-  }, [selectedId, selected?.unreadCount, queryClient]);
+    if (!selectedId || detailQuery.isLoading) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await api<{ unreadCount: number }>(
+          `/admin/conversations/${selectedId}/read`,
+          { method: 'POST' },
+        );
+        if (cancelled) return;
+        queryClient.setQueryData(
+          ['conversations'],
+          (current: Conversation[] | undefined) => {
+            if (!Array.isArray(current)) return current;
+            return current.map((item) =>
+              item.id === selectedId ? { ...item, unreadCount: 0 } : item,
+            );
+          },
+        );
+        queryClient.setQueryData(
+          ['conversation', selectedId],
+          (current: Conversation | undefined) =>
+            current ? { ...current, unreadCount: 0 } : current,
+        );
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedId,
+    detailQuery.isLoading,
+    visibleMessages.length,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (!selectedId || detailQuery.isLoading) return;
@@ -205,6 +242,19 @@ export function ConversationsInbox() {
         queryKey: ['conversation', selectedId],
       });
       await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      api(`/admin/conversations/${selectedId}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      const removedId = selectedId;
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      if (removedId) {
+        queryClient.removeQueries({ queryKey: ['conversation', removedId] });
+      }
+      router.push('/conversations');
     },
   });
 
@@ -300,6 +350,8 @@ export function ConversationsInbox() {
                 const active = conversation.id === selectedId;
                 const name =
                   conversation.displayName ?? conversation.id.slice(0, 8);
+                const unread = conversation.unreadCount ?? 0;
+                const hasUnread = !active && unread > 0;
                 return (
                   <li key={conversation.id}>
                     <button
@@ -310,16 +362,35 @@ export function ConversationsInbox() {
                       }`}
                     >
                       <div className="flex gap-3">
-                        <ContactAvatar
-                          name={name}
-                          src={conversation.contactAvatarUrl}
-                        />
+                        <div className="relative shrink-0">
+                          <ContactAvatar
+                            name={name}
+                            src={conversation.contactAvatarUrl}
+                          />
+                          {hasUnread ? (
+                            <span
+                              className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-panel"
+                              aria-hidden
+                            />
+                          ) : null}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-sm truncate">
-                              {name}
+                            <p
+                              className={`text-sm truncate flex items-center gap-1.5 min-w-0 ${
+                                hasUnread ? 'font-semibold text-text' : 'font-medium'
+                              }`}
+                            >
+                              <ChannelBadge channel={conversation.channel} />
+                              <span className="truncate">{name}</span>
                             </p>
-                            <span className="text-[11px] text-muted shrink-0">
+                            <span
+                              className={`text-[11px] shrink-0 ${
+                                hasUnread
+                                  ? 'text-accent font-medium'
+                                  : 'text-muted'
+                              }`}
+                            >
                               {formatTime(
                                 conversation.lastMessageAt ??
                                   conversation.updatedAt,
@@ -327,7 +398,13 @@ export function ConversationsInbox() {
                             </span>
                           </div>
                           <div className="mt-1 flex items-center justify-between gap-2">
-                            <p className="text-xs text-muted truncate">
+                            <p
+                              className={`text-xs truncate ${
+                                hasUnread
+                                  ? 'text-text font-medium'
+                                  : 'text-muted'
+                              }`}
+                            >
                               {conversation.lastMessagePreview ||
                                 'Sin mensajes'}
                             </p>
@@ -341,9 +418,12 @@ export function ConversationsInbox() {
                                   Manual
                                 </span>
                               ) : null}
-                              {(conversation.unreadCount ?? 0) > 0 ? (
-                                <span className="rounded-full bg-accent text-white text-[10px] px-1.5 py-0.5">
-                                  {conversation.unreadCount}
+                              {hasUnread ? (
+                                <span
+                                  className="inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full bg-accent text-white text-[11px] font-semibold px-1.5"
+                                  aria-label={`${unread} sin leer`}
+                                >
+                                  {unread > 99 ? '99+' : unread}
                                 </span>
                               ) : null}
                             </div>
@@ -387,13 +467,18 @@ export function ConversationsInbox() {
                     src={selected.contactAvatarUrl}
                   />
                   <div className="min-w-0">
-                    <p className="font-medium truncate">
-                      {selected.displayName ?? selected.id.slice(0, 8)}
+                    <p className="font-medium truncate flex items-center gap-2">
+                      <ChannelBadge channel={selected.channel} />
+                      <span className="truncate">
+                        {selected.displayName ?? selected.id.slice(0, 8)}
+                      </span>
                     </p>
                     <p className="text-xs text-muted">
-                      {selected.contactPhone ||
-                        selected.user?.phone ||
-                        selected.channel}
+                      {selected.contactUsername
+                        ? `@${selected.contactUsername.replace(/^@/, '')}`
+                        : selected.contactPhone ||
+                          selected.user?.phone ||
+                          selected.channel}
                     </p>
                   </div>
                 </div>
@@ -430,11 +515,27 @@ export function ConversationsInbox() {
                       type="button"
                       className="rounded-lg border border-line px-3 py-2.5 text-sm text-muted min-h-10"
                       onClick={() => closeMutation.mutate()}
-                      disabled={closeMutation.isPending}
+                      disabled={closeMutation.isPending || deleteMutation.isPending}
                     >
                       Cerrar
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="rounded-lg border border-line px-3 py-2.5 text-sm text-rose min-h-10"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          '¿Eliminar esta conversación de la bandeja? No se mostrará más salvo que el contacto escriba de nuevo.',
+                        )
+                      ) {
+                        deleteMutation.mutate();
+                      }
+                    }}
+                    disabled={deleteMutation.isPending || closeMutation.isPending}
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </div>
 

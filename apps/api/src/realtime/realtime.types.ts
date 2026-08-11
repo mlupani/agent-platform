@@ -4,6 +4,7 @@ export const REALTIME_EVENTS = {
   CONVERSATION_BOT_STATUS_CHANGED: 'conversation.bot_status.changed',
   WHATSAPP_STATUS_CHANGED: 'whatsapp.status.changed',
   WHATSAPP_QR_UPDATED: 'whatsapp.qr.updated',
+  INSTAGRAM_STATUS_CHANGED: 'instagram.status.changed',
   MESSAGE_STATUS_UPDATED: 'message.status.updated',
 } as const;
 

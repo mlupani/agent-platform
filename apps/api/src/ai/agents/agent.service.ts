@@ -68,7 +68,9 @@ export class AgentService {
 
     const inboundExternalId = input.metadata?.wamid
       ? String(input.metadata.wamid)
-      : undefined;
+      : input.metadata?.externalMessageId
+        ? String(input.metadata.externalMessageId)
+        : undefined;
 
     const alreadyPersisted = inboundExternalId
       ? await this.prisma.message.findFirst({
@@ -103,6 +105,9 @@ export class AgentService {
             : undefined,
           contactPhone: input.metadata?.contactPhone
             ? String(input.metadata.contactPhone)
+            : undefined,
+          contactUsername: input.metadata?.contactUsername
+            ? String(input.metadata.contactUsername)
             : undefined,
         },
       });
@@ -149,6 +154,7 @@ export class AgentService {
         lastMessageAt: new Date(),
         lastMessagePreview: message.slice(0, 280),
         lastMessageSender: 'CLIENT',
+        unreadCount: { increment: 1 },
       },
     });
 
@@ -266,6 +272,9 @@ export class AgentService {
       },
     });
 
+    const seenSuccessfulToolCalls = new Set<string>();
+    let forceFinalAnswer = false;
+
     try {
       while (steps < agentConfig.maxSteps) {
         steps += 1;
@@ -274,7 +283,8 @@ export class AgentService {
           temperature: agentConfig.temperature,
           maxTokens: agentConfig.maxTokens,
           messages: llmMessages,
-          tools: toolDefs.length ? toolDefs : undefined,
+          tools:
+            forceFinalAnswer || !toolDefs.length ? undefined : toolDefs,
         }).then((result) => {
           llmTarget = result.target;
           usedProvider = result.target.providerName;
@@ -285,12 +295,14 @@ export class AgentService {
         inputTokens += response.usage.inputTokens;
         outputTokens += response.usage.outputTokens;
 
-        if (response.toolCalls.length) {
+        if (!forceFinalAnswer && response.toolCalls.length) {
           llmMessages.push({
             role: 'assistant',
             content: response.content ?? '',
             toolCalls: response.toolCalls,
           });
+
+          let repeatedSuccessfulCall = false;
 
           for (const call of response.toolCalls) {
             let parsedArgs: unknown = {};
@@ -298,6 +310,35 @@ export class AgentService {
               parsedArgs = JSON.parse(call.arguments || '{}');
             } catch {
               parsedArgs = {};
+            }
+
+            const fingerprint = this.toolCallFingerprint(call.name, parsedArgs);
+            const alreadySucceeded = seenSuccessfulToolCalls.has(fingerprint);
+
+            if (alreadySucceeded) {
+              repeatedSuccessfulCall = true;
+              const result = {
+                success: true,
+                error:
+                  'Ya ejecutaste esta herramienta con los mismos argumentos. Respondé ahora al usuario con la información ya obtenida; no vuelvas a llamar tools.',
+                data: { repeated: true, tool: call.name },
+                durationMs: 0,
+              };
+              executedTools.push({
+                call,
+                result,
+                success: true,
+                durationMs: 0,
+                error: result.error,
+                step: steps,
+              });
+              llmMessages.push({
+                role: 'tool',
+                toolCallId: call.id,
+                name: call.name,
+                content: JSON.stringify(result),
+              });
+              continue;
             }
 
             const result = await this.tools.execute(call.name, parsedArgs, {
@@ -312,6 +353,10 @@ export class AgentService {
                 confirmed: input.confirmed === true,
               },
             });
+
+            if (result.success) {
+              seenSuccessfulToolCalls.add(fingerprint);
+            }
 
             executedTools.push({
               call,
@@ -329,15 +374,52 @@ export class AgentService {
               content: JSON.stringify(result),
             });
           }
+
+          if (repeatedSuccessfulCall) {
+            forceFinalAnswer = true;
+          }
           continue;
         }
 
-        finalContent = response.content?.trim() || 'No pude generar una respuesta.';
+        finalContent =
+          response.content?.trim() ||
+          this.fallbackFromToolResults(executedTools) ||
+          'No pude generar una respuesta.';
         break;
+      }
+
+      if (!finalContent && executedTools.length) {
+        // Último intento: responder sin tools (p.ej. Gemini lite se queda en loop).
+        const synthesis = await this.chatWithFallback(llmTarget, {
+          model: llmTarget.model,
+          temperature: agentConfig.temperature,
+          maxTokens: agentConfig.maxTokens,
+          messages: [
+            ...llmMessages,
+            {
+              role: 'user',
+              content:
+                'Con la información de las herramientas anteriores, respondé ahora al usuario de forma clara y breve. No llames más herramientas.',
+            },
+          ],
+        }).then((result) => {
+          llmTarget = result.target;
+          usedProvider = result.target.providerName;
+          usedModel = result.target.model;
+          return result.response;
+        });
+        steps += 1;
+        inputTokens += synthesis.usage.inputTokens;
+        outputTokens += synthesis.usage.outputTokens;
+        finalContent =
+          synthesis.content?.trim() ||
+          this.fallbackFromToolResults(executedTools) ||
+          '';
       }
 
       if (!finalContent) {
         finalContent =
+          this.fallbackFromToolResults(executedTools) ||
           'Alcancé el límite de pasos del agente. Reformulá la consulta o revisá las herramientas.';
       }
     } catch (err) {
@@ -518,6 +600,48 @@ export class AgentService {
         metadata: input.metadata as object | undefined,
       },
     });
+  }
+
+  private toolCallFingerprint(name: string, args: unknown): string {
+    return `${name}:${JSON.stringify(args ?? {})}`;
+  }
+
+  private fallbackFromToolResults(executedTools: ExecutedTool[]): string | null {
+    for (let i = executedTools.length - 1; i >= 0; i -= 1) {
+      const item = executedTools[i];
+      if (item.call.name !== 'checkAvailability' || !item.success) continue;
+      const payload =
+        item.result && typeof item.result === 'object'
+          ? (item.result as { data?: Record<string, unknown> }).data
+          : undefined;
+      if (!payload || typeof payload !== 'object') continue;
+
+      const date = typeof payload.date === 'string' ? payload.date : null;
+      const dayLabel =
+        typeof payload.dayLabel === 'string' ? payload.dayLabel : null;
+      const slots = Array.isArray(payload.slots) ? payload.slots : [];
+      const label = dayLabel || date || 'ese día';
+
+      if (!slots.length) {
+        return `Para ${label} no tengo turnos libres en este momento. ¿Querés que revise otra fecha?`;
+      }
+
+      const options = slots
+        .slice(0, 4)
+        .map((slot) => {
+          if (!slot || typeof slot !== 'object') return null;
+          const start = (slot as { start?: string }).start;
+          return typeof start === 'string' ? start : null;
+        })
+        .filter((value): value is string => Boolean(value));
+
+      if (!options.length) {
+        return `Encontré disponibilidad para ${label}. Decime qué horario te viene bien.`;
+      }
+
+      return `Para ${label} tengo estos horarios libres: ${options.join(', ')}. ¿Cuál te sirve?`;
+    }
+    return null;
   }
 
   private toJsonSchema(schema: unknown): Record<string, unknown> {

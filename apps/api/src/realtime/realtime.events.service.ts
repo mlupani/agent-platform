@@ -68,6 +68,17 @@ export class RealtimeEventsService {
     );
   }
 
+  instagramStatusChanged(
+    businessId: string,
+    payload: Record<string, unknown> | object,
+  ) {
+    this.emit(
+      REALTIME_EVENTS.INSTAGRAM_STATUS_CHANGED,
+      payload as Record<string, unknown>,
+      businessId,
+    );
+  }
+
   messageStatusUpdated(businessId: string, payload: Record<string, unknown>) {
     this.emit(REALTIME_EVENTS.MESSAGE_STATUS_UPDATED, payload, businessId);
   }

@@ -177,9 +177,10 @@ export class PromptBuilderService {
     }
     return [
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
-      `Usá getBusinessInformation, getOpeningHours y getServices antes de afirmar datos del negocio.`,
-      `Para turnos: checkAvailability → createAppointment / cancelAppointment / rescheduleAppointment. Nunca inventes horarios libres.`,
-      `checkAvailability exige fecha YYYY-MM-DD correcta según la fecha actual del prompt; si la tool avisa fecha pasada, corregí y reintentá.`,
+      `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
+      `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `checkAvailability exige fecha YYYY-MM-DD según la fecha actual del prompt; si avisa fecha pasada, corregí UNA vez y reintentá.`,
+      `No repitas la misma herramienta con los mismos argumentos. Después de un resultado exitoso, contestá al usuario.`,
       `Para derivar a un humano: requestHumanAssistance.`,
     ].join('\n');
   }

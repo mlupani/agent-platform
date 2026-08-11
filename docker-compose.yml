@@ -66,6 +66,18 @@ services:
       - 1.1.1.1
       - 8.8.8.8
 
+  # https://github.com/subzeroid/aiograpi-rest — Instagram Direct (no oficial)
+  # Nest usa INSTAGRAM_API_URL=http://instagram:8000
+  # No hay webhooks/WS de DMs: Nest hace polling.
+  # Sesiones TinyDB en /app/db.json (default, writable). Nest guarda sessionid
+  # encriptado y rehidrata con /auth/login/by/sessionid tras reinicios.
+  instagram:
+    image: subzeroid/aiograpi-rest:6.0.0
+    container_name: agent-platform-instagram
+    restart: unless-stopped
+    # Solo localhost (API en el host). En producción podés quitar `ports`.
+    ports:
+      - '127.0.0.1:8000:8000'
   api:
     build:
       context: .
@@ -77,6 +89,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      instagram:
+        condition: service_started
     env_file:
       - .env
     environment:
@@ -90,6 +104,8 @@ services:
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY:-00000000000000000000000000000000}
       WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
+      INSTAGRAM_API_URL: http://instagram:8000
+      INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/api/oauth/google/callback}
     ports:
       - '3001:3001'

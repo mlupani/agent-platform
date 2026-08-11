@@ -170,6 +170,31 @@ export class WhatsAppWebhookService {
       contactName,
     );
 
+    // Cliente nuevo / chat importado en HUMAN: activar bot salvo pausa manual
+    if (!fromMe && conversation.status === 'HUMAN') {
+      const meta =
+        conversation.metadata && typeof conversation.metadata === 'object'
+          ? (conversation.metadata as Record<string, unknown>)
+          : {};
+      if (meta.statusReason !== 'operator_paused') {
+        const updated = await this.prisma.conversation.update({
+          where: { id: conversation.id },
+          data: {
+            status: 'AI',
+            hiddenAt: null,
+            metadata: {
+              ...meta,
+              statusReason: 'auto_enabled_inbound',
+              statusChangedAt: new Date().toISOString(),
+            } as object,
+          },
+        });
+        conversation.status = updated.status;
+        conversation.hiddenAt = updated.hiddenAt;
+        conversation.metadata = updated.metadata;
+      }
+    }
+
     // Ya existía (p.ej. sync histórico): en chat "Yo" igual puede faltar respuesta del agente
     if (existing) {
       if (!(fromMe && selfChat)) return false;
@@ -253,13 +278,14 @@ export class WhatsAppWebhookService {
         return false;
       }
 
-      // Asegurar bot activo para pruebas en "Yo"
-      if (conversation.status !== 'AI' && conversation.status !== 'CLOSED') {
+      // Asegurar bot activo para pruebas en "Yo" (también si estaba cerrado/eliminado)
+      if (conversation.status !== 'AI') {
         await this.prisma.conversation.update({
           where: { id: conversation.id },
-          data: { status: 'AI' },
+          data: { status: 'AI', hiddenAt: null },
         });
         conversation.status = 'AI';
+        conversation.hiddenAt = null;
       }
     }
 
@@ -299,6 +325,16 @@ export class WhatsAppWebhookService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const afterInbound = await this.prisma.conversation.findUnique({
+      where: { id: conversation.id },
+      select: {
+        unreadCount: true,
+        lastMessageAt: true,
+        lastMessagePreview: true,
+        lastMessageSender: true,
+      },
+    });
+
     this.realtime.conversationMessageCreated(businessId, {
       conversationId: conversation.id,
       message: clientMessage,
@@ -306,6 +342,10 @@ export class WhatsAppWebhookService {
     this.realtime.conversationUpdated(businessId, {
       conversationId: conversation.id,
       status: previousStatus,
+      lastMessageAt: afterInbound?.lastMessageAt,
+      lastMessagePreview: afterInbound?.lastMessagePreview,
+      lastMessageSender: afterInbound?.lastMessageSender,
+      unreadCount: afterInbound?.unreadCount,
     });
 
     if (previousStatus === 'AI' && result.status === 'AI' && result.message) {
@@ -573,6 +613,19 @@ export class WhatsAppWebhookService {
       orderBy: { updatedAt: 'desc' },
     });
     if (existing) {
+      const metaBase =
+        existing.metadata && typeof existing.metadata === 'object'
+          ? { ...(existing.metadata as Record<string, unknown>) }
+          : {};
+      const reopen =
+        existing.status === 'CLOSED' || existing.hiddenAt != null;
+      if (reopen) {
+        delete metaBase.hiddenReason;
+        delete metaBase.hiddenAt;
+        metaBase.reopenedAt = new Date().toISOString();
+        metaBase.reopenedReason = 'inbound_message';
+      }
+
       return this.prisma.conversation.update({
         where: { id: existing.id },
         data: {
@@ -580,6 +633,14 @@ export class WhatsAppWebhookService {
           contactPhone: phone ?? existing.contactPhone,
           contactName: contactName ?? existing.contactName,
           userId,
+          // Actividad nueva vuelve a mostrar chats ocultos/cerrados
+          hiddenAt: null,
+          ...(reopen
+            ? {
+                status: 'AI' as const,
+                metadata: metaBase as object,
+              }
+            : {}),
         },
       });
     }

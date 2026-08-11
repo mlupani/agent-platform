@@ -98,6 +98,9 @@ export function useRealtimeInvalidation() {
         },
       );
 
+      const isClientInbound =
+        message.sender === 'CLIENT' || message.role === 'user';
+
       queryClient.setQueryData(
         ['conversations'],
         (current: Conversation[] | undefined) => {
@@ -111,6 +114,9 @@ export function useRealtimeInvalidation() {
                     message.content ?? item.lastMessagePreview,
                   lastMessageSender:
                     message.sender ?? item.lastMessageSender,
+                  unreadCount: isClientInbound
+                    ? (item.unreadCount ?? 0) + 1
+                    : item.unreadCount,
                 }
               : item,
           );
@@ -138,9 +144,15 @@ export function useRealtimeInvalidation() {
         ['conversations'],
         (current: Conversation[] | undefined) => {
           if (!Array.isArray(current)) return current;
-          return current.map((item) =>
-            item.id === conversationId ? { ...item, ...patch } : item,
-          );
+          return current.map((item) => {
+            if (item.id !== conversationId) return item;
+            const next = { ...item, ...patch };
+            // Si el patch no trae unreadCount numérico, conservar el local
+            if (typeof patch.unreadCount !== 'number') {
+              next.unreadCount = item.unreadCount;
+            }
+            return next;
+          });
         },
       );
       queryClient.setQueryData(

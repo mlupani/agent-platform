@@ -3,15 +3,25 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { GoogleCalendarConfigForm } from '@/components/google-calendar-config-form';
+import { InstagramConfigForm } from '@/components/instagram-config-form';
 import { WhatsAppConfigForm } from '@/components/whatsapp-config-form';
+import {
+  InstagramIconMono,
+  WhatsAppIcon,
+} from '@/components/channel-icons';
 import { api } from '@/lib/api';
 
-type Panel = 'list' | 'whatsapp' | 'calendar';
+type Panel = 'list' | 'whatsapp' | 'instagram' | 'calendar';
 
 interface WhatsAppPublicConfig {
   status: string;
   displayPhoneNumber?: string | null;
   meId?: string | null;
+}
+
+interface InstagramPublicConfig {
+  status: string;
+  username?: string | null;
 }
 
 interface GoogleCalendarPublicConfig {
@@ -40,6 +50,10 @@ export function IntegrationsHub() {
     queryKey: ['whatsapp-config'],
     queryFn: () => api<WhatsAppPublicConfig | null>('/admin/whatsapp'),
   });
+  const ig = useQuery({
+    queryKey: ['instagram-config'],
+    queryFn: () => api<InstagramPublicConfig | null>('/admin/instagram'),
+  });
   const cal = useQuery({
     queryKey: ['google-calendar-config'],
     queryFn: () =>
@@ -47,12 +61,14 @@ export function IntegrationsHub() {
   });
 
   const waConnected = wa.data?.status === 'connected';
+  const igConnected = ig.data?.status === 'connected';
   const calConnected =
     cal.data?.status === 'connected' ||
     (cal.data?.enabled === true && Boolean(cal.data?.hasRefreshToken === true || cal.data?.connectedEmail));
 
   const title = useMemo(() => {
     if (panel === 'whatsapp') return 'WhatsApp';
+    if (panel === 'instagram') return 'Instagram';
     if (panel === 'calendar') return 'Google Calendar';
     return 'Integraciones';
   }, [panel]);
@@ -71,6 +87,7 @@ export function IntegrationsHub() {
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">{title}</h2>
         </header>
         {panel === 'whatsapp' ? <WhatsAppConfigForm /> : null}
+        {panel === 'instagram' ? <InstagramConfigForm /> : null}
         {panel === 'calendar' ? <GoogleCalendarConfigForm /> : null}
       </div>
     );
@@ -92,8 +109,8 @@ export function IntegrationsHub() {
           className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="h-10 w-10 rounded-xl bg-[#25D366]/15 grid place-items-center text-[#128C7E] text-xl font-bold">
-              ✆
+            <div className="h-10 w-10 rounded-xl bg-[#25D366]/15 grid place-items-center text-[#25D366]">
+              <WhatsAppIcon className="h-5 w-5" title="WhatsApp" />
             </div>
             <StatusPill
               ok={waConnected}
@@ -103,6 +120,29 @@ export function IntegrationsHub() {
           <h3 className="mt-4 font-medium">WhatsApp</h3>
           <p className="mt-1 text-sm text-muted">
             Recibe mensajes de WhatsApp y deja que el agente responda.
+          </p>
+          <div className="mt-4 flex justify-end text-muted group-hover:text-text">
+            →
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPanel('instagram')}
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] grid place-items-center text-white">
+              <InstagramIconMono className="h-5 w-5" title="Instagram" />
+            </div>
+            <StatusPill
+              ok={igConnected}
+              label={igConnected ? 'Conectado' : 'Desconectado'}
+            />
+          </div>
+          <h3 className="mt-4 font-medium">Instagram</h3>
+          <p className="mt-1 text-sm text-muted">
+            Direct Messages en la misma bandeja que WhatsApp.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →

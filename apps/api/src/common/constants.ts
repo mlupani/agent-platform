@@ -22,8 +22,12 @@ export type MessageRole = (typeof messageRoles)[number];
 export const toolRisks = ['READ', 'WRITE', 'SENSITIVE'] as const;
 export type ToolRisk = (typeof toolRisks)[number];
 
-export const channelTypes = ['WEB', 'WHATSAPP', 'TELEGRAM'] as const;
+export const channelTypes = ['WEB', 'WHATSAPP', 'TELEGRAM', 'INSTAGRAM'] as const;
 export type ChannelType = (typeof channelTypes)[number];
+
+/** Canales de mensajería con provider outbound */
+export const messagingChannels = ['WHATSAPP', 'INSTAGRAM'] as const;
+export type MessagingChannel = (typeof messagingChannels)[number];
 
 export const memoryTypes = ['SHORT_TERM', 'LONG_TERM'] as const;
 export type MemoryType = (typeof memoryTypes)[number];

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { WhatsAppIcon } from '@/components/channel-icons';
 import { api } from '@/lib/api';
 
 interface WhatsAppPublicConfig {
@@ -141,12 +142,17 @@ export function WhatsAppConfigForm() {
   return (
     <section className="panel rounded-2xl p-5 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-medium">WhatsApp</h3>
-          <p className="text-sm text-muted mt-1">
-            Escaneá el QR una sola vez y esperá sin refrescar muchas veces.
-            Mientras vinculás, evitá abrir WhatsApp Web en otra pestaña.
-          </p>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-xl bg-[#25D366]/15 grid place-items-center text-[#25D366] shrink-0">
+            <WhatsAppIcon className="h-5 w-5" title="WhatsApp" />
+          </div>
+          <div>
+            <h3 className="font-medium">WhatsApp</h3>
+            <p className="text-sm text-muted mt-1">
+              Escaneá el QR una sola vez y esperá sin refrescar muchas veces.
+              Mientras vinculás, evitá abrir WhatsApp Web en otra pestaña.
+            </p>
+          </div>
         </div>
         <span
           className={`text-xs px-2.5 py-1 rounded-full ${

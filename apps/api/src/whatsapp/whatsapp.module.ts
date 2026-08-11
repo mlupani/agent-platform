@@ -10,6 +10,7 @@ import { WhatsAppWebhookService } from './whatsapp-webhook.service';
 import { WahaConversationsSyncService } from './waha-conversations.sync';
 import { MetaCloudWhatsAppProvider } from './providers/meta-cloud.whatsapp-provider';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
+import { WahaMessagingProvider } from './providers/waha.messaging-provider';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
 
 @Module({
@@ -23,6 +24,7 @@ import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
     SecretsService,
     WhatsAppConfigService,
     WahaWhatsAppProvider,
+    WahaMessagingProvider,
     MetaCloudWhatsAppProvider,
     WhatsAppProviderFactory,
     WhatsAppWebhookService,
@@ -32,6 +34,7 @@ import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
     WhatsAppConfigService,
     WhatsAppProviderFactory,
     WahaWhatsAppProvider,
+    WahaMessagingProvider,
     WahaConversationsSyncService,
   ],
 })

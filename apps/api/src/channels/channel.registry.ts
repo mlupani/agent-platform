@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ChannelAdapter } from './channel-adapter.interface';
+import { InstagramChannel } from './instagram.channel';
 import { TelegramChannel } from './telegram.channel';
 import { WebChatChannel } from './web-chat.channel';
 import { WhatsAppChannel } from './whatsapp.channel';
@@ -11,10 +12,12 @@ export class ChannelRegistry {
   constructor(
     web: WebChatChannel,
     whatsapp: WhatsAppChannel,
+    instagram: InstagramChannel,
     telegram: TelegramChannel,
   ) {
     this.channels.set(web.type, web);
     this.channels.set(whatsapp.type, whatsapp);
+    this.channels.set(instagram.type, instagram);
     this.channels.set(telegram.type, telegram);
   }
 

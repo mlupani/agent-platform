@@ -62,6 +62,7 @@ export interface Conversation {
   updatedAt: string;
   createdAt?: string;
   contactName?: string | null;
+  contactUsername?: string | null;
   contactPhone?: string | null;
   contactAvatarUrl?: string | null;
   unreadCount?: number;

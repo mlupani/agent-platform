@@ -55,7 +55,7 @@ export class CheckAvailabilityTool implements AgentTool {
         hint:
           result.slots.length === 0
             ? 'Sin turnos libres ese día (horarios del negocio y/o calendario). Probá otra fecha o derivá a un humano.'
-            : `Ofrecé 2–4 opciones al cliente para ${result.dayLabel || result.date}; no inventes horarios fuera de esta lista.`,
+            : `Respondé YA al cliente con 2–4 opciones de ${result.dayLabel || result.date}. No vuelvas a llamar getServices ni checkAvailability para la misma fecha.`,
       },
     };
   }

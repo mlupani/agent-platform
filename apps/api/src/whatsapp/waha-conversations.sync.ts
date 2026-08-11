@@ -228,6 +228,27 @@ export class WahaConversationsSyncService {
           : {};
 
       if (existing) {
+        // Oculto: solo revivir si hay actividad más nueva que el hide
+        if (existing.hiddenAt) {
+          if (!lastAt || lastAt <= existing.hiddenAt) {
+            continue;
+          }
+        }
+        const reopen =
+          existing.status === 'CLOSED' || existing.hiddenAt != null;
+        const nextMeta = {
+          ...metadataBase,
+          wahaChatId: chatId,
+          wahaSyncedAt: new Date().toISOString(),
+          wahaActivityAt: lastAt?.toISOString() ?? null,
+        } as Record<string, unknown>;
+        if (reopen) {
+          delete nextMeta.hiddenReason;
+          delete nextMeta.hiddenAt;
+          nextMeta.reopenedAt = new Date().toISOString();
+          nextMeta.reopenedReason = 'waha_sync_activity';
+        }
+
         await this.prisma.conversation.update({
           where: { id: existing.id },
           data: {
@@ -238,19 +259,16 @@ export class WahaConversationsSyncService {
               (typeof chat.picture === 'string' && chat.picture
                 ? chat.picture
                 : null) ?? existing.contactAvatarUrl,
-            unreadCount: chat._chat?.unreadCount ?? existing.unreadCount,
+            // No pisar el unread del admin con el del teléfono WAHA
             // Siempre preferir actividad WAHA del chat (no mezclar con updatedAt del sync)
             lastMessageAt: lastAt ?? existing.lastMessageAt,
             lastMessagePreview: preview
               ? preview.slice(0, 280)
               : existing.lastMessagePreview,
             lastMessageSender: lastSender ?? existing.lastMessageSender,
-            metadata: {
-              ...metadataBase,
-              wahaChatId: chatId,
-              wahaSyncedAt: new Date().toISOString(),
-              wahaActivityAt: lastAt?.toISOString() ?? null,
-            },
+            hiddenAt: null,
+            ...(reopen ? { status: 'AI' as const } : {}),
+            metadata: nextMeta as object,
           },
         });
       } else {
@@ -265,8 +283,8 @@ export class WahaConversationsSyncService {
             userId: user.id,
             agentConfigId: agent?.id,
             channel: 'WHATSAPP',
-            // Histórico: humano por defecto (el bot no responde hasta resume)
-            status: selfChat ? 'AI' : 'HUMAN',
+            // Número nuevo: bot activo por defecto (igual que el webhook)
+            status: 'AI',
             externalId: chatId,
             contactPhone: contactPhone,
             contactName: name,
