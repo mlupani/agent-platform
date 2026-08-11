@@ -7,6 +7,7 @@ COPY apps/api/package.json apps/api/
 RUN pnpm install --filter api... --frozen-lockfile
 
 FROM node:22-alpine AS build
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable && corepack prepare pnpm@10.16.0 --activate
 WORKDIR /repo

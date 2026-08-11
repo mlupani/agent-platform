@@ -7,6 +7,7 @@ COPY apps/admin/package.json apps/admin/
 RUN pnpm install --filter admin... --frozen-lockfile
 
 FROM node:22-alpine AS build
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@10.16.0 --activate
 WORKDIR /repo
