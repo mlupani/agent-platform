@@ -1,51 +1,25 @@
-# Producción — Oracle Cloud Free Tier Ampere A1 (2 OCPU / 12 GB ARM)
-# o cualquier VPS x86/ARM con ≥8 GB RAM.
+# Producción detrás de Traefik (Hostinger / VPS).
+#
+# Requisitos:
+#   - Traefik ya corriendo con:
+#       entrypoints web (:80) + websecure (:443)
+#       certificatesresolvers.letsencrypt
+#       providers.docker.exposedbydefault=false
+#   - DNS A: ADMIN_HOST y API_HOST → IP del VPS
+#   - Contenedores admin/api en la MISMA red Docker que Traefik
 #
 # Uso:
-#   1. Completá .env.production (dominios, secretos, ACME_EMAIL)
-#   2. DNS A: ADMIN_HOST y API_HOST → IP pública de la VM
-#   3. Firewall OCI: abrir TCP 80 y 443 (no hace falta 3000/3001)
-#   4. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#   1. docker network ls | grep -i traefik   → anotá el nombre
+#   2. Completá TRAEFIK_NETWORK en .env.production
+#   3. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
-# Notas Oracle ARM:
-#   - WAHA_IMAGE por defecto: noweb-arm (NOWEB, sin Chromium)
+# Notas ARM (Ampere):
+#   - WAHA_IMAGE por defecto: noweb-arm
 #   - En VPS x86: WAHA_IMAGE=devlikeapro/waha:noweb
-#   - No uses WEBJS aquí: pide ~2GB shm y más RAM
 
 name: agent-platform-prod
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: agent-platform-caddy
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-      admin:
-        condition: service_started
-    ports:
-      - '80:80'
-      - '443:443'
-      - '443:443/udp'
-    environment:
-      ADMIN_HOST: ${ADMIN_HOST:?Set ADMIN_HOST e.g. admin.tudominio.com}
-      API_HOST: ${API_HOST:?Set API_HOST e.g. api.tudominio.com}
-      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for Let's Encrypt}
-    volumes:
-      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    logging:
-      driver: json-file
-      options:
-        max-size: '5m'
-        max-file: '3'
-
   postgres:
     image: pgvector/pgvector:pg16
     container_name: agent-platform-postgres
@@ -66,6 +40,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - internal
     deploy:
       resources:
         limits:
@@ -88,6 +64,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - internal
     deploy:
       resources:
         limits:
@@ -98,7 +76,6 @@ services:
         max-size: '5m'
         max-file: '3'
 
-  # Oracle ARM → noweb-arm | VPS x86 → noweb
   waha:
     image: ${WAHA_IMAGE:-devlikeapro/waha:noweb-arm}
     container_name: agent-platform-waha
@@ -124,6 +101,8 @@ services:
     dns:
       - 1.1.1.1
       - 8.8.8.8
+    networks:
+      - internal
     deploy:
       resources:
         limits:
@@ -134,11 +113,12 @@ services:
         max-size: '10m'
         max-file: '3'
 
-  # Sin ports públicos. IPs de datacenter (Oracle) suelen ser flaggeadas por Instagram.
   instagram:
     image: subzeroid/aiograpi-rest:6.0.0
     container_name: agent-platform-instagram
     restart: unless-stopped
+    networks:
+      - internal
     deploy:
       resources:
         limits:
@@ -180,9 +160,22 @@ services:
       INSTAGRAM_API_URL: http://instagram:8000
       INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
-    # Solo red Docker; Caddy es la puerta pública (80/443)
     expose:
       - '3001'
+    networks:
+      - internal
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_default}
+      - traefik.http.routers.agent-api.rule=Host(`${API_HOST:?Set API_HOST}`)
+      - traefik.http.routers.agent-api.entrypoints=websecure
+      - traefik.http.routers.agent-api.tls=true
+      - traefik.http.routers.agent-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.agent-api.service=agent-api
+      - traefik.http.services.agent-api.loadbalancer.server.port=3001
+      # WebSockets (/realtime)
+      - traefik.http.services.agent-api.loadbalancer.server.scheme=http
     healthcheck:
       test:
         [
@@ -223,6 +216,17 @@ services:
       HOSTNAME: 0.0.0.0
     expose:
       - '3000'
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_default}
+      - traefik.http.routers.agent-admin.rule=Host(`${ADMIN_HOST:?Set ADMIN_HOST}`)
+      - traefik.http.routers.agent-admin.entrypoints=websecure
+      - traefik.http.routers.agent-admin.tls=true
+      - traefik.http.routers.agent-admin.tls.certresolver=letsencrypt
+      - traefik.http.routers.agent-admin.service=agent-admin
+      - traefik.http.services.agent-admin.loadbalancer.server.port=3000
     deploy:
       resources:
         limits:
@@ -233,9 +237,14 @@ services:
         max-size: '5m'
         max-file: '3'
 
+networks:
+  internal:
+    driver: bridge
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik_default}
+
 volumes:
   postgres_data:
   redis_data:
   waha_sessions:
-  caddy_data:
-  caddy_config:
