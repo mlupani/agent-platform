@@ -13,14 +13,6 @@ function resolveWsUrl() {
   return api.replace(/\/api\/?$/, '');
 }
 
-function resolveApiKey() {
-  return (
-    process.env.NEXT_PUBLIC_ADMIN_API_KEY ??
-    process.env.ADMIN_API_KEY ??
-    ''
-  );
-}
-
 interface MessageCreatedEnvelope {
   event?: string;
   payload?: {
@@ -47,14 +39,11 @@ export function useRealtimeInvalidation() {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const apiKey = resolveApiKey();
-    if (!apiKey) return;
     if (socketRef.current?.connected) return;
 
     const socket = io(`${resolveWsUrl()}/realtime`, {
       transports: ['websocket', 'polling'],
-      auth: { apiKey },
-      query: { apiKey },
+      withCredentials: true,
       reconnection: true,
       reconnectionAttempts: 20,
       reconnectionDelay: 1_000,

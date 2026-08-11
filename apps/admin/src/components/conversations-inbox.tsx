@@ -439,7 +439,7 @@ export function ConversationsInbox() {
         </aside>
 
         <section
-          className={`flex flex-col min-h-0 ${
+          className={`flex flex-col min-h-0 min-w-0 bg-panel-2/40 ${
             showChat ? 'flex' : 'hidden md:flex'
           }`}
         >
@@ -452,7 +452,7 @@ export function ConversationsInbox() {
               Cargando chat…
             </div>
           ) : selected ? (
-            <>
+            <div className="flex flex-1 min-h-0 w-full max-w-3xl mx-auto flex-col bg-panel border-x border-line/60 shadow-sm">
               <div className="border-b border-line px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
@@ -560,7 +560,7 @@ export function ConversationsInbox() {
                   return (
                     <article
                       key={message.id}
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                      className={`w-fit max-w-[min(20rem,72%)] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                         fromOther
                           ? 'bg-[#e5e7eb] text-[#1f2937] mr-auto'
                           : 'bg-[#0066ff] text-white ml-auto'
@@ -619,7 +619,7 @@ export function ConversationsInbox() {
                   {(replyMutation.error as Error).message}
                 </p>
               ) : null}
-            </>
+            </div>
           ) : (
             <div className="flex-1 grid place-items-center text-sm text-rose p-6">
               No se encontró la conversación.

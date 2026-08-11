@@ -165,10 +165,10 @@ export function AppointmentsCalendar() {
   }, [selected]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 w-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-xl font-semibold tracking-tight">
+          <h3 className="text-2xl font-semibold tracking-tight">
             {MONTHS[monthIndex]} {year}
           </h3>
           <p className="text-sm text-muted mt-1">
@@ -181,14 +181,14 @@ export function AppointmentsCalendar() {
           <button
             type="button"
             aria-label="Mes anterior"
-            className="h-9 w-9 rounded-lg border border-line bg-panel text-lg leading-none hover:bg-panel-2"
+            className="h-9 w-9 rounded-lg border border-line bg-panel text-lg leading-none text-muted hover:bg-panel-2 hover:text-text"
             onClick={() => setMonth((prev) => addMonths(prev, -1))}
           >
             ‹
           </button>
           <button
             type="button"
-            className="rounded-lg border border-line bg-panel px-3 py-2 text-sm hover:bg-panel-2"
+            className="rounded-lg border border-line bg-panel px-3.5 py-2 text-sm text-muted hover:bg-panel-2 hover:text-text"
             onClick={() => setMonth(startOfMonth(new Date()))}
           >
             Hoy
@@ -196,7 +196,7 @@ export function AppointmentsCalendar() {
           <button
             type="button"
             aria-label="Mes siguiente"
-            className="h-9 w-9 rounded-lg border border-line bg-panel text-lg leading-none hover:bg-panel-2"
+            className="h-9 w-9 rounded-lg border border-line bg-panel text-lg leading-none text-muted hover:bg-panel-2 hover:text-text"
             onClick={() => setMonth((prev) => addMonths(prev, 1))}
           >
             ›
@@ -209,7 +209,7 @@ export function AppointmentsCalendar() {
       ) : null}
 
       {/* Vista agenda (móvil) */}
-      <div className="md:hidden panel rounded-2xl overflow-hidden divide-y divide-line">
+      <div className="md:hidden rounded-xl border border-line bg-panel overflow-hidden divide-y divide-line">
         {isLoading ? (
           <p className="p-6 text-sm text-muted">Cargando calendario…</p>
         ) : (
@@ -271,13 +271,13 @@ export function AppointmentsCalendar() {
         )}
       </div>
 
-      {/* Vista grilla (desktop) */}
-      <div className="hidden md:block panel rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-line bg-panel-2">
+      {/* Vista grilla (desktop) — estilo limpio a ancho completo */}
+      <div className="hidden md:block w-full">
+        <div className="grid grid-cols-7 gap-2 mb-2">
           {WEEKDAY.map((label) => (
             <div
               key={label}
-              className="px-2 py-2 text-center text-xs font-medium text-muted"
+              className="text-center text-sm font-medium text-muted py-1"
             >
               {label}
             </div>
@@ -287,7 +287,7 @@ export function AppointmentsCalendar() {
         {isLoading ? (
           <p className="p-6 text-sm text-muted">Cargando calendario…</p>
         ) : (
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-2">
             {range.cells.map((day) => {
               const key = toIsoDate(day);
               const inMonth = day.getMonth() === monthIndex;
@@ -297,24 +297,22 @@ export function AppointmentsCalendar() {
               return (
                 <div
                   key={key}
-                  className={`min-h-28 border-b border-r border-line p-2 ${
-                    inMonth ? 'bg-panel' : 'bg-panel-2/60'
-                  }`}
+                  className="aspect-square overflow-hidden rounded-lg border border-line bg-panel p-2 flex flex-col"
                 >
-                  <div className="flex justify-end mb-1">
+                  <div className="flex justify-start shrink-0">
                     <span
-                      className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-sm ${
+                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full text-sm ${
                         isToday
-                          ? 'bg-accent text-white font-medium'
+                          ? 'bg-accent text-white font-medium px-1'
                           : inMonth
-                            ? 'text-text'
+                            ? 'text-text font-medium'
                             : 'text-muted'
                       }`}
                     >
                       {day.getDate()}
                     </span>
                   </div>
-                  <ul className="space-y-1">
+                  <ul className="space-y-1 min-h-0 overflow-hidden mt-1.5">
                     {dayItems.slice(0, 3).map((item) => (
                       <li key={item.id}>
                         <button

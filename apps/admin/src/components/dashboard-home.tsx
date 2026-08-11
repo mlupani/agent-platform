@@ -25,6 +25,8 @@ export function DashboardHome() {
   });
 
   const m = dashboard?.metrics;
+  const photos = m?.contentPhotosMonth ?? 0;
+  const videos = m?.contentVideosMonth ?? 0;
   const cards = [
     {
       label: 'Conversaciones',
@@ -50,6 +52,12 @@ export function DashboardHome() {
       hint: 'Conversaciones con atención humana',
       icon: '⏸',
     },
+    {
+      label: 'Contenido generado',
+      value: m?.contentGeneratedMonth ?? 0,
+      hint: `Este mes · ${photos} foto${photos === 1 ? '' : 's'} · ${videos} video${videos === 1 ? '' : 's'}`,
+      icon: '✨',
+    },
   ];
 
   return (
@@ -74,7 +82,7 @@ export function DashboardHome() {
         </div>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map((card) => (
           <article key={card.label} className="panel rounded-2xl p-5">
             <div className="flex items-start justify-between gap-3">

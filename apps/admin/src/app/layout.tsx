@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Providers } from '@/components/providers';
-import { Shell } from '@/components/shell';
+import { AppFrame } from '@/components/app-frame';
 import './globals.css';
 
 const sans = Plus_Jakarta_Sans({
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
     <html lang="es" className={`${sans.variable} ${mono.variable} h-full`}>
       <body className="min-h-full antialiased">
         <Providers>
-          <Shell>{children}</Shell>
+          <AppFrame>{children}</AppFrame>
         </Providers>
       </body>
     </html>

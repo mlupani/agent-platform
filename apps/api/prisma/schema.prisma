@@ -662,3 +662,17 @@ model ContentGenerationExecution {
   @@map("content_generation_executions")
 }
 
+/// Usuarios del panel admin (login local, no confundir con User/contacto).
+model AdminUser {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  /// ADMIN | USER
+  role         String
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admin_users")
+}
+

@@ -1,13 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import type { Business } from '@/lib/types';
 import { useRealtimeInvalidation } from '@/hooks/use-realtime';
 
+interface ShellUser {
+  id: string;
+  username: string;
+  role: 'ADMIN' | 'USER';
+  displayName?: string | null;
+}
 const NAV = [
   {
     href: '/',
@@ -95,14 +101,19 @@ function NavLinks({
   pathname,
   onNavigate,
   contentBadge = 0,
+  role,
 }: {
   pathname: string;
   onNavigate?: () => void;
   contentBadge?: number;
+  role: 'ADMIN' | 'USER';
 }) {
+  const items = NAV.filter(
+    (item) => item.href !== '/playground' || role === 'ADMIN',
+  );
   return (
     <nav className="p-3 flex flex-col gap-1">
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active =
           item.href === '/'
             ? pathname === '/'
@@ -139,9 +150,17 @@ function NavLinks({
   );
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({
+  children,
+  user,
+}: {
+  children: ReactNode;
+  user: ShellUser;
+}) {
   useRealtimeInvalidation();
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: business } = useQuery({
     queryKey: ['current-business'],
@@ -157,9 +176,21 @@ export function Shell({ children }: { children: ReactNode }) {
   });
   const contentBadge = contentSummary?.drafts ?? 0;
 
-  const email = adminEmail();
-  const initial = email.slice(0, 1).toUpperCase();
+  const label =
+    user.displayName?.trim() ||
+    user.username ||
+    adminEmail();
+  const initial = label.slice(0, 1).toUpperCase();
 
+  async function logout() {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    await queryClient.clear();
+    router.replace('/login');
+  }
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
@@ -193,7 +224,11 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh grid lg:grid-cols-[240px_1fr] bg-ink">
       <aside className="hidden lg:flex lg:flex-col border-r border-line bg-panel">
         {brand}
-        <NavLinks pathname={pathname} contentBadge={contentBadge} />
+        <NavLinks
+          pathname={pathname}
+          contentBadge={contentBadge}
+          role={user.role}
+        />
       </aside>
 
       {menuOpen ? (
@@ -221,6 +256,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <NavLinks
               pathname={pathname}
               contentBadge={contentBadge}
+              role={user.role}
               onNavigate={() => setMenuOpen(false)}
             />
           </aside>
@@ -246,10 +282,22 @@ export function Shell({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="flex items-center gap-2.5 text-sm text-muted shrink-0">
+            <span className="hidden sm:inline text-[11px] uppercase tracking-wide text-muted">
+              {user.role === 'ADMIN' ? 'Admin' : 'Usuario'}
+            </span>
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white text-xs font-semibold">
               {initial}
             </span>
-            <span className="hidden sm:inline truncate max-w-[12rem]">{email}</span>
+            <span className="hidden sm:inline truncate max-w-[10rem]">
+              {label}
+            </span>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-panel-2 hover:text-text"
+            >
+              Salir
+            </button>
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-clip">

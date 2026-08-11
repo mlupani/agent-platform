@@ -42,6 +42,9 @@ export class AnalyticsService {
     const startOfWeek = now.startOf('week').toUTC().toJSDate(); // Monday
     const endOfWeek = now.endOf('week').toUTC().toJSDate();
 
+    const startOfMonth = now.startOf('month').toUTC().toJSDate();
+    const visibleConversation = { businessId, hiddenAt: null };
+
     const [
       conversationsToday,
       conversationsWeek,
@@ -55,31 +58,33 @@ export class AnalyticsService {
       latency,
       recentConversations,
       upcomingAppointments,
+      contentGeneratedMonth,
+      contentAssetsByType,
     ] = await Promise.all([
       this.prisma.conversation.count({
         where: {
-          businessId,
+          ...visibleConversation,
           createdAt: { gte: startOfDay, lte: endOfDay },
         },
       }),
       this.prisma.conversation.count({
         where: {
-          businessId,
+          ...visibleConversation,
           createdAt: { gte: startOfWeek, lte: endOfWeek },
         },
       }),
       this.prisma.conversation.groupBy({
         by: ['status'],
-        where: { businessId },
+        where: visibleConversation,
         _count: true,
       }),
       this.prisma.conversation.aggregate({
-        where: { businessId },
+        where: visibleConversation,
         _sum: { unreadCount: true },
       }),
       this.prisma.conversation.groupBy({
         by: ['channel'],
-        where: { businessId },
+        where: visibleConversation,
         _count: true,
       }),
       this.prisma.appointment.count({
@@ -121,7 +126,7 @@ export class AnalyticsService {
         _avg: { latencyMs: true },
       }),
       this.prisma.conversation.findMany({
-        where: { businessId },
+        where: visibleConversation,
         orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
         take: 8,
         select: {
@@ -148,6 +153,24 @@ export class AnalyticsService {
           service: { select: { id: true, name: true } },
         },
       }),
+      this.prisma.generatedContent.count({
+        where: {
+          businessId,
+          createdAt: { gte: startOfMonth },
+          status: { not: 'FAILED' },
+        },
+      }),
+      this.prisma.contentAsset.groupBy({
+        by: ['type'],
+        where: {
+          createdAt: { gte: startOfMonth },
+          content: {
+            businessId,
+            status: { not: 'FAILED' },
+          },
+        },
+        _count: true,
+      }),
     ]);
 
     const statusCounts = Object.fromEntries(
@@ -160,6 +183,10 @@ export class AnalyticsService {
       (statusCounts.AI ?? 0) +
       (statusCounts.WAITING_HUMAN ?? 0) +
       (statusCounts.HUMAN ?? 0);
+
+    const assetCounts = Object.fromEntries(
+      contentAssetsByType.map((row) => [row.type, row._count]),
+    ) as Record<string, number>;
 
     return {
       business: {
@@ -190,6 +217,9 @@ export class AnalyticsService {
             executionsWeek._avg.durationMs ??
             0,
         ),
+        contentGeneratedMonth,
+        contentPhotosMonth: assetCounts.IMAGE ?? 0,
+        contentVideosMonth: assetCounts.VIDEO ?? 0,
       },
       statusMix: openByStatus.map((row) => ({
         status: row.status,

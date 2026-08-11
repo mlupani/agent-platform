@@ -5,6 +5,8 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AuthModule } from './auth/auth.module';
+import { AuthGuardsModule } from './common/guards/auth-guards.module';
 import { AutomationsModule } from './automations/automations.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { ChannelsModule } from './channels/channels.module';
@@ -45,6 +47,8 @@ import { AppService } from './app.service';
     }),
     PrismaModule,
     RedisModule,
+    AuthModule,
+    AuthGuardsModule,
     RealtimeModule,
     AiModule,
     BusinessesModule,

@@ -16,6 +16,8 @@ describe('AnalyticsService.dashboard', () => {
     agentExecution: { aggregate: jest.fn() },
     message: { aggregate: jest.fn() },
     business: { count: jest.fn() },
+    generatedContent: { count: jest.fn() },
+    contentAsset: { groupBy: jest.fn() },
   };
 
   const businesses = {
@@ -56,6 +58,11 @@ describe('AnalyticsService.dashboard', () => {
     });
     prisma.conversation.findMany.mockResolvedValue([]);
     prisma.appointment.findMany.mockResolvedValue([]);
+    prisma.generatedContent.count.mockResolvedValue(4);
+    prisma.contentAsset.groupBy.mockResolvedValue([
+      { type: 'IMAGE', _count: 6 },
+      { type: 'VIDEO', _count: 1 },
+    ]);
   });
 
   it('returns business-scoped KPIs with handoffs and channel mix', async () => {
@@ -67,6 +74,14 @@ describe('AnalyticsService.dashboard', () => {
     expect(result.metrics.openConversations).toBe(5);
     expect(result.metrics.unreadMessages).toBe(7);
     expect(result.metrics.avgLatencyMs).toBe(1200);
+    expect(result.metrics.contentGeneratedMonth).toBe(4);
+    expect(result.metrics.contentPhotosMonth).toBe(6);
+    expect(result.metrics.contentVideosMonth).toBe(1);
+    expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ hiddenAt: null }),
+      }),
+    );
     expect(result.channelMix).toEqual(
       expect.arrayContaining([
         { channel: 'WHATSAPP', count: 4 },

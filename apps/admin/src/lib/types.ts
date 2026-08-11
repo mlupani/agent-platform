@@ -121,6 +121,9 @@ export interface DashboardPayload {
     outputTokensWeek: number;
     estimatedCostWeek: number;
     avgLatencyMs: number;
+    contentGeneratedMonth: number;
+    contentPhotosMonth: number;
+    contentVideosMonth: number;
   };
   statusMix: Array<{ status: string; count: number }>;
   channelMix: Array<{ channel: string; count: number }>;
