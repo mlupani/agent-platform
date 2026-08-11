@@ -1,21 +1,15 @@
-# Producción detrás de Traefik (Hostinger / VPS).
+# Producción detrás de Traefik con network_mode: host (Hostinger).
 #
-# Requisitos:
-#   - Traefik ya corriendo con:
-#       entrypoints web (:80) + websecure (:443)
-#       certificatesresolvers.letsencrypt
-#       providers.docker.exposedbydefault=false
-#   - DNS A: ADMIN_HOST y API_HOST → IP del VPS
-#   - Contenedores admin/api en la MISMA red Docker que Traefik
+# Traefik (traefik-traefik-1) escucha :80/:443 en el host.
+# api/admin se publican solo en 127.0.0.1 para que Traefik los alcance.
 #
 # Uso:
-#   1. docker network ls | grep -i traefik   → anotá el nombre
-#   2. Completá TRAEFIK_NETWORK en .env.production
+#   1. DNS A: ADMIN_HOST y API_HOST → IP pública del VPS
+#   2. Completá .env.production
 #   3. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
-# Notas ARM (Ampere):
-#   - WAHA_IMAGE por defecto: noweb-arm
-#   - En VPS x86: WAHA_IMAGE=devlikeapro/waha:noweb
+# ARM (Ampere): WAHA_IMAGE=devlikeapro/waha:noweb-arm
+# x86:          WAHA_IMAGE=devlikeapro/waha:noweb
 
 name: agent-platform-prod
 
@@ -40,8 +34,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - internal
     deploy:
       resources:
         limits:
@@ -64,8 +56,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks:
-      - internal
     deploy:
       resources:
         limits:
@@ -101,8 +91,6 @@ services:
     dns:
       - 1.1.1.1
       - 8.8.8.8
-    networks:
-      - internal
     deploy:
       resources:
         limits:
@@ -117,8 +105,6 @@ services:
     image: subzeroid/aiograpi-rest:6.0.0
     container_name: agent-platform-instagram
     restart: unless-stopped
-    networks:
-      - internal
     deploy:
       resources:
         limits:
@@ -160,22 +146,17 @@ services:
       INSTAGRAM_API_URL: http://instagram:8000
       INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
-    expose:
-      - '3001'
-    networks:
-      - internal
-      - traefik
+    # Solo localhost: Traefik (host network) proxya hacia acá
+    ports:
+      - '127.0.0.1:3001:3001'
     labels:
       - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_default}
       - traefik.http.routers.agent-api.rule=Host(`${API_HOST:?Set API_HOST}`)
       - traefik.http.routers.agent-api.entrypoints=websecure
       - traefik.http.routers.agent-api.tls=true
       - traefik.http.routers.agent-api.tls.certresolver=letsencrypt
       - traefik.http.routers.agent-api.service=agent-api
       - traefik.http.services.agent-api.loadbalancer.server.port=3001
-      # WebSockets (/realtime)
-      - traefik.http.services.agent-api.loadbalancer.server.scheme=http
     healthcheck:
       test:
         [
@@ -214,13 +195,10 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-    expose:
-      - '3000'
-    networks:
-      - traefik
+    ports:
+      - '127.0.0.1:3000:3000'
     labels:
       - traefik.enable=true
-      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik_default}
       - traefik.http.routers.agent-admin.rule=Host(`${ADMIN_HOST:?Set ADMIN_HOST}`)
       - traefik.http.routers.agent-admin.entrypoints=websecure
       - traefik.http.routers.agent-admin.tls=true
@@ -236,13 +214,6 @@ services:
       options:
         max-size: '5m'
         max-file: '3'
-
-networks:
-  internal:
-    driver: bridge
-  traefik:
-    external: true
-    name: ${TRAEFIK_NETWORK:-traefik_default}
 
 volumes:
   postgres_data:
