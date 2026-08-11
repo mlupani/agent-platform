@@ -22,7 +22,9 @@ export class BusinessesService {
     const business = await this.prisma.business.findFirst({
       orderBy: { createdAt: 'asc' },
       include: {
-        agentConfigs: { where: { isDefault: true }, take: 1 },
+        agentConfigs: {
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        },
         knowledgeBases: true,
         toolConfigs: true,
         businessHours: { orderBy: { dayOfWeek: 'asc' } },

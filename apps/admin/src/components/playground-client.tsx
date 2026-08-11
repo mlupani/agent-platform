@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Business, ChatResponse } from '@/lib/types';
-
-interface PlaygroundClientProps {
-  businesses: Business[];
-}
+import type {
+  AgentConfig,
+  Business,
+  ChatResponse,
+  RegisteredTool,
+} from '@/lib/types';
 
 interface ExecutionListItem {
   id: string;
@@ -25,12 +26,37 @@ interface ExecutionListItem {
   _count: { toolExecutions: number };
 }
 
-export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
-  const [businessId, setBusinessId] = useState(businesses[0]?.id ?? '');
-  const business = businesses.find((item) => item.id === businessId);
+interface BusinessWithAgents extends Business {
+  agentConfigs?: AgentConfig[];
+}
+
+function riskBadgeClass(risk: string) {
+  if (risk === 'READ') return 'badge-success';
+  if (risk === 'SENSITIVE') return 'badge-warn';
+  return 'badge-muted';
+}
+
+export function PlaygroundClient() {
+  const businessQuery = useQuery({
+    queryKey: ['business'],
+    queryFn: () => api<BusinessWithAgents>('/admin/business'),
+  });
+
+  const toolsQuery = useQuery({
+    queryKey: ['admin-tools'],
+    queryFn: () => api<RegisteredTool[]>('/admin/tools'),
+  });
+
+  const business = businessQuery.data;
   const agents = business?.agentConfigs ?? [];
-  const [agentId, setAgentId] = useState(agents[0]?.id ?? '');
-  const agent = agents.find((item) => item.id === agentId) ?? agents[0];
+  const defaultAgent =
+    agents.find((item) => item.isDefault) ?? agents[0] ?? null;
+
+  const [agentId, setAgentId] = useState<string>('');
+  const agent =
+    agents.find((item) => item.id === (agentId || defaultAgent?.id)) ??
+    defaultAgent;
+
   const [input, setInput] = useState('Hola, ¿cuál es el horario?');
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<
@@ -44,6 +70,17 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
   const [expandedTool, setExpandedTool] = useState<number | null>(null);
 
   const selectedTools = useMemo(() => agent?.enabledTools ?? [], [agent]);
+  const enabledSet = useMemo(() => new Set(selectedTools), [selectedTools]);
+
+  const catalogTools = useMemo(() => {
+    const list = toolsQuery.data ?? [];
+    return [...list].sort((a, b) => {
+      const aOn = enabledSet.has(a.name) ? 0 : 1;
+      const bOn = enabledSet.has(b.name) ? 0 : 1;
+      if (aOn !== bOn) return aOn - bOn;
+      return a.name.localeCompare(b.name);
+    });
+  }, [toolsQuery.data, enabledSet]);
 
   const executionsQuery = useQuery({
     queryKey: ['executions', conversationId],
@@ -67,20 +104,23 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
   }
 
   async function send() {
-    if (!businessId || !input.trim()) return;
+    if (!input.trim() || !business?.id) return;
     setLoading(true);
     setError(null);
     const userMessage = input.trim();
-    setMessages((current) => [...current, { role: 'user', content: userMessage }]);
+    setMessages((current) => [
+      ...current,
+      { role: 'user', content: userMessage },
+    ]);
     setInput('');
     try {
       const result = await api<ChatResponse>('/chat/messages', {
         method: 'POST',
         body: JSON.stringify({
-          businessId,
           agentConfigId: agent?.id,
           conversationId,
           message: userMessage,
+          channel: 'WEB',
           debug: true,
         }),
       });
@@ -98,46 +138,54 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
     }
   }
 
+  if (businessQuery.isLoading) {
+    return <p className="text-sm text-muted">Cargando negocio…</p>;
+  }
+
+  if (businessQuery.error || !business) {
+    return (
+      <p className="text-sm text-rose">
+        {(businessQuery.error as Error)?.message ??
+          'No hay un negocio configurado. Ejecutá el seed.'}
+      </p>
+    );
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] min-w-0">
       <section className="panel rounded-xl p-4 sm:p-5 space-y-4 min-w-0">
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm">
-            Negocio
-            <select
-              className="mt-1 w-full rounded-md bg-ink border border-line px-3 py-2"
-              value={businessId}
-              onChange={(event) => {
-                setBusinessId(event.target.value);
-                resetSession();
-                const next = businesses.find(
-                  (item) => item.id === event.target.value,
-                );
-                setAgentId(next?.agentConfigs?.[0]?.id ?? '');
-              }}
-            >
-              {businesses.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            Agente
-            <select
-              className="mt-1 w-full rounded-md bg-ink border border-line px-3 py-2"
-              value={agent?.id ?? ''}
-              onChange={(event) => setAgentId(event.target.value)}
-            >
-              {agents.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted">Negocio</p>
+            <p className="font-medium truncate">{business.name}</p>
+          </div>
+          {agents.length > 1 ? (
+            <label className="text-sm min-w-[12rem]">
+              Agente
+              <select
+                className="input mt-1 w-full"
+                value={agent?.id ?? ''}
+                onChange={(event) => {
+                  setAgentId(event.target.value);
+                  resetSession();
+                }}
+              >
+                {agents.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                    {item.isDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="text-sm">
+              <p className="text-xs text-muted">Agente</p>
+              <p className="font-medium">{agent?.name ?? '—'}</p>
+            </div>
+          )}
         </div>
+
         <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <p className="mono text-xs text-muted break-all min-w-0">
             {agent?.provider}/{agent?.model} · temp {agent?.temperature} · tools{' '}
@@ -146,26 +194,31 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
           </p>
           <button
             type="button"
-            className="text-xs text-muted hover:text-text min-h-10 px-2"
+            className="btn-secondary text-xs min-h-10 px-3"
             onClick={resetSession}
           >
             Nueva sesión
           </button>
         </div>
-        <div className="min-h-72 max-h-[28rem] overflow-y-auto space-y-3 min-w-0">
+
+        <div className="min-h-72 max-h-[28rem] overflow-y-auto space-y-3 min-w-0 rounded-lg border border-line bg-panel-2/40 p-3">
           {messages.map((message, index) => (
             <article
               key={`${message.role}-${index}`}
               className={`rounded-lg px-3 py-2 text-sm break-words ${
-                message.role === 'user' ? 'bg-white/5' : 'bg-teal/10'
+                message.role === 'user'
+                  ? 'bg-panel ml-6'
+                  : 'bg-accent-soft mr-6'
               }`}
             >
               <div className="flex items-center justify-between gap-2 mb-1">
-                <p className="mono text-[10px] text-muted">{message.role}</p>
+                <p className="mono text-[10px] text-muted">
+                  {message.role === 'user' ? 'Vos' : 'Agente'}
+                </p>
                 {message.debug ? (
                   <button
                     type="button"
-                    className="mono text-[10px] text-teal min-h-8 px-1"
+                    className="mono text-[10px] text-accent min-h-8 px-1"
                     onClick={() => setDebug(message.debug)}
                   >
                     ver debug
@@ -177,13 +230,15 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
           ))}
           {!messages.length && (
             <p className="text-sm text-muted">
-              Todavía no hay mensajes en esta sesión.
+              Todavía no hay mensajes. Probá preguntar horarios, servicios o
+              disponibilidad.
             </p>
           )}
         </div>
+
         <div className="flex gap-2">
           <input
-            className="flex-1 min-w-0 rounded-md bg-ink border border-line px-3 py-3 text-sm min-h-11"
+            className="input flex-1 min-w-0 min-h-11"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
@@ -193,14 +248,15 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
               }
             }}
             placeholder="Escribí un mensaje"
+            disabled={loading || !agent}
           />
           <button
             type="button"
             onClick={() => void send()}
-            disabled={loading}
-            className="shrink-0 rounded-md bg-amber px-4 py-3 text-sm text-ink disabled:opacity-50 min-h-11"
+            disabled={loading || !agent || !input.trim()}
+            className="btn-primary shrink-0 min-h-11 px-4"
           >
-            {loading ? '...' : 'Enviar'}
+            {loading ? '…' : 'Enviar'}
           </button>
         </div>
         {error ? (
@@ -232,11 +288,7 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
                   debug?.success === false ? 'text-rose' : 'text-teal'
                 }`}
               >
-                {debug
-                  ? debug.success === false
-                    ? 'error'
-                    : 'ok'
-                  : '—'}
+                {debug ? (debug.success === false ? 'error' : 'ok') : '—'}
               </dd>
             </div>
             <div>
@@ -279,10 +331,79 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
             Ver system prompt
           </label>
           {showPrompt && debug?.systemPrompt ? (
-            <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-ink/60 p-3 mono text-[11px] text-muted whitespace-pre-wrap">
+            <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-panel-2 p-3 mono text-[11px] text-muted whitespace-pre-wrap">
               {debug.systemPrompt}
             </pre>
           ) : null}
+        </article>
+
+        <article className="panel rounded-xl p-5">
+          <p className="mono text-[11px] text-muted">TOOLS DISPONIBLES</p>
+          <p className="mt-1 text-xs text-muted">
+            Horarios y servicios suelen venir en el prompt (sin tool). Para ver
+            el timeline, probá disponibilidad o reservar.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[20rem]">
+              <thead>
+                <tr className="border-b border-line text-muted">
+                  <th className="py-2 pr-2 font-medium">Tool</th>
+                  <th className="py-2 pr-2 font-medium">Riesgo</th>
+                  <th className="py-2 font-medium">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catalogTools.map((tool) => {
+                  const enabled = enabledSet.has(tool.name);
+                  return (
+                    <tr
+                      key={tool.name}
+                      className="border-b border-line/70 align-top"
+                    >
+                      <td className="py-2 pr-2">
+                        <p className="mono text-[11px] font-medium">
+                          {tool.name}
+                        </p>
+                        <p className="text-muted mt-0.5 leading-snug">
+                          {tool.description}
+                        </p>
+                      </td>
+                      <td className="py-2 pr-2 whitespace-nowrap">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${riskBadgeClass(tool.risk)}`}
+                        >
+                          {tool.risk}
+                        </span>
+                      </td>
+                      <td className="py-2 whitespace-nowrap">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            enabled ? 'badge-success' : 'badge-muted'
+                          }`}
+                        >
+                          {enabled ? 'ON' : 'OFF'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!catalogTools.length && !toolsQuery.isLoading ? (
+                  <tr>
+                    <td colSpan={3} className="py-3 text-muted">
+                      No se pudieron cargar las tools.
+                    </td>
+                  </tr>
+                ) : null}
+                {toolsQuery.isLoading ? (
+                  <tr>
+                    <td colSpan={3} className="py-3 text-muted">
+                      Cargando tools…
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </article>
 
         <article className="panel rounded-xl p-5">
@@ -291,7 +412,7 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
             {(debug?.tools ?? []).map((tool, index) => (
               <li
                 key={`${tool.name}-${index}`}
-                className="rounded-md border border-line/70 px-3 py-2"
+                className="rounded-md border border-line px-3 py-2"
               >
                 <button
                   type="button"
@@ -329,7 +450,12 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
               </li>
             ))}
             {!debug?.tools?.length && (
-              <li className="text-muted">Sin tool calls en este turno</li>
+              <li className="text-muted">
+                Sin tool calls en este turno
+                {debug
+                  ? ' (puede haber respondido solo con el prompt)'
+                  : ''}
+              </li>
             )}
           </ol>
         </article>
@@ -344,7 +470,10 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
                 chunk.id.slice(0, 8);
               const open = expandedChunk === chunk.id;
               return (
-                <li key={chunk.id} className="rounded-md border border-line/70 p-3">
+                <li
+                  key={chunk.id}
+                  className="rounded-md border border-line p-3"
+                >
                   <button
                     type="button"
                     className="w-full text-left"
@@ -354,7 +483,7 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
                       )
                     }
                   >
-                    <p className="mono text-[11px] text-teal">
+                    <p className="mono text-[11px] text-accent">
                       {title} · score {chunk.score.toFixed(3)}
                     </p>
                     <p className="text-muted mt-1">
@@ -376,10 +505,12 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
 
         <article className="panel rounded-xl p-5">
           <div className="flex items-center justify-between gap-2">
-            <p className="mono text-[11px] text-muted">HISTORIAL DE EJECUCIONES</p>
+            <p className="mono text-[11px] text-muted">
+              HISTORIAL DE EJECUCIONES
+            </p>
             <button
               type="button"
-              className="text-[11px] text-teal"
+              className="text-[11px] text-accent"
               onClick={() => void executionsQuery.refetch()}
             >
               Actualizar
@@ -389,7 +520,7 @@ export function PlaygroundClient({ businesses }: PlaygroundClientProps) {
             {(executionsQuery.data ?? []).map((item) => (
               <li
                 key={item.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-line/50 pb-2"
+                className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2"
               >
                 <div>
                   <p className={item.success ? 'text-teal' : 'text-rose'}>

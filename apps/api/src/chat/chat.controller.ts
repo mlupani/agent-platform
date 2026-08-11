@@ -1,11 +1,14 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { AgentService } from '../ai/agents/agent.service';
+import { BusinessesService } from '../businesses/businesses.service';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 const chatSchema = z.object({
-  businessId: z.string().uuid(),
+  /** Opcional: si falta, usa el negocio del deployment (single-business). */
+  businessId: z.string().uuid().optional(),
   conversationId: z.string().uuid().optional(),
   message: z.string().min(1),
   channel: z.string().optional(),
@@ -16,16 +19,22 @@ const chatSchema = z.object({
 });
 
 @Controller('chat')
+@UseGuards(ApiKeyGuard)
 export class ChatController {
-  constructor(private readonly agent: AgentService) {}
+  constructor(
+    private readonly agent: AgentService,
+    private readonly businesses: BusinessesService,
+  ) {}
 
   @Post('messages')
-  send(
+  async send(
     @Body(new ZodValidationPipe(chatSchema))
     body: z.infer<typeof chatSchema>,
   ) {
+    const businessId = body.businessId ?? (await this.businesses.getCurrentId());
     return this.agent.run({
       ...body,
+      businessId,
       channel: body.channel ?? 'WEB',
     });
   }
@@ -36,8 +45,10 @@ export class ChatController {
     body: z.infer<typeof chatSchema>,
     @Res() res: Response,
   ) {
+    const businessId = body.businessId ?? (await this.businesses.getCurrentId());
     const result = await this.agent.run({
       ...body,
+      businessId,
       channel: body.channel ?? 'WEB',
       debug: true,
     });
@@ -45,7 +56,9 @@ export class ChatController {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.write(`data: ${JSON.stringify({ type: 'delta', content: result.message })}\n\n`);
+    res.write(
+      `data: ${JSON.stringify({ type: 'delta', content: result.message })}\n\n`,
+    );
     res.write(
       `data: ${JSON.stringify({
         type: 'done',

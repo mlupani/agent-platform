@@ -49,6 +49,17 @@ const NAV = [
     ),
   },
   {
+    href: '/playground',
+    label: 'Playground',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M8 8h8v8H8z" />
+        <path d="M10 12h4M12 10v4" />
+        <path d="M5 7V5a1 1 0 0 1 1-1h2M19 7V5a1 1 0 0 0-1-1h-2M5 17v2a1 1 0 0 0 1 1h2M19 17v2a1 1 0 0 1-1 1h-2" />
+      </svg>
+    ),
+  },
+  {
     href: '/integrations',
     label: 'Integraciones',
     icon: (
