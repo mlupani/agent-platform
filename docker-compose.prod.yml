@@ -67,7 +67,7 @@ services:
         max-file: '3'
 
   waha:
-    image: ${WAHA_IMAGE:-devlikeapro/waha:noweb-arm}
+    image: ${WAHA_IMAGE:-devlikeapro/waha:noweb}
     container_name: agent-platform-waha
     restart: unless-stopped
     environment:
