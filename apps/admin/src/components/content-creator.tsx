@@ -7,6 +7,7 @@ import { api, apiForm } from '@/lib/api';
 
 interface ContentAsset {
   id: string;
+  type?: string;
   format: string;
   storageUrl: string;
   width?: number | null;
@@ -140,6 +141,21 @@ function formatPubDate(value?: string | null) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function isVideoContent(item: GeneratedContent): boolean {
+  const assets = item.assets ?? [];
+  if (!assets.length) return false;
+  return assets.some((asset) => (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO');
+}
+
+function isImageContent(item: GeneratedContent): boolean {
+  if (item.status === 'GENERATING' || item.status === 'PUBLISHING') {
+    return !isVideoContent(item);
+  }
+  const assets = item.assets ?? [];
+  if (!assets.length) return false;
+  return assets.every((asset) => (asset.type ?? 'IMAGE').toUpperCase() !== 'VIDEO');
+}
+
 export function ContentCreator() {
   const queryClient = useQueryClient();
   const [objective, setObjective] = useState<string>('AUTOMATIC');
@@ -185,9 +201,15 @@ export function ContentCreator() {
   const business = useQuery({
     queryKey: ['current-business'],
     queryFn: () =>
-      api<{ services?: ServiceRow[]; brandingConfig?: unknown | null; timezone?: string }>(
+      api<{ brandingConfig?: unknown | null; timezone?: string }>(
         '/admin/business',
       ),
+  });
+
+  const servicesQuery = useQuery({
+    queryKey: ['services', 'enabled'],
+    queryFn: () =>
+      api<ServiceRow[]>('/admin/services?enabledOnly=true'),
   });
 
   useEffect(() => {
@@ -433,7 +455,7 @@ export function ContentCreator() {
     );
   }
 
-  const services = (business.data?.services ?? []).filter((s) => s.enabled);
+  const services = servicesQuery.data ?? [];
   const hasBranding = Boolean(business.data?.brandingConfig);
   const generating =
     generate.isPending ||
@@ -452,6 +474,89 @@ export function ContentCreator() {
       item.status === 'GENERATING' ||
       item.status === 'PUBLISHING',
   );
+  const imageItems = previewItems.filter(isImageContent);
+  const videoItems = previewItems.filter(isVideoContent);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const selected = (list.data ?? []).find((item) => item.id === selectedId);
+    if (!selected) return;
+    const matchesTab =
+      mediaKind === 'video' ? isVideoContent(selected) : isImageContent(selected);
+    if (!matchesTab) setSelectedId(null);
+  }, [mediaKind, selectedId, list.data]);
+
+  function renderGallery(
+    items: GeneratedContent[],
+    emptyLabel: string,
+  ) {
+    return (
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-2">
+          <h3 className="font-medium">
+            {mediaKind === 'image' ? 'Imágenes generadas' : 'Videos generados'}
+          </h3>
+          <p className="text-xs text-muted tabular-nums">
+            {items.length} {items.length === 1 ? 'pieza' : 'piezas'}
+          </p>
+        </div>
+        {list.isLoading ? (
+          <p className="text-sm text-muted">Cargando…</p>
+        ) : !items.length ? (
+          <p className="text-sm text-muted panel rounded-2xl p-5">{emptyLabel}</p>
+        ) : (
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+            {items.map((item) => {
+              const thumb = item.assets?.[0]?.storageUrl;
+              const active = item.id === selectedId;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openContent(item)}
+                  className={`text-left panel rounded-2xl overflow-hidden border transition ${
+                    active
+                      ? 'border-accent ring-1 ring-accent/40'
+                      : 'border-transparent'
+                  }`}
+                >
+                  <div className="aspect-[4/3] bg-panel-2">
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumb}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-xs text-muted">
+                        Generando…
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium truncate">
+                        {item.headline || item.topic || 'Sin título'}
+                      </p>
+                      <span
+                        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusClass(item.status)}`}
+                      >
+                        {STATUS_LABEL[item.status] ?? item.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted line-clamp-2">
+                      {item.caption || '—'}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -472,6 +577,29 @@ export function ContentCreator() {
           {hasBranding ? 'Editar marca' : 'Configurar marca'}
         </Link>
       </header>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ['Este mes', summary.data?.generatedThisMonth],
+          ['Sin publicar', summary.data?.drafts],
+          ['Imágenes', summary.data?.imageGenerationsThisMonth],
+          [
+            'Costo est.',
+            summary.data
+              ? `$${summary.data.estimatedCostThisMonth.toFixed(2)}`
+              : undefined,
+          ],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="panel rounded-2xl p-4">
+            <p className="text-xs text-muted uppercase tracking-wide">
+              {label}
+            </p>
+            <p className="text-2xl font-semibold mt-1 tabular-nums">
+              {value ?? '—'}
+            </p>
+          </div>
+        ))}
+      </section>
 
       <div
         className="inline-flex rounded-xl border border-line bg-panel p-1 gap-1"
@@ -516,210 +644,33 @@ export function ContentCreator() {
       </div>
 
       {mediaKind === 'video' ? (
-        <section className="panel rounded-2xl p-8 sm:p-12 text-center space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
-            En desarrollo
-          </p>
-          <h3 className="text-xl font-semibold tracking-tight">
-            Generación de video
-          </h3>
-          <p className="text-sm text-muted max-w-md mx-auto">
-            Esta funcionalidad está en desarrollo. Por ahora podés crear
-            imágenes; el video va a llegar en una próxima actualización.
-          </p>
-          <button
-            type="button"
-            className="mt-2 rounded-lg border border-line bg-panel px-4 py-2.5 text-sm min-h-10 inline-flex items-center hover:bg-panel-2"
-            onClick={() => setMediaKind('image')}
-          >
-            Volver a imagen
-          </button>
-        </section>
+        <div className="space-y-6">
+          <section className="panel rounded-2xl p-8 sm:p-12 text-center space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+              En desarrollo
+            </p>
+            <h3 className="text-xl font-semibold tracking-tight">
+              Generación de video
+            </h3>
+            <p className="text-sm text-muted max-w-md mx-auto">
+              Esta funcionalidad está en desarrollo. Por ahora podés crear
+              imágenes; el video va a llegar en una próxima actualización.
+            </p>
+            <button
+              type="button"
+              className="mt-2 rounded-lg border border-line bg-panel px-4 py-2.5 text-sm min-h-10 inline-flex items-center hover:bg-panel-2"
+              onClick={() => setMediaKind('image')}
+            >
+              Volver a imagen
+            </button>
+          </section>
+          {renderGallery(
+            videoItems,
+            'Todavía no hay videos generados. Cuando esté disponible la generación, van a aparecer acá.',
+          )}
+        </div>
       ) : (
-        <>
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          ['Este mes', summary.data?.generatedThisMonth],
-          ['Sin publicar', summary.data?.drafts],
-          ['Imágenes', summary.data?.imageGenerationsThisMonth],
-          [
-            'Costo est.',
-            summary.data
-              ? `$${summary.data.estimatedCostThisMonth.toFixed(2)}`
-              : undefined,
-          ],
-        ].map(([label, value]) => (
-          <div key={String(label)} className="panel rounded-2xl p-4">
-            <p className="text-xs text-muted uppercase tracking-wide">
-              {label}
-            </p>
-            <p className="text-2xl font-semibold mt-1 tabular-nums">
-              {value ?? '—'}
-            </p>
-          </div>
-        ))}
-      </section>
-
-      <section className="panel rounded-2xl p-5 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="font-medium">Generación automática</h3>
-            <p className="text-sm text-muted mt-1">
-              Elegí los días y la hora: generamos borradores solos en segundo
-              plano, aunque no tengas el panel abierto. Quedan listos para que
-              los revises y publiques.
-              {business.data?.timezone
-                ? ` Horario según ${business.data.timezone}.`
-                : ''}
-            </p>
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm min-h-10 cursor-pointer">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={autoEnabled}
-              onChange={(e) => {
-                setAutoDirty(true);
-                setAutoEnabled(e.target.checked);
-              }}
-            />
-            Activar
-          </label>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted">Días</span>
-            <button
-              type="button"
-              className="text-xs text-muted underline-offset-2 hover:underline"
-              onClick={() => {
-                setAutoDirty(true);
-                setAutoDays([1, 2, 3, 4, 5, 6, 7]);
-              }}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              className="text-xs text-muted underline-offset-2 hover:underline"
-              onClick={() => {
-                setAutoDirty(true);
-                setAutoDays([1, 2, 3, 4, 5]);
-              }}
-            >
-              Lun–Vie
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {WEEKDAYS.map((day) => {
-              const on = autoDays.includes(day.value);
-              return (
-                <button
-                  key={day.value}
-                  type="button"
-                  disabled={!autoEnabled}
-                  onClick={() => toggleAutoDay(day.value)}
-                  className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
-                    on
-                      ? 'border-accent bg-accent text-white'
-                      : 'border-line text-muted'
-                  } disabled:opacity-50`}
-                >
-                  {day.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Horario</span>
-            <input
-              type="time"
-              disabled={!autoEnabled}
-              className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
-              value={autoTime}
-              onChange={(e) => {
-                setAutoDirty(true);
-                setAutoTime(e.target.value);
-              }}
-            />
-          </label>
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted">Objetivo</span>
-            <select
-              disabled={!autoEnabled}
-              className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
-              value={autoObjective}
-              onChange={(e) => {
-                setAutoDirty(true);
-                setAutoObjective(e.target.value);
-              }}
-            >
-              {OBJECTIVES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="space-y-2">
-          <span className="text-sm text-muted">Canales</span>
-          <div className="flex flex-wrap gap-2">
-            {CHANNELS.map((ch) => {
-              const on = autoChannels.includes(ch.value);
-              return (
-                <button
-                  key={ch.value}
-                  type="button"
-                  disabled={!autoEnabled}
-                  onClick={() => toggleAutoChannel(ch.value)}
-                  className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
-                    on
-                      ? 'border-nav-active bg-nav-active/15 text-text'
-                      : 'border-line text-muted'
-                  } disabled:opacity-50`}
-                >
-                  {ch.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="rounded-lg bg-nav-active text-white px-4 py-2.5 text-sm min-h-10 disabled:opacity-50"
-            disabled={
-              saveAutoConfig.isPending ||
-              (autoEnabled && (autoDays.length === 0 || autoChannels.length === 0))
-            }
-            onClick={() => saveAutoConfig.mutate()}
-          >
-            {saveAutoConfig.isPending ? 'Guardando…' : 'Guardar programación'}
-          </button>
-          {socialConfig.data?.lastAutoGenerateAt ? (
-            <p className="text-xs text-muted">
-              Última automática:{' '}
-              {formatPubDate(socialConfig.data.lastAutoGenerateAt)}
-            </p>
-          ) : null}
-          {saveAutoConfig.isSuccess && !autoDirty ? (
-            <p className="text-xs text-emerald-700">Guardado</p>
-          ) : null}
-          {saveAutoConfig.isError ? (
-            <p className="text-xs text-red-600">
-              {(saveAutoConfig.error as Error)?.message || 'No se pudo guardar'}
-            </p>
-          ) : null}
-        </div>
-      </section>
-
+        <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section className="panel rounded-2xl p-5 space-y-4">
           <h3 className="font-medium">Nuevo contenido</h3>
@@ -768,23 +719,34 @@ export function ContentCreator() {
             </div>
           </div>
 
-          {objective === 'SERVICE_PROMOTION' || services.length > 0 ? (
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted">Servicio (opcional)</span>
-              <select
-                className="w-full rounded-lg border border-line bg-panel px-3 py-2"
-                value={serviceId}
-                onChange={(e) => setServiceId(e.target.value)}
-              >
-                <option value="">Sin servicio específico</option>
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Servicio (opcional)</span>
+            <select
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={serviceId}
+              onChange={(e) => setServiceId(e.target.value)}
+              disabled={servicesQuery.isLoading || services.length === 0}
+            >
+              <option value="">
+                {servicesQuery.isLoading
+                  ? 'Cargando servicios…'
+                  : services.length === 0
+                    ? 'No hay servicios cargados'
+                    : 'Sin servicio específico'}
+              </option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {!servicesQuery.isLoading && services.length === 0 ? (
+              <p className="text-xs text-muted">
+                Cargá servicios en Personalización para poder asociarlos al
+                contenido.
+              </p>
+            ) : null}
+          </label>
 
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Instrucciones</span>
@@ -1082,63 +1044,173 @@ export function ContentCreator() {
         </section>
       </div>
 
-      <section className="space-y-3">
-        <h3 className="font-medium">Recientes</h3>
-        {list.isLoading ? (
-          <p className="text-sm text-muted">Cargando…</p>
-        ) : !previewItems.length ? (
-          <p className="text-sm text-muted">Todavía no hay contenidos.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {previewItems.map((item) => {
-              const thumb = item.assets?.[0]?.storageUrl;
-              const active = item.id === selectedId;
+          {renderGallery(
+            imageItems,
+            'Todavía no hay imágenes generadas. Creá un borrador arriba para verlo acá.',
+          )}
+        </div>
+      )}
+
+      <section className="panel rounded-2xl p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-medium">Generación automática</h3>
+            <p className="text-sm text-muted mt-1">
+              Elegí los días y la hora: generamos borradores solos en segundo
+              plano, aunque no tengas el panel abierto. Quedan listos para que
+              los revises y publiques.
+              {business.data?.timezone
+                ? ` Horario según ${business.data.timezone}.`
+                : ''}
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm min-h-10 cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={autoEnabled}
+              onChange={(e) => {
+                setAutoDirty(true);
+                setAutoEnabled(e.target.checked);
+              }}
+            />
+            Activar
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted">Días</span>
+            <button
+              type="button"
+              className="text-xs text-muted underline-offset-2 hover:underline"
+              onClick={() => {
+                setAutoDirty(true);
+                setAutoDays([1, 2, 3, 4, 5, 6, 7]);
+              }}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              className="text-xs text-muted underline-offset-2 hover:underline"
+              onClick={() => {
+                setAutoDirty(true);
+                setAutoDays([1, 2, 3, 4, 5]);
+              }}
+            >
+              Lun–Vie
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {WEEKDAYS.map((day) => {
+              const on = autoDays.includes(day.value);
               return (
                 <button
-                  key={item.id}
+                  key={day.value}
                   type="button"
-                  onClick={() => openContent(item)}
-                  className={`text-left panel rounded-2xl overflow-hidden border transition ${
-                    active ? 'border-accent ring-1 ring-accent/40' : 'border-transparent'
-                  }`}
+                  disabled={!autoEnabled}
+                  onClick={() => toggleAutoDay(day.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
+                    on
+                      ? 'border-accent bg-accent text-white'
+                      : 'border-line text-muted'
+                  } disabled:opacity-50`}
                 >
-                  <div className="aspect-[4/3] bg-panel-2">
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumb}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-xs text-muted">
-                        Generando…
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate">
-                        {item.headline || item.topic || 'Sin título'}
-                      </p>
-                      <span
-                        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusClass(item.status)}`}
-                      >
-                        {STATUS_LABEL[item.status] ?? item.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted line-clamp-2">
-                      {item.caption || '—'}
-                    </p>
-                  </div>
+                  {day.label}
                 </button>
               );
             })}
           </div>
-        )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Horario</span>
+            <input
+              type="time"
+              disabled={!autoEnabled}
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+              value={autoTime}
+              onChange={(e) => {
+                setAutoDirty(true);
+                setAutoTime(e.target.value);
+              }}
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Objetivo</span>
+            <select
+              disabled={!autoEnabled}
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+              value={autoObjective}
+              onChange={(e) => {
+                setAutoDirty(true);
+                setAutoObjective(e.target.value);
+              }}
+            >
+              {OBJECTIVES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-sm text-muted">Canales</span>
+          <div className="flex flex-wrap gap-2">
+            {CHANNELS.map((ch) => {
+              const on = autoChannels.includes(ch.value);
+              return (
+                <button
+                  key={ch.value}
+                  type="button"
+                  disabled={!autoEnabled}
+                  onClick={() => toggleAutoChannel(ch.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
+                    on
+                      ? 'border-nav-active bg-nav-active/15 text-text'
+                      : 'border-line text-muted'
+                  } disabled:opacity-50`}
+                >
+                  {ch.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="rounded-lg bg-nav-active text-white px-4 py-2.5 text-sm min-h-10 disabled:opacity-50"
+            disabled={
+              saveAutoConfig.isPending ||
+              (autoEnabled &&
+                (autoDays.length === 0 || autoChannels.length === 0))
+            }
+            onClick={() => saveAutoConfig.mutate()}
+          >
+            {saveAutoConfig.isPending ? 'Guardando…' : 'Guardar programación'}
+          </button>
+          {socialConfig.data?.lastAutoGenerateAt ? (
+            <p className="text-xs text-muted">
+              Última automática:{' '}
+              {formatPubDate(socialConfig.data.lastAutoGenerateAt)}
+            </p>
+          ) : null}
+          {saveAutoConfig.isSuccess && !autoDirty ? (
+            <p className="text-xs text-emerald-700">Guardado</p>
+          ) : null}
+          {saveAutoConfig.isError ? (
+            <p className="text-xs text-red-600">
+              {(saveAutoConfig.error as Error)?.message || 'No se pudo guardar'}
+            </p>
+          ) : null}
+        </div>
       </section>
-        </>
-      )}
     </div>
   );
 }

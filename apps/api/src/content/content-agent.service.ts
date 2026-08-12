@@ -111,6 +111,7 @@ export class ContentAgentService {
       : null;
 
     const system = this.buildSystemPrompt();
+    const logoUrl = business.brandingConfig?.logoUrl?.trim() || null;
     const userText = this.buildUserPrompt({
       business,
       selectedService,
@@ -121,10 +122,10 @@ export class ContentAgentService {
       referenceImageCount: input.referenceImageUrls?.length ?? 0,
     });
 
-    const referenceImageUrls = (input.referenceImageUrls ?? [])
-      .map((u) => u.trim())
-      .filter(Boolean)
-      .slice(0, 4);
+    const referenceImageUrls = this.mergeLogoAndRefs(
+      logoUrl,
+      input.referenceImageUrls,
+    );
 
     let providerName: string;
     let model: string;
@@ -252,17 +253,40 @@ export class ContentAgentService {
     >;
   }
 
+  private mergeLogoAndRefs(
+    logoUrl: string | null,
+    refs: string[] | undefined,
+  ): string[] {
+    const cleaned = [...new Set((refs ?? []).map((u) => u.trim()).filter(Boolean))];
+    const withLogo = logoUrl ? [logoUrl, ...cleaned.filter((u) => u !== logoUrl)] : cleaned;
+    return withLogo.slice(0, 4);
+  }
+
   private buildSystemPrompt(): string {
-    return `Sos un Content Agent de marketing para un negocio local.
+    return `Sos un Content Agent de marketing visual para un negocio local.
 Tu trabajo es crear UNA estrategia de publicación en JSON (sin markdown extra).
-Reglas:
-- Caption en español, natural, sin hashtags excesivos (máx 5).
+
+Reglas de copy:
+- Caption en español rioplatense, natural, sin hashtags excesivos (máx 5).
 - Evitá repetir temas/headlines/CTA de RECENT CONTENT.
-- imagePrompt en inglés, fotográfico/publicitario, sin texto ilegible en la imagen.
-- Si hay branding, respetá colores, estilo, audiencia y "evitar".
-- Si hay REFERENCE IMAGES, usalas como contexto visual: producto, local, estilo, personas o detalles a preservar. El imagePrompt debe describir cómo combinarlas en una pieza nueva (no copiar textual).
 - CTA claro y accionable.
-- Respondé SOLO con un objeto JSON con las keys:
+- Si hay branding, respetá colores, estilo, audiencia y "evitar".
+
+Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, no una foto suelta):
+- imagePrompt en inglés, estilo publicitario / social ad / flyer digital.
+- La composición DEBE incluir branding del negocio:
+  1) Logo del negocio si hay LOGO_URL (describí integrarlo limpio, esquina o barra de marca), O si no hay logo, el NOMBRE DEL NEGOCIO tipografiado de forma legible y profesional.
+  2) Espacio tipográfico limpio para un headline corto (pocas palabras, alto contraste).
+  3) Jerarquía visual clara: foto/hero + marca + mensaje.
+- Si Objective es OFFER: incluí un badge/sello visible tipo "OFERTA" / "PROMO" / "% OFF" (texto corto y legible, no garabatos).
+- Si Objective es SERVICE_PROMOTION: mostrá el servicio y la marca juntos (no solo el producto aislado).
+- Si Objective es SPECIAL_DATE: badge de la ocasión (ej. "Día de la Madre") además de la marca.
+- Evitá texto ilegible, Lorem Ipsum, letras inventadas o párrafos largos dentro de la imagen.
+- Preferí tipografía sans limpia, contraste alto, márgenes seguros para story/feed.
+- Si hay REFERENCE IMAGES, usalas como contexto (producto/local/estilo) dentro de la pieza de marketing, no como foto cruda sin marca.
+- Si hay LOGO_URL, el imagePrompt debe indicar explícitamente usar ese logo como brand mark.
+
+Respondé SOLO con un objeto JSON con las keys:
   topic, objective, headline, caption, cta, imagePrompt, visualStyle, serviceId, audience`;
   }
 
@@ -273,6 +297,7 @@ Reglas:
       type: string;
       timezone: string;
       brandingConfig: {
+        logoUrl: string | null;
         primaryColor: string | null;
         secondaryColor: string | null;
         visualStyle: string | null;
@@ -343,6 +368,7 @@ Reglas:
     const brand = params.business.brandingConfig;
     const brandBlock = brand
       ? [
+          `Logo URL: ${brand.logoUrl || 'no hay logo — usar el nombre tipografiado'}`,
           `Estilo visual: ${brand.visualStyle || '—'}`,
           `Tono comercial: ${brand.commercialTone || '—'}`,
           `Audiencia: ${brand.targetAudience || '—'}`,
@@ -351,7 +377,7 @@ Reglas:
           `Evitar: ${brand.avoidNotes || '—'}`,
           `Extra: ${brand.additionalInstructions || '—'}`,
         ].join('\n')
-      : 'Sin branding configurado.';
+      : `Sin branding configurado. Usá el nombre tipografiado "${params.business.name}" como marca.`;
 
     const recentBlock =
       params.recent
@@ -364,8 +390,17 @@ Reglas:
     const formatHint = params.channels.some(
       (c) => c === 'INSTAGRAM_STORY' || c === 'WHATSAPP_STATUS',
     )
-      ? 'Priorizar composición vertical 9:16 (story/status).'
-      : 'Priorizar composición cuadrada/feed.';
+      ? 'Priorizar composición vertical 9:16 (story/status) con marca y headline seguros en zona central/superior.'
+      : 'Priorizar composición cuadrada/feed con marca visible y headline corto.';
+
+    const objectiveVisual =
+      params.objective === 'OFFER'
+        ? 'VISUAL OFFER: badge/sello "OFERTA" o "% OFF" grande y legible + nombre/logo del negocio.'
+        : params.objective === 'SERVICE_PROMOTION'
+          ? 'VISUAL SERVICE: hero del servicio + nombre/logo del negocio + headline corto del servicio.'
+          : params.objective === 'SPECIAL_DATE'
+            ? 'VISUAL SPECIAL DATE: badge de la ocasión + nombre/logo del negocio.'
+            : 'VISUAL BRAND: toda pieza debe llevar nombre o logo del negocio de forma clara.';
 
     return [
       'BUSINESS',
@@ -387,6 +422,7 @@ Reglas:
       '',
       'USER REQUEST',
       `Objective: ${params.objective}`,
+      objectiveVisual,
       `Channels: ${params.channels.join(', ')}`,
       `Selected service: ${
         params.selectedService
@@ -395,10 +431,13 @@ Reglas:
       }`,
       `Instructions: ${params.userInstructions?.trim() || '—'}`,
       `Format hint: ${formatHint}`,
-      `Reference images attached: ${params.referenceImageCount}`,
+      `Reference images attached (user): ${params.referenceImageCount}`,
       params.referenceImageCount > 0
-        ? 'Las imágenes adjuntas son contexto visual obligatorio para caption e imagePrompt.'
+        ? 'Las imágenes adjuntas del usuario son contexto visual (producto/local/estilo) para integrar en la pieza de marketing con marca.'
         : '',
+      brand?.logoUrl
+        ? `LOGO_URL: ${brand.logoUrl} — si hay imágenes adjuntas, la primera puede ser el logo: usalo como brand mark en imagePrompt.`
+        : `Sin logo: el imagePrompt debe incluir el nombre tipografiado "${params.business.name}".`,
     ]
       .filter(Boolean)
       .join('\n');

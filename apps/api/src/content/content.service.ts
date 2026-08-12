@@ -288,9 +288,36 @@ export class ContentService {
         },
       });
 
-      const referenceImages = await this.loadReferenceImageBuffers(
-        referenceImageUrls,
-      );
+      const branding = await this.prisma.brandingConfig.findUnique({
+        where: { businessId },
+        select: { logoUrl: true, primaryColor: true, secondaryColor: true },
+      });
+      const business = await this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: { name: true },
+      });
+      const businessName = business?.name?.trim() || 'the business';
+      const logoUrl = branding?.logoUrl?.trim() || null;
+
+      // Logo primero como referencia visual de marca (máx 4 en total).
+      const imageRefUrls = this.normalizeReferenceUrls([
+        ...(logoUrl ? [logoUrl] : []),
+        ...referenceImageUrls,
+      ]);
+      const referenceImages = await this.loadReferenceImageBuffers(imageRefUrls);
+      if (logoUrl && referenceImages[0]) {
+        referenceImages[0].filename = 'brand-logo.png';
+      }
+
+      const marketingPrompt = this.enrichMarketingImagePrompt({
+        basePrompt: strategyResult.strategy.imagePrompt,
+        headline: strategyResult.strategy.headline,
+        objective,
+        businessName,
+        hasLogo: Boolean(logoUrl),
+        primaryColor: branding?.primaryColor,
+        secondaryColor: branding?.secondaryColor,
+      });
 
       const formats = this.resolveFormats(channels);
       const assets = [];
@@ -298,7 +325,7 @@ export class ContentService {
       for (const format of formats) {
         const size = this.sizeForFormat(format);
         const image = await this.images.generate({
-          prompt: strategyResult.strategy.imagePrompt,
+          prompt: marketingPrompt,
           size,
           quality: 'medium',
           referenceImages:
@@ -810,6 +837,58 @@ export class ContentService {
       assets.find((a) => a.format.startsWith('FEED_')) ||
       assets[0]
     );
+  }
+
+  private enrichMarketingImagePrompt(input: {
+    basePrompt: string;
+    headline?: string | null;
+    objective: ContentObjective;
+    businessName: string;
+    hasLogo: boolean;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+  }): string {
+    const brandMark = input.hasLogo
+      ? `Include the provided brand logo image as a clean brand mark (corner or top brand bar). Do not distort the logo.`
+      : `Include the business name "${input.businessName}" as clean, legible professional typography (brand lockup).`;
+
+    const offerBadge =
+      input.objective === 'OFFER'
+        ? `Add a prominent, clean "OFERTA" / "PROMO" badge or seal (short readable text, high contrast).`
+        : input.objective === 'SPECIAL_DATE'
+          ? `Add a short occasion badge (readable, not decorative gibberish).`
+          : '';
+
+    const headline =
+      input.headline?.trim()
+        ? `Short headline text on image (few words only): "${input.headline.trim()}".`
+        : 'Leave a clean area for a short headline (few words, high contrast).';
+
+    const colors = [
+      input.primaryColor ? `primary ${input.primaryColor}` : null,
+      input.secondaryColor ? `secondary ${input.secondaryColor}` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    const colorHint = colors
+      ? `Prefer brand colors: ${colors}.`
+      : '';
+
+    return [
+      input.basePrompt.trim(),
+      '',
+      'MARKETING COMPOSITION (mandatory):',
+      'This must look like a social media marketing creative / flyer, NOT a plain photo.',
+      brandMark,
+      offerBadge,
+      headline,
+      colorHint,
+      'Clear visual hierarchy: hero visual + brand + message. Safe margins for feed/story.',
+      'No illegible text, no lorem ipsum, no fake letters, no long paragraphs on the image.',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   private cloudinaryRoot() {
