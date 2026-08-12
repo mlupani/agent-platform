@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { ConversationStatus } from '../../common/constants';
@@ -612,19 +613,20 @@ export class AgentService {
       return existing;
     }
 
+    const channel = (input.channel ?? 'WEB').toUpperCase();
+    const metadata = {
+      ...(input.metadata ?? {}),
+      ...(channel === 'PLAYGROUND' ? { source: 'playground' } : {}),
+    };
+
     return this.prisma.conversation.create({
       data: {
         businessId: input.businessId,
         agentConfigId,
         userId: input.userId,
-        channel: (input.channel ?? 'WEB').toUpperCase(),
+        channel,
         status: 'AI',
-        metadata: {
-          ...(input.metadata ?? {}),
-          ...(((input.channel ?? 'WEB').toUpperCase() === 'PLAYGROUND'
-            ? { source: 'playground' }
-            : {}) as object),
-        },
+        metadata: metadata as Prisma.InputJsonValue,
       },
     });
   }
