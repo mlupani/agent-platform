@@ -16,6 +16,7 @@ const chatSchema = z.object({
   agentConfigId: z.string().uuid().optional(),
   debug: z.boolean().optional(),
   confirmed: z.boolean().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 @Controller('chat')

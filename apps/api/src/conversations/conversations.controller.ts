@@ -7,12 +7,17 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { ApiKeyGuard } from '../common/guards/api-key.guard';
+import {
+  ApiKeyGuard,
+  type AuthedRequest,
+} from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { conversationStatuses } from '../common/constants';
+import type { AdminRole } from '../auth/auth.constants';
 import { ConversationsService } from './conversations.service';
 
 const statusSchema = z.object({
@@ -28,60 +33,73 @@ const replySchema = z.object({
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
+  private role(req: AuthedRequest): AdminRole {
+    return req.adminUser?.role === 'ADMIN' ? 'ADMIN' : 'USER';
+  }
+
   @Get()
-  list(@Query('status') status?: string) {
-    return this.conversations.list(status);
+  list(@Req() req: AuthedRequest, @Query('status') status?: string) {
+    return this.conversations.list(status, { role: this.role(req) });
   }
 
   @Get(':id')
   get(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Query('markRead') markRead?: string,
   ) {
-    // Solo marcar leído con ?markRead=true explícito (el detalle ya no lo hace por defecto).
-    return this.conversations.get(id, { markRead: markRead === 'true' });
+    return this.conversations.get(id, {
+      markRead: markRead === 'true',
+      role: this.role(req),
+    });
   }
 
   @Post(':id/read')
-  markRead(@Param('id') id: string) {
-    return this.conversations.markRead(id);
+  markRead(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.conversations.markRead(id, { role: this.role(req) });
   }
 
   @Patch(':id/status')
   updateStatus(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(statusSchema))
     body: z.infer<typeof statusSchema>,
   ) {
-    return this.conversations.updateStatus(id, body.status);
+    return this.conversations.updateStatus(id, body.status, {
+      role: this.role(req),
+    });
   }
 
   @Post(':id/pause')
-  pause(@Param('id') id: string) {
-    return this.conversations.pause(id);
+  pause(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.conversations.pause(id, { role: this.role(req) });
   }
 
   @Post(':id/resume')
-  resume(@Param('id') id: string) {
-    return this.conversations.resume(id);
+  resume(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.conversations.resume(id, { role: this.role(req) });
   }
 
   @Post(':id/close')
-  close(@Param('id') id: string) {
-    return this.conversations.close(id);
+  close(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.conversations.close(id, { role: this.role(req) });
   }
 
   @Delete(':id')
-  hide(@Param('id') id: string) {
-    return this.conversations.hide(id);
+  hide(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.conversations.hide(id, { role: this.role(req) });
   }
 
   @Post(':id/messages')
   reply(
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(replySchema))
     body: z.infer<typeof replySchema>,
   ) {
-    return this.conversations.sendHumanMessage(id, body.content);
+    return this.conversations.sendHumanMessage(id, body.content, {
+      role: this.role(req),
+    });
   }
 }

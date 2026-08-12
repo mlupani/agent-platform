@@ -22,8 +22,17 @@ export type MessageRole = (typeof messageRoles)[number];
 export const toolRisks = ['READ', 'WRITE', 'SENSITIVE'] as const;
 export type ToolRisk = (typeof toolRisks)[number];
 
-export const channelTypes = ['WEB', 'WHATSAPP', 'TELEGRAM', 'INSTAGRAM'] as const;
+export const channelTypes = [
+  'WEB',
+  'PLAYGROUND',
+  'WHATSAPP',
+  'TELEGRAM',
+  'INSTAGRAM',
+] as const;
 export type ChannelType = (typeof channelTypes)[number];
+
+/** Canales de prueba del panel: solo visibles para rol ADMIN. */
+export const ADMIN_ONLY_CONVERSATION_CHANNELS = ['PLAYGROUND', 'WEB'] as const;
 
 /** Canales de mensajería con provider outbound */
 export const messagingChannels = ['WHATSAPP', 'INSTAGRAM'] as const;

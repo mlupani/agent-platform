@@ -120,8 +120,9 @@ export function PlaygroundClient() {
           agentConfigId: agent?.id,
           conversationId,
           message: userMessage,
-          channel: 'WEB',
+          channel: 'PLAYGROUND',
           debug: true,
+          metadata: { source: 'playground' },
         }),
       });
       setConversationId(result.conversationId);

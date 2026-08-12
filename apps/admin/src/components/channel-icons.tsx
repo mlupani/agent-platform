@@ -101,5 +101,17 @@ export function ChannelBadge({
     );
   }
 
+  if (value === 'PLAYGROUND' || value === 'WEB') {
+    return (
+      <span
+        title={value === 'PLAYGROUND' ? 'Playground' : 'Web'}
+        aria-label={value === 'PLAYGROUND' ? 'Playground' : 'Web'}
+        className={`inline-flex ${box} items-center justify-center rounded-full bg-panel-2 text-muted text-[9px] font-semibold shrink-0`}
+      >
+        {value === 'PLAYGROUND' ? 'PG' : 'W'}
+      </span>
+    );
+  }
+
   return null;
 }

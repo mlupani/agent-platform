@@ -6,10 +6,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { ConversationStatus, MessageSender } from '../common/constants';
+import { ADMIN_ONLY_CONVERSATION_CHANNELS } from '../common/constants';
+import type { AdminRole } from '../auth/auth.constants';
 import { BusinessesService } from '../businesses/businesses.service';
 import { ChannelRegistry } from '../channels/channel.registry';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WahaConversationsSyncService } from '../whatsapp/waha-conversations.sync';
+
+interface RoleOptions {
+  role?: AdminRole;
+}
 
 @Injectable()
 export class ConversationsService {
@@ -23,7 +29,7 @@ export class ConversationsService {
     private readonly wahaSync: WahaConversationsSyncService,
   ) {}
 
-  async list(status?: string) {
+  async list(status?: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
     try {
       await this.wahaSync.syncChats(businessId);
@@ -40,6 +46,7 @@ export class ConversationsService {
         businessId,
         hiddenAt: null,
         ...(status ? { status } : {}),
+        ...this.roleChannelFilter(options?.role),
       },
       orderBy: [{ lastMessageAt: { sort: 'desc', nulls: 'last' } }],
       take: 200,
@@ -59,10 +66,17 @@ export class ConversationsService {
     }));
   }
 
-  async get(id: string, options?: { markRead?: boolean }) {
+  async get(
+    id: string,
+    options?: { markRead?: boolean; role?: AdminRole },
+  ) {
     const businessId = await this.businesses.getCurrentId();
     const conversation = await this.prisma.conversation.findFirst({
-      where: { id, businessId },
+      where: {
+        id,
+        businessId,
+        ...this.roleChannelFilter(options?.role),
+      },
       include: {
         user: { select: { id: true, name: true, phone: true, email: true } },
         messages: { orderBy: { createdAt: 'asc' } },
@@ -87,7 +101,11 @@ export class ConversationsService {
     }
 
     const refreshed = await this.prisma.conversation.findFirst({
-      where: { id, businessId },
+      where: {
+        id,
+        businessId,
+        ...this.roleChannelFilter(options?.role),
+      },
       include: {
         user: { select: { id: true, name: true, phone: true, email: true } },
         messages: { orderBy: { createdAt: 'asc' } },
@@ -109,12 +127,9 @@ export class ConversationsService {
     };
   }
 
-  async markRead(id: string) {
+  async markRead(id: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id, businessId, hiddenAt: null },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
+    const conversation = await this.assertVisible(id, businessId, options?.role);
     await this.markReadById(businessId, conversation.id, conversation);
     return {
       id: conversation.id,
@@ -125,7 +140,13 @@ export class ConversationsService {
   private async markReadById(
     businessId: string,
     conversationId: string,
-    conversation: { unreadCount: number; status: string; lastMessageAt: Date | null; lastMessagePreview: string | null; lastMessageSender: string | null },
+    conversation: {
+      unreadCount: number;
+      status: string;
+      lastMessageAt: Date | null;
+      lastMessagePreview: string | null;
+      lastMessageSender: string | null;
+    },
   ) {
     if (conversation.unreadCount <= 0) return;
     await this.prisma.conversation.update({
@@ -143,25 +164,31 @@ export class ConversationsService {
     });
   }
 
-  async pause(id: string) {
-    return this.updateStatus(id, 'HUMAN', { reason: 'operator_paused' });
+  async pause(id: string, options?: RoleOptions) {
+    return this.updateStatus(id, 'HUMAN', {
+      reason: 'operator_paused',
+      role: options?.role,
+    });
   }
 
-  async resume(id: string) {
-    return this.updateStatus(id, 'AI', { reason: 'operator_resumed' });
+  async resume(id: string, options?: RoleOptions) {
+    return this.updateStatus(id, 'AI', {
+      reason: 'operator_resumed',
+      role: options?.role,
+    });
   }
 
-  async close(id: string) {
-    return this.updateStatus(id, 'CLOSED', { reason: 'operator_closed' });
+  async close(id: string, options?: RoleOptions) {
+    return this.updateStatus(id, 'CLOSED', {
+      reason: 'operator_closed',
+      role: options?.role,
+    });
   }
 
   /** Oculta la conversación de la bandeja. El sync no la revive salvo mensaje nuevo del cliente. */
-  async hide(id: string) {
+  async hide(id: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id, businessId, hiddenAt: null },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
+    const conversation = await this.assertVisible(id, businessId, options?.role);
 
     const updated = await this.prisma.conversation.update({
       where: { id: conversation.id },
@@ -192,13 +219,10 @@ export class ConversationsService {
   async updateStatus(
     id: string,
     status: ConversationStatus,
-    meta?: { reason?: string },
+    meta?: { reason?: string; role?: AdminRole },
   ) {
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id, businessId },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
+    const conversation = await this.assertVisible(id, businessId, meta?.role);
 
     const metadata =
       conversation.metadata && typeof conversation.metadata === 'object'
@@ -232,15 +256,16 @@ export class ConversationsService {
     return updated;
   }
 
-  async sendHumanMessage(id: string, content: string) {
+  async sendHumanMessage(
+    id: string,
+    content: string,
+    options?: RoleOptions,
+  ) {
     const text = content.trim();
     if (!text) throw new BadRequestException('El mensaje no puede estar vacío');
 
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id, businessId },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
+    const conversation = await this.assertVisible(id, businessId, options?.role);
     if (conversation.status === 'CLOSED') {
       throw new BadRequestException('La conversación está cerrada');
     }
@@ -324,6 +349,33 @@ export class ConversationsService {
         contactPhone: options.contactPhone ?? undefined,
       },
     });
+  }
+
+  private async assertVisible(
+    id: string,
+    businessId: string,
+    role?: AdminRole,
+  ) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: {
+        id,
+        businessId,
+        hiddenAt: null,
+        ...this.roleChannelFilter(role),
+      },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    return conversation;
+  }
+
+  /** USER no ve playground ni WEB de prueba; ADMIN ve todo. */
+  private roleChannelFilter(role?: AdminRole) {
+    if (role === 'ADMIN') return {};
+    return {
+      channel: {
+        notIn: [...ADMIN_ONLY_CONVERSATION_CHANNELS],
+      },
+    };
   }
 
   private displayName(conversation: {

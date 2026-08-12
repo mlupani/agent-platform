@@ -619,7 +619,12 @@ export class AgentService {
         userId: input.userId,
         channel: (input.channel ?? 'WEB').toUpperCase(),
         status: 'AI',
-        metadata: input.metadata as object | undefined,
+        metadata: {
+          ...(input.metadata ?? {}),
+          ...(((input.channel ?? 'WEB').toUpperCase() === 'PLAYGROUND'
+            ? { source: 'playground' }
+            : {}) as object),
+        },
       },
     });
   }
