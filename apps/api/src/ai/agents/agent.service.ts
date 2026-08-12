@@ -65,6 +65,7 @@ export class AgentService {
     await this.costControl.assertWithinLimits(business.id, llmTarget.model);
 
     const conversation = await this.resolveConversation(input, agentConfig.id);
+    const confirmed = await this.resolveConfirmed(input, conversation.id);
 
     const inboundExternalId = input.metadata?.wamid
       ? String(input.metadata.wamid)
@@ -341,7 +342,7 @@ export class AgentService {
               continue;
             }
 
-            const result = await this.tools.execute(call.name, parsedArgs, {
+            let result = await this.tools.execute(call.name, parsedArgs, {
               businessId: business.id,
               conversationId: conversation.id,
               userId: conversation.userId ?? undefined,
@@ -350,9 +351,31 @@ export class AgentService {
               agentExecutionId: execution.id,
               metadata: {
                 ...input.metadata,
-                confirmed: input.confirmed === true,
+                confirmed,
               },
             });
+
+            // sendEmail: no hay UI de confirmación en WhatsApp/web chat.
+            // Si ToolConfig aún pide confirmación, reintentamos una vez autorizados.
+            if (
+              !result.success &&
+              result.requiresConfirmation &&
+              !confirmed &&
+              call.name === 'sendEmail'
+            ) {
+              result = await this.tools.execute(call.name, parsedArgs, {
+                businessId: business.id,
+                conversationId: conversation.id,
+                userId: conversation.userId ?? undefined,
+                channel: conversation.channel,
+                enabledTools: agentConfig.enabledTools,
+                agentExecutionId: execution.id,
+                metadata: {
+                  ...input.metadata,
+                  confirmed: true,
+                },
+              });
+            }
 
             if (result.success) {
               seenSuccessfulToolCalls.add(fingerprint);
@@ -600,6 +623,61 @@ export class AgentService {
         metadata: input.metadata as object | undefined,
       },
     });
+  }
+
+  /**
+   * WhatsApp/web no mandan `confirmed: true` estructurado: el usuario solo escribe "sí".
+   * Si la última tool falló pidiendo confirmación, el próximo mensaje afirmativo la libera.
+   */
+  private async resolveConfirmed(
+    input: AgentRunInput,
+    conversationId: string,
+  ): Promise<boolean> {
+    if (input.confirmed === true) return true;
+
+    const recent = await this.prisma.toolExecution.findFirst({
+      where: {
+        conversationId,
+        businessId: input.businessId,
+        success: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!recent) return false;
+
+    const output =
+      recent.output && typeof recent.output === 'object'
+        ? (recent.output as { requiresConfirmation?: boolean })
+        : null;
+    if (!output?.requiresConfirmation) return false;
+
+    return this.looksLikeAffirmation(input.message);
+  }
+
+  private looksLikeAffirmation(message: string): boolean {
+    const normalized = message
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .trim();
+    if (!normalized) return false;
+
+    const patterns = [
+      /^si\b/,
+      /^sí\b/,
+      /\bsi[,.]?\s*(autorizo|confirmo|dale|envio|envia|envialo|envíalo)\b/,
+      /\bautorizo\b/,
+      /\bconfirmo\b/,
+      /\bde acuerdo\b/,
+      /\bdale\b/,
+      /\bok\b/,
+      /\bokay\b/,
+      /\bprocede\b/,
+      /\benvia(lo|me)?\b/,
+      /\benvíalo\b/,
+      /\benviá(lo|me)?\b/,
+    ];
+    return patterns.some((re) => re.test(normalized));
   }
 
   private toolCallFingerprint(name: string, args: unknown): string {

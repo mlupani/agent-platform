@@ -76,10 +76,14 @@ export class CreateAppointmentTool implements AgentTool {
             service: appointment.service,
             contactName: appointment.contactName,
             contactPhone: appointment.contactPhone,
+            contactEmail: appointment.contactEmail,
           },
           confirmationMessage:
             messages.appointmentConfirmation ??
             'Tu cita quedó confirmada.',
+          emailHint: appointment.contactEmail
+            ? 'Si el usuario dio email, podés usar sendEmail para mandar la confirmación.'
+            : undefined,
         },
       };
     } catch (error) {

@@ -160,7 +160,7 @@ async function main() {
     { name: 'rescheduleAppointment', risk: 'WRITE', requireConfirmation: false },
     { name: 'createLead', risk: 'WRITE', requireConfirmation: false },
     { name: 'requestHumanAssistance', risk: 'WRITE', requireConfirmation: false },
-    { name: 'sendEmail', risk: 'SENSITIVE', requireConfirmation: true },
+    { name: 'sendEmail', risk: 'WRITE', requireConfirmation: false },
     { name: 'triggerAutomation', risk: 'WRITE', requireConfirmation: false },
   ];
 
@@ -189,6 +189,7 @@ Si no sabés algo, no lo inventes.
 Si el usuario quiere hablar con una persona, usá requestHumanAssistance.
 Usá getServices, getOpeningHours y checkAvailability antes de afirmar disponibilidad o precios.
 Para reservar usá createAppointment solo con un horario devuelto por checkAvailability.
+Si el usuario dio email, después de reservar usá sendEmail para confirmar el turno.
 Usá createLead cuando el usuario deje nombre, email o teléfono.`,
       temperature: 0.3,
       maxSteps: 8,

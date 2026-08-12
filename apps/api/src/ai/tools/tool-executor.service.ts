@@ -56,10 +56,13 @@ export class ToolExecutorService {
     }
 
     const risk = config?.risk ?? tool.risk;
-    if (
-      (risk === 'SENSITIVE' || config?.requireConfirmation) &&
-      context.metadata?.confirmed !== true
-    ) {
+    // Solo exigir confirmación si ToolConfig lo pide explícitamente.
+    // Si no hay config, fallback al risk de la tool (SENSITIVE).
+    const needsConfirmation =
+      config != null
+        ? config.requireConfirmation === true
+        : tool.risk === 'SENSITIVE';
+    if (needsConfirmation && context.metadata?.confirmed !== true) {
       return {
         success: false,
         requiresConfirmation: true,

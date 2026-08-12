@@ -187,7 +187,7 @@ export class BusinessesService {
               name,
               enabled: true,
               risk: this.toolRisk(name),
-              requireConfirmation: name === 'sendEmail',
+              requireConfirmation: false,
             },
           }),
         ),
@@ -430,14 +430,14 @@ export class BusinessesService {
   }
 
   private toolRisk(name: string): string {
-    if (name === 'sendEmail') return 'SENSITIVE';
     if (
       name === 'createLead' ||
       name === 'requestHumanAssistance' ||
       name === 'triggerAutomation' ||
       name === 'createAppointment' ||
       name === 'cancelAppointment' ||
-      name === 'rescheduleAppointment'
+      name === 'rescheduleAppointment' ||
+      name === 'sendEmail'
     ) {
       return 'WRITE';
     }

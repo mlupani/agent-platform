@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AutomationsModule } from '../automations/automations.module';
 import { CalendarModule } from '../calendar/calendar.module';
+import { EmailModule } from '../email/email.module';
 import { AgentService } from './agents/agent.service';
 import { EmbeddingsService } from './embeddings/embeddings.service';
 import { GuardrailsService } from './guardrails/guardrails.service';
@@ -49,7 +50,7 @@ const demoTools = [
 ];
 
 @Module({
-  imports: [AutomationsModule, AnalyticsModule, CalendarModule],
+  imports: [AutomationsModule, AnalyticsModule, CalendarModule, EmailModule],
   controllers: [ToolsController],
   providers: [
     OpenAIProvider,

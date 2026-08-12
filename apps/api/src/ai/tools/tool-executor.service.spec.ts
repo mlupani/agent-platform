@@ -88,4 +88,28 @@ describe('ToolExecutorService permissions', () => {
     expect(result.requiresConfirmation).toBe(true);
     expect(sensitive.execute).not.toHaveBeenCalled();
   });
+
+  it('does not require confirmation when ToolConfig disables it even if risk is SENSITIVE', async () => {
+    const sensitive: AgentTool = {
+      name: 'sendEmailNoConfirm',
+      description: 'email',
+      schema: z.object({ to: z.string().email() }),
+      risk: 'SENSITIVE',
+      execute: jest.fn(async () => ({ success: true, data: { sent: true } })),
+    };
+    registry.register(sensitive);
+    prisma.toolConfig.findUnique.mockResolvedValue({
+      enabled: true,
+      risk: 'SENSITIVE',
+      requireConfirmation: false,
+    });
+
+    const result = await executor.execute(
+      'sendEmailNoConfirm',
+      { to: 'a@test.com' },
+      { ...baseContext, enabledTools: ['sendEmailNoConfirm'] },
+    );
+    expect(result.success).toBe(true);
+    expect(sensitive.execute).toHaveBeenCalled();
+  });
 });
