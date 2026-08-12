@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AutomationsModule } from '../automations/automations.module';
 import { CalendarModule } from '../calendar/calendar.module';
 import { EmailModule } from '../email/email.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AgentService } from './agents/agent.service';
 import { EmbeddingsService } from './embeddings/embeddings.service';
 import { GuardrailsService } from './guardrails/guardrails.service';
@@ -28,6 +29,7 @@ import { GetServicesTool } from './tools/implementations/get-services.tool';
 import { RequestHumanAssistanceTool } from './tools/implementations/request-human-assistance.tool';
 import { RescheduleAppointmentTool } from './tools/implementations/reschedule-appointment.tool';
 import { SendEmailTool } from './tools/implementations/send-email.tool';
+import { SendWhatsAppMessageTool } from './tools/implementations/send-whatsapp-message.tool';
 import { TriggerAutomationTool } from './tools/implementations/trigger-automation.tool';
 import { ToolExecutorService } from './tools/tool-executor.service';
 import { ToolRegistry } from './tools/tool-registry';
@@ -46,11 +48,18 @@ const demoTools = [
   CreateLeadTool,
   RequestHumanAssistanceTool,
   SendEmailTool,
+  SendWhatsAppMessageTool,
   TriggerAutomationTool,
 ];
 
 @Module({
-  imports: [AutomationsModule, AnalyticsModule, CalendarModule, EmailModule],
+  imports: [
+    AutomationsModule,
+    AnalyticsModule,
+    CalendarModule,
+    EmailModule,
+    forwardRef(() => WhatsAppModule),
+  ],
   controllers: [ToolsController],
   providers: [
     OpenAIProvider,

@@ -161,6 +161,7 @@ async function main() {
     { name: 'createLead', risk: 'WRITE', requireConfirmation: false },
     { name: 'requestHumanAssistance', risk: 'WRITE', requireConfirmation: false },
     { name: 'sendEmail', risk: 'WRITE', requireConfirmation: false },
+    { name: 'sendWhatsAppMessage', risk: 'WRITE', requireConfirmation: false },
     { name: 'triggerAutomation', risk: 'WRITE', requireConfirmation: false },
   ];
 
@@ -190,6 +191,7 @@ Si el usuario quiere hablar con una persona, usá requestHumanAssistance.
 Usá getServices, getOpeningHours y checkAvailability antes de afirmar disponibilidad o precios.
 Para reservar usá createAppointment solo con un horario devuelto por checkAvailability.
 Si el usuario dio email, después de reservar usá sendEmail para confirmar el turno.
+Si el usuario pide confirmación por WhatsApp o dio teléfono, usá sendWhatsAppMessage.
 Usá createLead cuando el usuario deje nombre, email o teléfono.`,
       temperature: 0.3,
       maxSteps: 8,

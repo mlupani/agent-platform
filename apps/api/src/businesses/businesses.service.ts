@@ -437,7 +437,8 @@ export class BusinessesService {
       name === 'createAppointment' ||
       name === 'cancelAppointment' ||
       name === 'rescheduleAppointment' ||
-      name === 'sendEmail'
+      name === 'sendEmail' ||
+      name === 'sendWhatsAppMessage'
     ) {
       return 'WRITE';
     }

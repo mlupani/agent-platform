@@ -355,13 +355,12 @@ export class AgentService {
               },
             });
 
-            // sendEmail: no hay UI de confirmación en WhatsApp/web chat.
-            // Si ToolConfig aún pide confirmación, reintentamos una vez autorizados.
+            // sendEmail / sendWhatsAppMessage: no hay UI de confirmación en chat.
             if (
               !result.success &&
               result.requiresConfirmation &&
               !confirmed &&
-              call.name === 'sendEmail'
+              (call.name === 'sendEmail' || call.name === 'sendWhatsAppMessage')
             ) {
               result = await this.tools.execute(call.name, parsedArgs, {
                 businessId: business.id,

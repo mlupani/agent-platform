@@ -107,6 +107,9 @@ export class CreateAppointmentTool implements AgentTool {
           emailHint: appointment.contactEmail
             ? 'Si el usuario dio email, podés usar sendEmail para mandar la confirmación.'
             : undefined,
+          whatsappHint: appointment.contactPhone
+            ? 'Si el usuario pidió o aceptó confirmación por WhatsApp, usá sendWhatsAppMessage.'
+            : 'Si el usuario pide confirmación por WhatsApp y da su teléfono, usá sendWhatsAppMessage.',
         },
       };
     } catch (error) {

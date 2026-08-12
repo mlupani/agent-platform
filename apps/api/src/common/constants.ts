@@ -113,6 +113,7 @@ export const GENERIC_TOOLS = [
   'createLead',
   'requestHumanAssistance',
   'sendEmail',
+  'sendWhatsAppMessage',
   'triggerAutomation',
 ] as const;
 
