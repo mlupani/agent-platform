@@ -30,8 +30,8 @@ export class OpenAIProvider implements LLMProvider {
     const completion = await withExponentialBackoff(() =>
       this.client.chat.completions.create({
         model: request.model,
-        temperature: request.temperature,
-        max_tokens: request.maxTokens,
+        ...this.buildSamplingParams(request.model, request.temperature),
+        ...this.buildTokenLimitParams(request.model, request.maxTokens),
         messages: this.toOpenAIMessages(request.messages),
         tools: request.tools?.length
           ? request.tools.map((tool) => ({
@@ -74,8 +74,8 @@ export class OpenAIProvider implements LLMProvider {
   async *stream(request: ChatRequest): AsyncIterable<ChatStreamChunk> {
     const stream = await this.client.chat.completions.create({
       model: request.model,
-      temperature: request.temperature,
-      max_tokens: request.maxTokens,
+      ...this.buildSamplingParams(request.model, request.temperature),
+      ...this.buildTokenLimitParams(request.model, request.maxTokens),
       stream: true,
       messages: this.toOpenAIMessages(request.messages),
       tools: request.tools?.length
@@ -114,6 +114,43 @@ export class OpenAIProvider implements LLMProvider {
     return response.data
       .sort((a, b) => a.index - b.index)
       .map((item) => item.embedding);
+  }
+
+  /** gpt-5 / o-series rechazan max_tokens; usan max_completion_tokens. */
+  private requiresMaxCompletionTokens(model: string): boolean {
+    const m = model.toLowerCase();
+    return (
+      m.startsWith('gpt-5') ||
+      m.startsWith('o1') ||
+      m.startsWith('o3') ||
+      m.startsWith('o4')
+    );
+  }
+
+  /** Algunos modelos solo aceptan temperature por defecto (1). */
+  private supportsCustomTemperature(model: string): boolean {
+    return !this.requiresMaxCompletionTokens(model);
+  }
+
+  private buildTokenLimitParams(
+    model: string,
+    maxTokens?: number,
+  ): { max_tokens: number } | { max_completion_tokens: number } | Record<string, never> {
+    if (maxTokens == null) return {};
+    if (this.requiresMaxCompletionTokens(model)) {
+      return { max_completion_tokens: maxTokens };
+    }
+    return { max_tokens: maxTokens };
+  }
+
+  private buildSamplingParams(
+    model: string,
+    temperature?: number,
+  ): { temperature: number } | Record<string, never> {
+    if (temperature == null || !this.supportsCustomTemperature(model)) {
+      return {};
+    }
+    return { temperature };
   }
 
   private toOpenAIMessages(

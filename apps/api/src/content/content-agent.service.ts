@@ -140,10 +140,17 @@ export class ContentAgentService {
       }
       providerName = 'openai';
       model = this.visionModel;
+      const usesMaxCompletionTokens =
+        model.toLowerCase().startsWith('gpt-5') ||
+        model.toLowerCase().startsWith('o1') ||
+        model.toLowerCase().startsWith('o3') ||
+        model.toLowerCase().startsWith('o4');
       const completion = await this.openai.chat.completions.create({
         model,
-        temperature: 0.7,
-        max_tokens: 1200,
+        ...(usesMaxCompletionTokens ? {} : { temperature: 0.7 }),
+        ...(usesMaxCompletionTokens
+          ? { max_completion_tokens: 1200 }
+          : { max_tokens: 1200 }),
         messages: [
           { role: 'system', content: system },
           {
