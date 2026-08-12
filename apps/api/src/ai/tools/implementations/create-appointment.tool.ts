@@ -3,12 +3,19 @@ import { z } from 'zod';
 import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { resolveServiceId } from '../resolve-service';
 
 const schema = z.object({
   startsAt: z
     .string()
     .describe('Inicio ISO 8601 con offset, p.ej. 2026-08-12T10:00:00-03:00'),
-  serviceId: z.string().uuid().optional(),
+  serviceId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'UUID del servicio (preferido) o nombre exacto, p.ej. "Consulta inicial".',
+    ),
   contactName: z.string().optional(),
   contactPhone: z.string().optional(),
   contactEmail: z.string().email().optional(),
@@ -19,7 +26,7 @@ const schema = z.object({
 export class CreateAppointmentTool implements AgentTool {
   readonly name = 'createAppointment';
   readonly description =
-    'Reserva una cita en un horario disponible (usar checkAvailability antes).';
+    'Reserva una cita en un horario disponible (usar checkAvailability antes). serviceId puede ser UUID o nombre del servicio.';
   readonly schema = schema;
   readonly risk = 'WRITE' as const;
 
@@ -33,6 +40,22 @@ export class CreateAppointmentTool implements AgentTool {
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: context.businessId },
     });
+
+    let serviceId = data.serviceId;
+    if (data.serviceId) {
+      const resolved = await resolveServiceId(
+        this.prisma,
+        context.businessId,
+        data.serviceId,
+      );
+      if (!resolved) {
+        return {
+          success: false,
+          error: `Servicio no encontrado: "${data.serviceId}". Usá el id o el nombre exacto de getServices / prompt.`,
+        };
+      }
+      serviceId = resolved.id;
+    }
 
     const contactPhone =
       data.contactPhone ||
@@ -50,7 +73,7 @@ export class CreateAppointmentTool implements AgentTool {
         businessId: context.businessId,
         conversationId: context.conversationId,
         userId: context.userId,
-        serviceId: data.serviceId,
+        serviceId,
         contactName,
         contactPhone,
         contactEmail: data.contactEmail,

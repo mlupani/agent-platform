@@ -179,6 +179,7 @@ export class PromptBuilderService {
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
       `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
       `No pidas autorización verbal extra para sendEmail: si el usuario pidió el email de confirmación y ya dio su correo, ejecutá sendEmail sin repreguntar.`,
       `Si sendEmail falla, confirmá el turno en este chat con los datos del turno. No digas que "falta una integración" ni derives a un humano salvo que el usuario lo pida.`,
@@ -220,6 +221,7 @@ export class PromptBuilderService {
 
   formatServices(
     services: Array<{
+      id?: string;
       name: string;
       description?: string | null;
       durationMinutes: number;
@@ -234,7 +236,8 @@ export class PromptBuilderService {
         const price =
           service.priceDescription ||
           (service.price != null ? `$${String(service.price)}` : 'Consultar');
-        return `- ${service.name} (${service.durationMinutes} min) — ${price}${
+        const idPart = service.id ? ` [id=${service.id}]` : '';
+        return `- ${service.name}${idPart} (${service.durationMinutes} min) — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;
       })

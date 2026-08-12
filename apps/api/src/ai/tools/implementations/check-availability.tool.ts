@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
+import { PrismaService } from '../../../common/prisma/prisma.service';
+import { resolveServiceId } from '../resolve-service';
 
 const schema = z.object({
   date: z
@@ -10,7 +12,13 @@ const schema = z.object({
     .describe(
       'Fecha a consultar en YYYY-MM-DD. Debe basarse en la fecha actual del system prompt (hoy/mañana/esta semana).',
     ),
-  serviceId: z.string().uuid().optional(),
+  serviceId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'UUID del servicio (preferido) o nombre exacto, p.ej. "Consulta inicial".',
+    ),
   durationMinutes: z.number().int().min(1).max(480).optional(),
 });
 
@@ -18,18 +26,38 @@ const schema = z.object({
 export class CheckAvailabilityTool implements AgentTool {
   readonly name = 'checkAvailability';
   readonly description =
-    'Consulta turnos libres para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Cruza horarios del negocio con Google Calendar si está conectado.';
+    'Consulta turnos libres para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 
-  constructor(private readonly appointments: AppointmentsService) {}
+  constructor(
+    private readonly appointments: AppointmentsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
     const data = schema.parse(input);
+
+    let serviceId = data.serviceId;
+    if (data.serviceId) {
+      const resolved = await resolveServiceId(
+        this.prisma,
+        context.businessId,
+        data.serviceId,
+      );
+      if (!resolved) {
+        return {
+          success: false,
+          error: `Servicio no encontrado: "${data.serviceId}". Usá el id o el nombre exacto del prompt.`,
+        };
+      }
+      serviceId = resolved.id;
+    }
+
     const result = await this.appointments.checkAvailability({
       businessId: context.businessId,
       date: data.date,
-      serviceId: data.serviceId,
+      serviceId,
       durationMinutes: data.durationMinutes,
     });
 
