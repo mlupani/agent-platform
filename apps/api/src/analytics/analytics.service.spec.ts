@@ -41,7 +41,7 @@ describe('AnalyticsService.dashboard', () => {
       ])
       .mockResolvedValueOnce([
         { channel: 'WHATSAPP', _count: 4 },
-        { channel: 'WEB', _count: 1 },
+        { channel: 'INSTAGRAM', _count: 1 },
       ]);
     prisma.conversation.aggregate.mockResolvedValue({
       _sum: { unreadCount: 7 },
@@ -79,13 +79,23 @@ describe('AnalyticsService.dashboard', () => {
     expect(result.metrics.contentVideosMonth).toBe(1);
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ hiddenAt: null }),
+        where: expect.objectContaining({
+          hiddenAt: null,
+          channel: { notIn: ['PLAYGROUND', 'WEB'] },
+        }),
+      }),
+    );
+    expect(prisma.conversation.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { notIn: ['PLAYGROUND', 'WEB'] },
+        }),
       }),
     );
     expect(result.channelMix).toEqual(
       expect.arrayContaining([
         { channel: 'WHATSAPP', count: 4 },
-        { channel: 'WEB', count: 1 },
+        { channel: 'INSTAGRAM', count: 1 },
       ]),
     );
   });

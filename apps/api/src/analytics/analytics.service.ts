@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DateTime } from 'luxon';
+import { ADMIN_ONLY_CONVERSATION_CHANNELS } from '../common/constants';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
 
@@ -13,7 +14,9 @@ export class AnalyticsService {
   async overview() {
     const [businesses, conversations, executions, leads] = await Promise.all([
       this.prisma.business.count(),
-      this.prisma.conversation.count(),
+      this.prisma.conversation.count({
+        where: this.customerConversationFilter(),
+      }),
       this.prisma.agentExecution.aggregate({
         _sum: { inputTokens: true, outputTokens: true, estimatedCost: true },
         _count: true,
@@ -43,7 +46,11 @@ export class AnalyticsService {
     const endOfWeek = now.endOf('week').toUTC().toJSDate();
 
     const startOfMonth = now.startOf('month').toUTC().toJSDate();
-    const visibleConversation = { businessId, hiddenAt: null };
+    const visibleConversation = {
+      businessId,
+      hiddenAt: null,
+      ...this.customerConversationFilter(),
+    };
 
     const [
       conversationsToday,
@@ -122,6 +129,7 @@ export class AnalyticsService {
           sender: 'AI',
           latencyMs: { not: null },
           createdAt: { gte: startOfWeek, lte: endOfWeek },
+          conversation: this.customerConversationFilter(),
         },
         _avg: { latencyMs: true },
       }),
@@ -244,7 +252,10 @@ export class AnalyticsService {
       }),
       this.prisma.conversation.groupBy({
         by: ['status'],
-        where: { businessId },
+        where: {
+          businessId,
+          ...this.customerConversationFilter(),
+        },
         _count: true,
       }),
       this.prisma.toolExecution.groupBy({
@@ -255,5 +266,14 @@ export class AnalyticsService {
     ]);
 
     return { executions, conversations, toolExecutions };
+  }
+
+  /** Excluye playground/WEB de prueba de KPIs y listados analíticos. */
+  private customerConversationFilter() {
+    return {
+      channel: {
+        notIn: [...ADMIN_ONLY_CONVERSATION_CHANNELS],
+      },
+    };
   }
 }
