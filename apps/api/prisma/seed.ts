@@ -1,33 +1,78 @@
 import { PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
-import {
-  DEFAULT_CONFIGURED_MESSAGES,
-  defaultWeeklyHours,
-} from '../src/common/constants';
+import { DEFAULT_CONFIGURED_MESSAGES } from '../src/common/constants';
 
 config({ path: resolve(__dirname, '../.env') });
 config({ path: resolve(__dirname, '../../../.env') });
 
 const prisma = new PrismaClient();
 
-const FAQ = `# Preguntas frecuentes - Demo Business
+/** Horarios típicos de un centro de estética chico. 0=lun … 6=dom */
+function aestheticsWeeklyHours(): Array<{
+  dayOfWeek: number;
+  isClosed: boolean;
+  ranges: Array<{ start: string; end: string }>;
+}> {
+  return [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => {
+    if (dayOfWeek === 6) {
+      return { dayOfWeek, isClosed: true, ranges: [] };
+    }
+    if (dayOfWeek === 5) {
+      return {
+        dayOfWeek,
+        isClosed: false,
+        ranges: [{ start: '09:00', end: '14:00' }],
+      };
+    }
+    return {
+      dayOfWeek,
+      isClosed: false,
+      ranges: [
+        { start: '10:00', end: '13:00' },
+        { start: '14:30', end: '19:00' },
+      ],
+    };
+  });
+}
+
+const FAQ = `# Preguntas frecuentes — Lumina Estética
+
+## Sobre el local
+Lumina Estética es un centro de belleza pequeño en Palermo, CABA.
+Trabajamos pestañas, cejas, uñas, cortes y peinados, con atención personalizada y turno previo.
 
 ## Horarios
-Abrimos de lunes a viernes de 09:00 a 13:00 y 14:00 a 18:00. Sábados de 10:00 a 14:00.
+Lunes a viernes: 10:00 a 13:00 y 14:30 a 19:00.
+Sábados: 09:00 a 14:00.
 Domingos cerrado.
 
 ## Contacto
-Email: hola@demobusiness.test
-Teléfono: +54 11 5555-1234
+WhatsApp: +54 11 5555-8899
+Teléfono: +54 11 5555-8899
+Email: hola@luminaestetica.test
+Instagram: @lumina.estetica
+Dirección: Thames 2450, Palermo, CABA
 
-## Servicios
-Consulta inicial, seguimiento y asesoramiento general.
-Para reservar, un asesor puede comunicarse a la brevedad.
+## Servicios y precios orientativos
+- Lifting de pestañas: 45 min — $18.000
+- Extensiones de pestañas (clásicas): 90 min — $32.000
+- Diseño y perfilado de cejas: 30 min — $12.000
+- Manicura semipermanente: 60 min — $16.000
+- Pedicura spa: 75 min — $22.000
+- Corte de cabello (dama): 45 min — $15.000
+- Brushing / peinado: 40 min — $12.000
+- Coloración parcial (mechas): 120 min — desde $45.000 (consultar)
+Los precios pueden variar según largo, técnica o productos. Confirmamos al reservar.
+
+## Turnos
+Se reserva con turno previo (WhatsApp o el asistente virtual).
+Llegá 5 minutos antes. Si vas a llegar tarde, avisanos.
+Cancelaciones: con al menos 4 horas de anticipación.
 
 ## Políticas
-No compartimos datos de clientes con terceros.
-Si el caso requiere una persona, se deriva a un humano.
+No compartimos datos de clientas/clientes con terceros.
+Si el pedido requiere una persona del equipo (coloración compleja, alergias, reclamos), se deriva a un humano.
 `;
 
 async function main() {
@@ -52,7 +97,7 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.business.deleteMany();
 
-  const weekly = defaultWeeklyHours();
+  const weekly = aestheticsWeeklyHours();
   const legacyKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   const openingHours = Object.fromEntries(
     weekly.map((day) => {
@@ -71,27 +116,38 @@ async function main() {
 
   const business = await prisma.business.create({
     data: {
-      name: 'Demo Business',
-      slug: 'demo-business',
+      name: 'Lumina Estética',
+      slug: 'lumina-estetica',
       description:
-        'Negocio ficticio para probar el template. Configurable desde el dashboard sin tocar código.',
+        'Centro de estética pequeño en Palermo: pestañas, cejas, uñas, cortes y peinados. Atención con turno previo.',
       type: 'OTHER',
       timezone: 'America/Argentina/Buenos_Aires',
       language: 'es',
-      address: 'Av. Ejemplo 123, CABA',
-      phone: '+54 11 5555-1234',
-      whatsapp: '+5491155551234',
-      email: 'hola@demobusiness.test',
-      website: 'https://demobusiness.test',
-      instagram: '@demobusiness',
-      additionalInfo: 'Atención con turno previo preferentemente.',
+      address: 'Thames 2450, Palermo, CABA',
+      phone: '+54 11 5555-8899',
+      whatsapp: '+5491155558899',
+      email: 'hola@luminaestetica.test',
+      website: 'https://luminaestetica.test',
+      instagram: '@lumina.estetica',
+      additionalInfo:
+        'Turno previo obligatorio. Traé el pelo limpio si venís a corte o peinado. Avisá alergias a productos o adhesivos.',
       openingHours,
-      defaultMessages: { ...DEFAULT_CONFIGURED_MESSAGES },
+      defaultMessages: {
+        ...DEFAULT_CONFIGURED_MESSAGES,
+        welcome:
+          '¡Hola! Soy el asistente de Lumina Estética. ¿Querés reservar un turno de pestañas, uñas, cejas o cabello?',
+        appointmentConfirmation:
+          '¡Listo! Tu turno quedó confirmado. Te esperamos 5 minutos antes. Si necesitás cambiarlo, avisame.',
+        appointmentCancellation:
+          'Tu turno fue cancelado. Cuando quieras, te ayudo a sacar uno nuevo.',
+        handoff:
+          'Te derivo con alguien del equipo de Lumina para que te ayude con eso.',
+      },
       rules: {
         neverInventPrices: true,
         escalateIfUnsure: true,
       },
-      allowedModels: ['gpt-4.1-mini', 'gpt-4o-mini'],
+      allowedModels: ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-5-mini'],
     },
   });
 
@@ -108,36 +164,94 @@ async function main() {
     data: [
       {
         businessId: business.id,
-        name: 'Consulta inicial',
-        description: 'Primera evaluación y orientación.',
-        durationMinutes: 30,
-        price: 15000,
-        priceDescription: '$15.000',
+        name: 'Lifting de pestañas',
+        description:
+          'Curvado natural de pestañas con duración aproximada de 4 a 6 semanas.',
+        durationMinutes: 45,
+        price: 18000,
+        priceDescription: '$18.000',
         enabled: true,
         requiresAppointment: true,
         sortOrder: 1,
       },
       {
         businessId: business.id,
-        name: 'Seguimiento',
-        description: 'Control o seguimiento de un caso existente.',
-        durationMinutes: 20,
-        price: 10000,
-        priceDescription: '$10.000',
+        name: 'Extensiones de pestañas',
+        description:
+          'Extensiones clásicas pelo a pelo. Ideal para mirada definida.',
+        durationMinutes: 90,
+        price: 32000,
+        priceDescription: '$32.000',
         enabled: true,
         requiresAppointment: true,
         sortOrder: 2,
       },
       {
         businessId: business.id,
-        name: 'Asesoramiento especial',
-        description: 'Casos que requieren más tiempo. Precio a confirmar.',
-        durationMinutes: 60,
-        price: null,
-        priceDescription: 'Consultar precio',
+        name: 'Diseño y perfilado de cejas',
+        description: 'Diseño, depilación y perfilado según el rostro.',
+        durationMinutes: 30,
+        price: 12000,
+        priceDescription: '$12.000',
         enabled: true,
         requiresAppointment: true,
         sortOrder: 3,
+      },
+      {
+        businessId: business.id,
+        name: 'Manicura semipermanente',
+        description: 'Limpieza, limado, cutículas y esmaltado semipermanente.',
+        durationMinutes: 60,
+        price: 16000,
+        priceDescription: '$16.000',
+        enabled: true,
+        requiresAppointment: true,
+        sortOrder: 4,
+      },
+      {
+        businessId: business.id,
+        name: 'Pedicura spa',
+        description: 'Pedicura completa con exfoliación e hidratación.',
+        durationMinutes: 75,
+        price: 22000,
+        priceDescription: '$22.000',
+        enabled: true,
+        requiresAppointment: true,
+        sortOrder: 5,
+      },
+      {
+        businessId: business.id,
+        name: 'Corte de cabello',
+        description: 'Corte y lavado. Consultá si querés peinado incluido.',
+        durationMinutes: 45,
+        price: 15000,
+        priceDescription: '$15.000',
+        enabled: true,
+        requiresAppointment: true,
+        sortOrder: 6,
+      },
+      {
+        businessId: business.id,
+        name: 'Brushing / peinado',
+        description: 'Secado y peinado con brushing.',
+        durationMinutes: 40,
+        price: 12000,
+        priceDescription: '$12.000',
+        enabled: true,
+        requiresAppointment: true,
+        sortOrder: 7,
+      },
+      {
+        businessId: business.id,
+        name: 'Coloración / mechas',
+        description:
+          'Coloración parcial o mechas. El precio final depende del largo y la técnica; se confirma en el local.',
+        durationMinutes: 120,
+        price: 45000,
+        priceDescription: 'Desde $45.000',
+        enabled: true,
+        requiresAppointment: true,
+        sortOrder: 8,
       },
     ],
   });
@@ -145,8 +259,8 @@ async function main() {
   const knowledgeBase = await prisma.knowledgeBase.create({
     data: {
       businessId: business.id,
-      name: 'Conocimiento principal',
-      description: 'Información que conoce tu asistente',
+      name: 'Conocimiento Lumina',
+      description: 'Horarios, servicios, precios y políticas del centro',
     },
   });
 
@@ -176,27 +290,28 @@ async function main() {
     data: {
       businessId: business.id,
       knowledgeBaseId: knowledgeBase.id,
-      name: 'Asistente Demo',
-      description: 'Asistente virtual del negocio demo',
+      name: 'Asistente Lumina',
+      description: 'Asistente virtual de Lumina Estética',
       provider: 'openai',
       model: process.env.OPENAI_DEFAULT_MODEL ?? 'gpt-4.1-mini',
-      tone: 'professional_warm',
+      tone: 'friendly',
       customInstructions:
-        'Sé claro, amable y breve. No inventes precios ni horarios: usá las herramientas.',
-      personality: 'Cercano, claro y profesional.',
-      systemPrompt: `Sos el asistente virtual de Demo Business.
-Ayudá con información general, horarios, servicios, FAQs y captura de leads.
+        'Hablá en español rioplatense, cálida y clara. Ayudá a elegir servicio y a sacar turno. No inventes precios ni horarios: usá las herramientas. Si preguntan por coloración compleja o alergias, ofrecé derivar a una persona del equipo.',
+      personality: 'Cercana, ordenada y amable, como la recepcionista del salón.',
+      systemPrompt: `Sos el asistente virtual de Lumina Estética, un centro de belleza pequeño en Palermo (pestañas, cejas, uñas, cortes y peinados).
+Ayudá con horarios, servicios, precios orientativos, FAQs y reservas.
 Si no sabés algo, no lo inventes.
-Si el usuario quiere hablar con una persona, usá requestHumanAssistance.
+Si la clienta quiere hablar con alguien del equipo, usá requestHumanAssistance.
 Usá getServices, getOpeningHours y checkAvailability antes de afirmar disponibilidad o precios.
 Para reservar usá createAppointment solo con un horario devuelto por checkAvailability.
-Si el usuario dio email, después de reservar usá sendEmail para confirmar el turno.
-Si el usuario pide confirmación por WhatsApp o dio teléfono, usá sendWhatsAppMessage.
-Usá createLead cuando el usuario deje nombre, email o teléfono.`,
-      temperature: 0.3,
+Pedí nombre y, si es posible, teléfono o email para la confirmación.
+Si dio email, después de reservar usá sendEmail para confirmar el turno.
+Si pide confirmación por WhatsApp o dio teléfono, usá sendWhatsAppMessage.
+Usá createLead cuando deje datos de contacto sin cerrar turno.`,
+      temperature: 0.4,
       maxSteps: 8,
       enabledTools: tools.map((tool) => tool.name),
-      enabledChannels: ['WEB', 'WHATSAPP'],
+      enabledChannels: ['WEB', 'WHATSAPP', 'PLAYGROUND'],
       memoryStrategy: {
         recentMessages: 12,
         includeSummary: true,
@@ -210,7 +325,7 @@ Usá createLead cuando el usuario deje nombre, email o teléfono.`,
     data: {
       knowledgeBaseId: knowledgeBase.id,
       businessId: business.id,
-      title: 'FAQ Demo Business',
+      title: 'FAQ Lumina Estética',
       source: 'seed-faq.md',
       mimeType: 'text/markdown',
       category: 'faq',
@@ -284,7 +399,7 @@ Usá createLead cuando el usuario deje nombre, email o teléfono.`,
       businessId: business.id,
       name: 'notify-new-lead',
       description: 'Webhook de ejemplo para notificar un lead en n8n',
-      webhookUrl: 'https://n8n.example.test/webhook/demo-lead',
+      webhookUrl: 'https://n8n.example.test/webhook/lumina-lead',
       enabled: false,
     },
   });
@@ -305,11 +420,13 @@ Usá createLead cuando el usuario deje nombre, email o teléfono.`,
       type: 'LONG_TERM',
       key: 'tone',
       content:
-        'Los clientes de Demo Business prefieren respuestas breves y en español rioplatense.',
+        'Las clientas de Lumina Estética prefieren respuestas cálidas, breves y en español rioplatense. Priorizar turnos claros (servicio + día + hora).',
     },
   });
 
-  console.log(`Seed OK. Demo Business id=${business.id} (single-business template)`);
+  console.log(
+    `Seed OK. Lumina Estética id=${business.id} (centro de estética de prueba)`,
+  );
 }
 
 main()
