@@ -13,12 +13,12 @@
     "db:generate": "pnpm --filter api prisma:generate",
     "db:migrate": "pnpm --filter api prisma:migrate",
     "db:deploy": "pnpm --filter api prisma:deploy",
-    "db:seed": "pnpm --filter api prisma:seed",
+    "db:seed": "pnpm --filter api prisma:seed --",
     "db:studio": "pnpm --filter api prisma:studio",
     "docker:up": "docker compose up -d --build",
     "docker:infra": "docker compose up -d postgres redis waha",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api admin waha",
-    "docker:seed": "docker compose exec api pnpm prisma:seed"
+    "docker:seed": "docker compose exec api pnpm prisma:seed --"
   }
 }
