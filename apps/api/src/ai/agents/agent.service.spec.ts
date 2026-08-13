@@ -16,6 +16,7 @@ describe('AgentService', () => {
     email: null,
     website: null,
     instagram: null,
+    googleReviewsUrl: null,
     additionalInfo: null,
     defaultMessages: { welcome: 'Hola' },
     allowedModels: ['gpt-4.1-mini'],

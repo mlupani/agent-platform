@@ -51,7 +51,7 @@ export class PromptBuilderService {
       this.messagesSection(ctx.configuredMessages),
       this.behaviorSection(ctx),
       SAFETY_PROMPT,
-      this.toolsSection(ctx.enabledTools),
+      this.toolsSection(ctx),
       ctx.memoryContext
         ? `Contexto de conversación / memoria:\n${ctx.memoryContext}`
         : null,
@@ -116,6 +116,9 @@ export class PromptBuilderService {
       b.email ? `- Email: ${b.email}` : null,
       b.website ? `- Sitio web: ${b.website}` : null,
       b.instagram ? `- Instagram: ${b.instagram}` : null,
+      b.googleReviewsUrl
+        ? `- Link de reseñas de Google: ${b.googleReviewsUrl}`
+        : null,
       b.additionalInfo ? `- Información adicional: ${b.additionalInfo}` : null,
     ];
     return lines.filter(Boolean).join('\n');
@@ -171,7 +174,8 @@ export class PromptBuilderService {
     return parts.join('\n\n');
   }
 
-  private toolsSection(enabledTools: string[]): string {
+  private toolsSection(ctx: AgentPromptContext): string {
+    const enabledTools = ctx.enabledTools;
     if (!enabledTools.length) {
       return 'No hay herramientas habilitadas. Respondé solo con la información disponible en este prompt.';
     }
@@ -182,12 +186,17 @@ export class PromptBuilderService {
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
       `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`,
+      ctx.business.googleReviewsUrl
+        ? `Si createAppointment fue exitoso y hay link de reseñas de Google (${ctx.business.googleReviewsUrl}), incluilo en el cuerpo de sendEmail/sendWhatsAppMessage pidiendo amablemente que dejen una reseña. No lo uses en cancelaciones ni en otros mensajes.`
+        : null,
       `No pidas autorización verbal extra para sendEmail/sendWhatsAppMessage: si el usuario pidió la confirmación y ya dio el canal (email/teléfono), ejecutá la tool sin repreguntar.`,
       `Si sendEmail o sendWhatsAppMessage fallan, confirmá el turno en este chat con los datos del turno. No digas que "falta una integración" ni derives a un humano salvo que el usuario lo pida.`,
       `checkAvailability exige fecha YYYY-MM-DD según la fecha actual del prompt; si avisa fecha pasada, corregí UNA vez y reintentá.`,
       `No repitas la misma herramienta con los mismos argumentos. Después de un resultado exitoso, contestá al usuario.`,
       `Para derivar a un humano: requestHumanAssistance.`,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   formatHours(

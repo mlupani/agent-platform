@@ -51,6 +51,28 @@ describe('PromptBuilderService', () => {
     expect(prompt).toContain('martes');
     expect(prompt).not.toContain('embeddings');
     expect(prompt).not.toContain('vector database');
+    expect(prompt).not.toContain('reseñas de Google');
+  });
+
+  it('includes the Google reviews link in confirmation instructions', () => {
+    const prompt = builder.buildFromContext({
+      assistantName: 'Luna',
+      tone: 'friendly',
+      business: {
+        name: 'Demo Business',
+        type: 'OTHER',
+        timezone: 'America/Argentina/Buenos_Aires',
+        language: 'es',
+        googleReviewsUrl: 'https://g.page/r/demo/review',
+      },
+      hoursText: '',
+      servicesText: '',
+      configuredMessages: {},
+      enabledTools: ['createAppointment', 'sendEmail', 'sendWhatsAppMessage'],
+    });
+
+    expect(prompt).toContain('https://g.page/r/demo/review');
+    expect(prompt).toContain('reseñas de Google');
   });
 
   it('buildCurrentDateTime returns tomorrow relative to timezone', () => {

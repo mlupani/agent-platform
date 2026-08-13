@@ -34,6 +34,7 @@ export const updateBusinessProfileSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   website: z.string().url().optional().nullable().or(z.literal('')),
   instagram: z.string().max(120).optional().nullable(),
+  googleReviewsUrl: z.string().url().optional().nullable().or(z.literal('')),
   additionalInfo: z.string().max(4000).optional().nullable(),
   rules: z.record(z.unknown()).optional(),
   defaultMessages: configuredMessagesSchema.optional(),

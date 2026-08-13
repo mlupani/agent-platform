@@ -16,6 +16,7 @@ describe('GetBusinessInformationTool', () => {
           email: 'hola@demo.test',
           website: null,
           instagram: null,
+          googleReviewsUrl: null,
           additionalInfo: null,
           rules: { escalateIfUnsure: true },
         }),

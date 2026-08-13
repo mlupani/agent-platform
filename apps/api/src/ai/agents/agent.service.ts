@@ -221,6 +221,7 @@ export class AgentService {
         email: business.email,
         website: business.website,
         instagram: business.instagram,
+        googleReviewsUrl: business.googleReviewsUrl,
         additionalInfo: business.additionalInfo,
       },
       currentDateTime,

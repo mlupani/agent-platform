@@ -9,7 +9,7 @@ const schema = z.object({});
 export class GetBusinessInformationTool implements AgentTool {
   readonly name = 'getBusinessInformation';
   readonly description =
-    'Obtiene información general del negocio: nombre, rubro, descripción, contacto, idioma y zona horaria.';
+    'Obtiene información general del negocio: nombre, rubro, descripción, contacto, reseñas de Google, idioma y zona horaria.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 
@@ -30,6 +30,7 @@ export class GetBusinessInformationTool implements AgentTool {
         email: true,
         website: true,
         instagram: true,
+        googleReviewsUrl: true,
         additionalInfo: true,
         rules: true,
       },

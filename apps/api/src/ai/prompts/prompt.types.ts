@@ -12,6 +12,7 @@ export interface BusinessPromptData {
   email?: string | null;
   website?: string | null;
   instagram?: string | null;
+  googleReviewsUrl?: string | null;
   additionalInfo?: string | null;
 }
 

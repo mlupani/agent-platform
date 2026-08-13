@@ -219,6 +219,7 @@ export class BusinessesService {
       email: string | null;
       website: string | null;
       instagram: string | null;
+      googleReviewsUrl: string | null;
       additionalInfo: string | null;
       openingHours: object;
       defaultMessages: object;
@@ -233,6 +234,10 @@ export class BusinessesService {
       data.email === '' ? null : (data.email as string | null | undefined);
     const website =
       data.website === '' ? null : (data.website as string | null | undefined);
+    const googleReviewsUrl =
+      data.googleReviewsUrl === ''
+        ? null
+        : (data.googleReviewsUrl as string | null | undefined);
 
     return this.prisma.business.update({
       where: { id: current.id },
@@ -240,6 +245,7 @@ export class BusinessesService {
         ...data,
         email,
         website,
+        googleReviewsUrl,
         defaultMessages: data.defaultMessages
           ? {
               ...DEFAULT_CONFIGURED_MESSAGES,

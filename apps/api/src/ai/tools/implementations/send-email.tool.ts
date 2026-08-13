@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { EmailService } from '../../../email/email.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { appendGoogleReviewsCta } from '../../../common/utils/google-reviews-cta';
 import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
 
 const schema = z.object({
@@ -15,7 +16,7 @@ const schema = z.object({
     .min(1)
     .max(5000)
     .describe(
-      'Cuerpo en texto plano. Para confirmación de turno incluí fecha, hora, servicio y datos del negocio.',
+      'Cuerpo en texto plano. Para confirmación de turno incluí fecha, hora, servicio, datos del negocio y el link de reseñas de Google si está configurado.',
     ),
 });
 
@@ -46,15 +47,19 @@ export class SendEmailTool implements AgentTool {
 
     const business = await this.prisma.business.findUnique({
       where: { id: context.businessId },
-      select: { name: true, email: true },
+      select: { name: true, email: true, googleReviewsUrl: true },
     });
 
     try {
+      const text = appendGoogleReviewsCta(
+        data.body,
+        business?.googleReviewsUrl,
+      );
       const result = await this.email.send(
         {
           to: data.to,
           subject: data.subject,
-          text: data.body,
+          text,
           from: formatFrom(business?.name, transport.from),
           replyTo: business?.email ?? undefined,
         },

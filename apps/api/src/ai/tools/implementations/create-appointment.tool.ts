@@ -104,6 +104,10 @@ export class CreateAppointmentTool implements AgentTool {
           confirmationMessage:
             messages.appointmentConfirmation ??
             'Tu cita quedó confirmada.',
+          googleReviewsUrl: business.googleReviewsUrl ?? undefined,
+          reviewHint: business.googleReviewsUrl
+            ? `Incluí este link de reseñas de Google en el email/WhatsApp de confirmación: ${business.googleReviewsUrl}`
+            : undefined,
           emailHint: appointment.contactEmail
             ? 'Si el usuario dio email, podés usar sendEmail para mandar la confirmación.'
             : undefined,

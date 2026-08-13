@@ -52,6 +52,7 @@ interface BusinessDetail {
   whatsapp?: string | null;
   email?: string | null;
   website?: string | null;
+  googleReviewsUrl?: string | null;
   timezone: string;
   defaultMessages?: Record<string, string> | null;
   agentConfigs?: AgentConfig[];
@@ -105,6 +106,7 @@ export function PersonalizationEditor() {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [website, setWebsite] = useState('');
+  const [googleReviewsUrl, setGoogleReviewsUrl] = useState('');
   const [hours, setHours] = useState<BusinessHour[]>([]);
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [logoUrl, setLogoUrl] = useState('');
@@ -126,6 +128,7 @@ export function PersonalizationEditor() {
     setEmail(data.email ?? '');
     setAddress(data.address ?? '');
     setWebsite(data.website ?? '');
+    setGoogleReviewsUrl(data.googleReviewsUrl ?? '');
     setMessages(
       (data.defaultMessages as Record<string, string> | null) ?? {},
     );
@@ -179,6 +182,7 @@ export function PersonalizationEditor() {
           email,
           address,
           website,
+          googleReviewsUrl,
         }),
       }),
     onSuccess: async () => {
@@ -477,6 +481,21 @@ export function PersonalizationEditor() {
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
             />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted">Link de reseñas de Google</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              type="url"
+              placeholder="https://g.page/r/.../review"
+              value={googleReviewsUrl}
+              onChange={(e) => setGoogleReviewsUrl(e.target.value)}
+            />
+            <span className="block text-xs text-muted">
+              Se agrega al email o WhatsApp de confirmación de turno para que
+              el cliente deje una reseña. Lo copiás desde Google Maps o Google
+              Business Profile.
+            </span>
           </label>
           <label className="space-y-1 text-sm sm:col-span-2">
             <span className="text-muted">Dirección</span>

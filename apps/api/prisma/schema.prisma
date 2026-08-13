@@ -25,6 +25,8 @@ model Business {
   email             String?
   website           String?
   instagram         String?
+  /// Link de Google para pedir reseñas (Maps / ficha del negocio).
+  googleReviewsUrl  String?
   additionalInfo    String?
   /// @deprecated Preferir BusinessHour. Se mantiene por compatibilidad.
   openingHours      Json?

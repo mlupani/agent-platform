@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { appendGoogleReviewsCta } from '../../../common/utils/google-reviews-cta';
 import { WhatsAppProviderFactory } from '../../../whatsapp/providers/whatsapp-provider.factory';
 import { WhatsAppConfigService } from '../../../whatsapp/whatsapp-config.service';
 import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
@@ -19,7 +20,7 @@ const schema = z.object({
     .min(1)
     .max(4000)
     .describe(
-      'Mensaje de WhatsApp. Para confirmación de turno incluí fecha, hora, servicio y datos del negocio.',
+      'Mensaje de WhatsApp. Para confirmación de turno incluí fecha, hora, servicio, datos del negocio y el link de reseñas de Google si está configurado.',
     ),
 });
 
@@ -80,6 +81,12 @@ export class SendWhatsAppMessageTool implements AgentTool {
       };
     }
 
+    const business = await this.prisma.business.findUnique({
+      where: { id: context.businessId },
+      select: { googleReviewsUrl: true },
+    });
+    const body = appendGoogleReviewsCta(data.body, business?.googleReviewsUrl);
+
     try {
       const provider = await this.providers.getForBusiness(context.businessId);
       const session =
@@ -89,7 +96,7 @@ export class SendWhatsAppMessageTool implements AgentTool {
       const sent = await provider.sendText({
         businessId: context.businessId,
         to,
-        body: data.body,
+        body,
         session,
       });
 
@@ -101,7 +108,7 @@ export class SendWhatsAppMessageTool implements AgentTool {
               businessId: context.businessId,
               role: 'assistant',
               sender: 'AI',
-              content: data.body,
+              content: body,
               status: 'sent',
               externalId: sent.externalId ?? undefined,
               metadata: {
@@ -114,7 +121,7 @@ export class SendWhatsAppMessageTool implements AgentTool {
             where: { id: context.conversationId },
             data: {
               lastMessageAt: new Date(),
-              lastMessagePreview: data.body.slice(0, 280),
+              lastMessagePreview: body.slice(0, 280),
               lastMessageSender: 'AI',
             },
           });
