@@ -10,6 +10,7 @@ Uso:
   pnpm db:seed -- --peluqueria
   pnpm db:seed -- --inmobiliaria
   pnpm db:seed -- --clinica-dental
+  pnpm db:seed -- --salon-de-eventos
 
 También:
   pnpm db:seed -- --industry=peluqueria

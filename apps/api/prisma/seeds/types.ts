@@ -5,6 +5,7 @@ export const SEED_INDUSTRIES = [
   'peluqueria',
   'inmobiliaria',
   'clinica-dental',
+  'salon-de-eventos',
 ] as const;
 
 export type SeedIndustry = (typeof SEED_INDUSTRIES)[number];
