@@ -11,6 +11,7 @@ import { AutomationsModule } from './automations/automations.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { ChannelsModule } from './channels/channels.module';
 import { ChatModule } from './chat/chat.module';
+import { WebChatModule } from './web-chat/web-chat.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { ConversationsModule } from './conversations/conversations.module';
@@ -65,6 +66,7 @@ import { AppService } from './app.service';
     UsersModule,
     AnalyticsModule,
     ChatModule,
+    WebChatModule,
     ContentModule,
   ],
   controllers: [AppController],

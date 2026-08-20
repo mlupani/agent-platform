@@ -14,10 +14,21 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
+  const adminOrigin = process.env.ADMIN_URL ?? 'http://localhost:3000';
   app.enableCors({
-    origin: process.env.ADMIN_URL ?? 'http://localhost:3000',
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin || origin === adminOrigin) {
+        callback(null, true);
+        return;
+      }
+      // Widget embebido en landings: refleja el origen. La auth es la API key, no cookies.
+      callback(null, true);
+    },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'x-api-key'],
+    allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization'],
   });
   app.setGlobalPrefix('api');
   const port = Number(process.env.API_PORT ?? process.env.PORT ?? 3001);

@@ -47,6 +47,7 @@ async function resetDatabase() {
   await prisma.appointment.deleteMany();
   await prisma.googleCalendarConfig.deleteMany();
   await prisma.whatsAppConfig.deleteMany();
+  await prisma.webChatConfig.deleteMany();
   await prisma.toolExecution.deleteMany();
   await prisma.agentExecution.deleteMany();
   await prisma.message.deleteMany();

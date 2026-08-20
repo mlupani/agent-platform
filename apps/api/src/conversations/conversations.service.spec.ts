@@ -54,13 +54,13 @@ describe('ConversationsService inbox', () => {
     );
   });
 
-  it('hides playground/web channels from USER role list', async () => {
+  it('hides playground channels from USER role list', async () => {
     prisma.conversation.findMany.mockResolvedValue([]);
     await service.list(undefined, { role: 'USER' });
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { notIn: ['PLAYGROUND', 'WEB'] },
+          channel: { notIn: ['PLAYGROUND'] },
         }),
       }),
     );

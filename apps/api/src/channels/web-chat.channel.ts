@@ -16,7 +16,12 @@ export class WebChatChannel implements ChannelAdapter {
       conversationId: data.conversationId,
       userId: data.userId,
       message: data.message,
-      metadata: data.metadata,
+      metadata: {
+        provider: 'web',
+        channel: 'WEB',
+        source: 'website',
+        ...data.metadata,
+      },
     };
   }
 

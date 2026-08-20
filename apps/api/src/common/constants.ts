@@ -31,8 +31,8 @@ export const channelTypes = [
 ] as const;
 export type ChannelType = (typeof channelTypes)[number];
 
-/** Canales de prueba del panel: solo visibles para rol ADMIN. */
-export const ADMIN_ONLY_CONVERSATION_CHANNELS = ['PLAYGROUND', 'WEB'] as const;
+/** Canales de prueba del panel: solo visibles para rol ADMIN. WEB (widget) sí entra a la bandeja. */
+export const ADMIN_ONLY_CONVERSATION_CHANNELS = ['PLAYGROUND'] as const;
 
 /** Canales de mensajería con provider outbound */
 export const messagingChannels = ['WHATSAPP', 'INSTAGRAM'] as const;

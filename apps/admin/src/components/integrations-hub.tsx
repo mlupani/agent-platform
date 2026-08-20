@@ -4,14 +4,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { GoogleCalendarConfigForm } from '@/components/google-calendar-config-form';
 import { InstagramConfigForm } from '@/components/instagram-config-form';
+import { WebChatConfigForm } from '@/components/web-chat-config-form';
 import { WhatsAppConfigForm } from '@/components/whatsapp-config-form';
 import {
   InstagramIconMono,
+  WebChannelIcon,
   WhatsAppIcon,
 } from '@/components/channel-icons';
 import { api } from '@/lib/api';
 
-type Panel = 'list' | 'whatsapp' | 'instagram' | 'calendar';
+type Panel = 'list' | 'whatsapp' | 'instagram' | 'web' | 'calendar';
 
 interface WhatsAppPublicConfig {
   status: string;
@@ -29,6 +31,11 @@ interface GoogleCalendarPublicConfig {
   enabled: boolean;
   connectedEmail: string | null;
   hasRefreshToken?: boolean;
+}
+
+interface WebChatPublicConfig {
+  status: string;
+  enabled: boolean;
 }
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
@@ -59,9 +66,15 @@ export function IntegrationsHub() {
     queryFn: () =>
       api<GoogleCalendarPublicConfig | null>('/admin/calendar'),
   });
+  const web = useQuery({
+    queryKey: ['web-chat-config'],
+    queryFn: () => api<WebChatPublicConfig | null>('/admin/web-chat'),
+  });
 
   const waConnected = wa.data?.status === 'connected';
   const igConnected = ig.data?.status === 'connected';
+  const webConnected =
+    web.data?.status === 'connected' || web.data?.enabled === true;
   const calConnected =
     cal.data?.status === 'connected' ||
     (cal.data?.enabled === true && Boolean(cal.data?.hasRefreshToken === true || cal.data?.connectedEmail));
@@ -69,6 +82,7 @@ export function IntegrationsHub() {
   const title = useMemo(() => {
     if (panel === 'whatsapp') return 'WhatsApp';
     if (panel === 'instagram') return 'Instagram';
+    if (panel === 'web') return 'Web';
     if (panel === 'calendar') return 'Google Calendar';
     return 'Integraciones';
   }, [panel]);
@@ -88,6 +102,7 @@ export function IntegrationsHub() {
         </header>
         {panel === 'whatsapp' ? <WhatsAppConfigForm /> : null}
         {panel === 'instagram' ? <InstagramConfigForm /> : null}
+        {panel === 'web' ? <WebChatConfigForm /> : null}
         {panel === 'calendar' ? <GoogleCalendarConfigForm /> : null}
       </div>
     );
@@ -143,6 +158,29 @@ export function IntegrationsHub() {
           <h3 className="mt-4 font-medium">Instagram</h3>
           <p className="mt-1 text-sm text-muted">
             Direct Messages en la misma bandeja que WhatsApp.
+          </p>
+          <div className="mt-4 flex justify-end text-muted group-hover:text-text">
+            →
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPanel('web')}
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent">
+              <WebChannelIcon className="h-5 w-5" title="Web" />
+            </div>
+            <StatusPill
+              ok={webConnected}
+              label={webConnected ? 'Conectado' : 'Desconectado'}
+            />
+          </div>
+          <h3 className="mt-4 font-medium">Web</h3>
+          <p className="mt-1 text-sm text-muted">
+            Chat embebido en tu landing, con API key propia.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →

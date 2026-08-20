@@ -368,7 +368,7 @@ export class ConversationsService {
     return conversation;
   }
 
-  /** USER no ve playground ni WEB de prueba; ADMIN ve todo. */
+  /** USER no ve playground; WEB (widget) sí aparece en la bandeja. ADMIN ve todo. */
   private roleChannelFilter(role?: AdminRole) {
     if (role === 'ADMIN') return {};
     return {

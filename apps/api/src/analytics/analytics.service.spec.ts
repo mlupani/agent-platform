@@ -81,14 +81,14 @@ describe('AnalyticsService.dashboard', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           hiddenAt: null,
-          channel: { notIn: ['PLAYGROUND', 'WEB'] },
+          channel: { notIn: ['PLAYGROUND'] },
         }),
       }),
     );
     expect(prisma.conversation.count).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { notIn: ['PLAYGROUND', 'WEB'] },
+          channel: { notIn: ['PLAYGROUND'] },
         }),
       }),
     );

@@ -268,7 +268,7 @@ export class AnalyticsService {
     return { executions, conversations, toolExecutions };
   }
 
-  /** Excluye playground/WEB de prueba de KPIs y listados analíticos. */
+  /** Excluye playground de KPIs y listados analíticos. WEB (widget) sí cuenta. */
   private customerConversationFilter() {
     return {
       channel: {

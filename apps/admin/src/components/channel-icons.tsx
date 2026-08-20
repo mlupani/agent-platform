@@ -66,6 +66,26 @@ export function InstagramIconMono({
   );
 }
 
+/** Icono de canal web / widget embebido */
+export function WebChannelIcon({ className = 'h-5 w-5', title }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3c2.5 2.8 3.8 5.8 3.8 9S14.5 18.2 12 21c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3Z" />
+    </svg>
+  );
+}
+
 export function ChannelBadge({
   channel,
   size = 'sm',
@@ -101,14 +121,26 @@ export function ChannelBadge({
     );
   }
 
-  if (value === 'PLAYGROUND' || value === 'WEB') {
+  if (value === 'WEB') {
     return (
       <span
-        title={value === 'PLAYGROUND' ? 'Playground' : 'Web'}
-        aria-label={value === 'PLAYGROUND' ? 'Playground' : 'Web'}
+        title="Web"
+        aria-label="Web"
+        className={`inline-flex ${box} items-center justify-center rounded-full bg-accent text-white shrink-0`}
+      >
+        <WebChannelIcon className={icon} title="Web" />
+      </span>
+    );
+  }
+
+  if (value === 'PLAYGROUND') {
+    return (
+      <span
+        title="Playground"
+        aria-label="Playground"
         className={`inline-flex ${box} items-center justify-center rounded-full bg-panel-2 text-muted text-[9px] font-semibold shrink-0`}
       >
-        {value === 'PLAYGROUND' ? 'PG' : 'W'}
+        PG
       </span>
     );
   }

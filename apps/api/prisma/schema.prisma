@@ -55,6 +55,7 @@ model Business {
   whatsappConfig  WhatsAppConfig?
   googleCalendarConfig GoogleCalendarConfig?
   instagramConfig InstagramConfig?
+  webChatConfig        WebChatConfig?
   brandingConfig       BrandingConfig?
   socialContentConfig  SocialContentConfig?
   generatedContents    GeneratedContent[]
@@ -290,6 +291,28 @@ model InstagramConfig {
   updatedAt       DateTime  @updatedAt
 
   @@map("instagram_configs")
+}
+
+/// Widget de chat embebido (landing). La API key se guarda hasheada.
+model WebChatConfig {
+  id             String    @id @default(uuid())
+  businessId     String    @unique
+  business       Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  enabled        Boolean   @default(false)
+  /// SHA-256 hex de la API key del widget
+  apiKeyHash     String?   @unique
+  /// Prefijo visible, p.ej. nlw_a1b2c3d4
+  apiKeyPrefix   String?
+  /// Orígenes CORS permitidos (https://midominio.com). Vacío = cualquier origen (la key sigue siendo obligatoria).
+  allowedOrigins String[]  @default([])
+  /// disconnected | connected
+  status         String    @default("disconnected")
+  lastError      String?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("web_chat_configs")
 }
 
 /// Cita local (fuente de verdad del negocio). Se sincroniza con Google Calendar si está conectado.
