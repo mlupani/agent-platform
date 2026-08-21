@@ -19,6 +19,7 @@ interface GeneratedContent {
   status: string;
   objective: string;
   channels: string[];
+  mediaType?: string;
   topic?: string | null;
   headline?: string | null;
   caption?: string | null;
@@ -47,6 +48,7 @@ interface ContentSummary {
   drafts: number;
   failed: number;
   imageGenerationsThisMonth: number;
+  videoGenerationsThisMonth?: number;
   estimatedCostThisMonth: number;
 }
 
@@ -100,10 +102,19 @@ const CHANNELS = [
   { value: 'INSTAGRAM_FEED', label: 'Instagram Feed' },
 ] as const;
 
+const VIDEO_CHANNELS = [
+  { value: 'INSTAGRAM_REEL', label: 'Instagram Reel' },
+  { value: 'INSTAGRAM_STORY', label: 'Instagram Story' },
+  { value: 'WHATSAPP_STATUS', label: 'WhatsApp Status' },
+] as const;
+
+const VIDEO_DURATIONS = [5, 10, 15] as const;
+
 const CHANNEL_LABEL: Record<string, string> = {
   WHATSAPP_STATUS: 'WhatsApp Status',
   INSTAGRAM_STORY: 'Instagram Story',
   INSTAGRAM_FEED: 'Instagram Feed',
+  INSTAGRAM_REEL: 'Instagram Reel',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -142,18 +153,88 @@ function formatPubDate(value?: string | null) {
 }
 
 function isVideoContent(item: GeneratedContent): boolean {
+  if ((item.mediaType ?? 'IMAGE').toUpperCase() === 'VIDEO') return true;
   const assets = item.assets ?? [];
   if (!assets.length) return false;
   return assets.some((asset) => (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO');
 }
 
 function isImageContent(item: GeneratedContent): boolean {
+  if ((item.mediaType ?? 'IMAGE').toUpperCase() === 'VIDEO') return false;
   if (item.status === 'GENERATING' || item.status === 'PUBLISHING') {
     return !isVideoContent(item);
   }
   const assets = item.assets ?? [];
   if (!assets.length) return false;
   return assets.every((asset) => (asset.type ?? 'IMAGE').toUpperCase() !== 'VIDEO');
+}
+
+interface LightboxMedia {
+  url: string;
+  video: boolean;
+  label?: string;
+}
+
+function MediaLightbox({
+  media,
+  onClose,
+}: {
+  media: LightboxMedia;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={media.label || 'Vista ampliada'}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/82" />
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-20 rounded-full bg-white/15 hover:bg-white/25 text-white w-10 h-10 inline-flex items-center justify-center text-lg"
+        aria-label="Cerrar"
+      >
+        ×
+      </button>
+      <div
+        className="relative z-10 max-h-[92vh] max-w-[min(96vw,1120px)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {media.video ? (
+          <video
+            src={media.url}
+            className="max-h-[92vh] max-w-full rounded-xl shadow-2xl bg-black"
+            controls
+            autoPlay
+            playsInline
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={media.url}
+            alt={media.label || 'Imagen generada'}
+            className="max-h-[92vh] max-w-full rounded-xl shadow-2xl object-contain bg-black"
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ContentCreator() {
@@ -182,6 +263,8 @@ export function ContentCreator() {
   const [autoObjective, setAutoObjective] = useState('AUTOMATIC');
   const [autoDirty, setAutoDirty] = useState(false);
   const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
+  const [videoDuration, setVideoDuration] = useState<5 | 10 | 15>(5);
+  const [lightbox, setLightbox] = useState<LightboxMedia | null>(null);
 
   const summary = useQuery({
     queryKey: ['content-summary'],
@@ -322,6 +405,8 @@ export function ContentCreator() {
         body: JSON.stringify({
           ...payload,
           referenceImageUrls,
+          mediaType: mediaKind === 'video' ? 'VIDEO' : 'IMAGE',
+          ...(mediaKind === 'video' ? { durationSeconds: videoDuration } : {}),
         }),
       });
     },
@@ -508,33 +593,58 @@ export function ContentCreator() {
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
             {items.map((item) => {
               const thumb = item.assets?.[0]?.storageUrl;
+              const thumbVideo = isVideoContent(item);
               const active = item.id === selectedId;
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => openContent(item)}
-                  className={`text-left panel rounded-2xl overflow-hidden border transition ${
+                  className={`panel rounded-2xl overflow-hidden border transition ${
                     active
                       ? 'border-accent ring-1 ring-accent/40'
                       : 'border-transparent'
                   }`}
                 >
-                  <div className="aspect-[4/3] bg-panel-2">
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumb}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-xs text-muted">
-                        Generando…
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openContent(item);
+                      if (!thumb) return;
+                      setLightbox({
+                        url: thumb,
+                        video: thumbVideo,
+                        label: item.headline || item.topic || undefined,
+                      });
+                    }}
+                    className={`block w-full text-left ${thumb ? 'cursor-zoom-in' : ''}`}
+                  >
+                    <div className="aspect-[4/3] bg-panel-2">
+                      {thumb && thumbVideo ? (
+                        <video
+                          src={thumb}
+                          className="w-full h-full object-cover pointer-events-none"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumb}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-muted">
+                          Generando…
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openContent(item)}
+                    className="w-full text-left p-3 space-y-1"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium truncate">
                         {item.headline || item.topic || 'Sin título'}
@@ -548,8 +658,8 @@ export function ContentCreator() {
                     <p className="text-xs text-muted line-clamp-2">
                       {item.caption || '—'}
                     </p>
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -567,7 +677,7 @@ export function ContentCreator() {
           </h2>
           <p className="text-sm text-muted mt-1">
             Generá borradores con IA y publicalos en WhatsApp Status o
-            Instagram (Story / Feed).
+            Instagram (Story / Feed / Reels).
           </p>
         </div>
         <Link
@@ -578,11 +688,12 @@ export function ContentCreator() {
         </Link>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[
           ['Este mes', summary.data?.generatedThisMonth],
           ['Sin publicar', summary.data?.drafts],
           ['Imágenes', summary.data?.imageGenerationsThisMonth],
+          ['Videos', summary.data?.videoGenerationsThisMonth],
           [
             'Costo est.',
             summary.data
@@ -610,7 +721,10 @@ export function ContentCreator() {
           type="button"
           role="tab"
           aria-selected={mediaKind === 'image'}
-          onClick={() => setMediaKind('image')}
+          onClick={() => {
+            setMediaKind('image');
+            setChannels(['INSTAGRAM_FEED', 'INSTAGRAM_STORY']);
+          }}
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm min-h-10 transition ${
             mediaKind === 'image'
               ? 'bg-accent text-white'
@@ -623,7 +737,10 @@ export function ContentCreator() {
           type="button"
           role="tab"
           aria-selected={mediaKind === 'video'}
-          onClick={() => setMediaKind('video')}
+          onClick={() => {
+            setMediaKind('video');
+            setChannels(['INSTAGRAM_REEL', 'INSTAGRAM_STORY', 'WHATSAPP_STATUS']);
+          }}
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm min-h-10 transition ${
             mediaKind === 'video'
               ? 'bg-accent text-white'
@@ -631,49 +748,21 @@ export function ContentCreator() {
           }`}
         >
           Video
-          <span
-            className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
-              mediaKind === 'video'
-                ? 'bg-white/20 text-white'
-                : 'bg-amber-500/15 text-amber-700'
-            }`}
-          >
-            Pronto
-          </span>
         </button>
       </div>
 
-      {mediaKind === 'video' ? (
-        <div className="space-y-6">
-          <section className="panel rounded-2xl p-8 sm:p-12 text-center space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
-              En desarrollo
-            </p>
-            <h3 className="text-xl font-semibold tracking-tight">
-              Generación de video
-            </h3>
-            <p className="text-sm text-muted max-w-md mx-auto">
-              Esta funcionalidad está en desarrollo. Por ahora podés crear
-              imágenes; el video va a llegar en una próxima actualización.
-            </p>
-            <button
-              type="button"
-              className="mt-2 rounded-lg border border-line bg-panel px-4 py-2.5 text-sm min-h-10 inline-flex items-center hover:bg-panel-2"
-              onClick={() => setMediaKind('image')}
-            >
-              Volver a imagen
-            </button>
-          </section>
-          {renderGallery(
-            videoItems,
-            'Todavía no hay videos generados. Cuando esté disponible la generación, van a aparecer acá.',
-          )}
-        </div>
-      ) : (
-        <div className="space-y-6">
+      <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <section className="panel rounded-2xl p-5 space-y-4">
-          <h3 className="font-medium">Nuevo contenido</h3>
+          <h3 className="font-medium">
+            {mediaKind === 'video' ? 'Nuevo short' : 'Nuevo contenido'}
+          </h3>
+          {mediaKind === 'video' ? (
+            <p className="text-sm text-muted">
+              Short vertical 9:16. Se genera con kie.ai y, si está saturado,
+              con fal.ai. Puede tardar unos minutos.
+            </p>
+          ) : null}
           {!hasBranding ? (
             <p className="text-sm text-amber-700 bg-amber-500/10 rounded-lg px-3 py-2">
               Tip: configurá la pestaña Marca en Personalización para mejores
@@ -699,7 +788,7 @@ export function ContentCreator() {
           <div className="space-y-2 text-sm">
             <span className="text-muted">Canales</span>
             <div className="flex flex-wrap gap-2">
-              {CHANNELS.map((ch) => {
+              {(mediaKind === 'video' ? VIDEO_CHANNELS : CHANNELS).map((ch) => {
                 const on = channels.includes(ch.value);
                 return (
                   <button
@@ -718,6 +807,36 @@ export function ContentCreator() {
               })}
             </div>
           </div>
+
+          {mediaKind === 'video' ? (
+            <div className="space-y-2 text-sm">
+              <span className="text-muted">Duración</span>
+              <div className="flex flex-wrap gap-2">
+                {VIDEO_DURATIONS.map((seconds) => {
+                  const on = videoDuration === seconds;
+                  return (
+                    <button
+                      key={seconds}
+                      type="button"
+                      onClick={() => setVideoDuration(seconds)}
+                      className={`rounded-lg px-3 py-2 min-h-10 border text-sm ${
+                        on
+                          ? 'border-accent bg-accent/10 text-text'
+                          : 'border-line text-muted'
+                      }`}
+                    >
+                      {seconds}s
+                    </button>
+                  );
+                })}
+              </div>
+              {videoDuration === 15 ? (
+                <p className="text-xs text-muted">
+                  15s: Seedance (kie) genera hasta 12s. Kling en fal.ai, 10s.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Servicio (opcional)</span>
@@ -833,7 +952,13 @@ export function ContentCreator() {
             }
             className="w-full rounded-lg bg-accent text-white px-3 py-2.5 text-sm font-medium disabled:opacity-60 min-h-10"
           >
-            {generate.isPending ? 'Generando…' : 'Generar borrador'}
+            {generate.isPending
+              ? mediaKind === 'video'
+                ? 'Encolando short…'
+                : 'Generando…'
+              : mediaKind === 'video'
+                ? 'Generar short'
+                : 'Generar borrador'}
           </button>
           {generate.isError ? (
             <p className="text-sm text-red-600">
@@ -874,25 +999,50 @@ export function ContentCreator() {
               ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
-                {(detail.assets?.length ? detail.assets : []).map((asset) => (
+                {(detail.assets?.length ? detail.assets : []).map((asset) => {
+                  const isVideo = (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO';
+                  return (
                   <figure
                     key={asset.id}
                     className="rounded-xl overflow-hidden border border-line bg-panel-2"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={asset.storageUrl}
-                      alt={asset.format}
-                      className="w-full object-cover max-h-72"
-                    />
+                    {isVideo ? (
+                      <video
+                        src={asset.storageUrl}
+                        className="w-full object-cover max-h-72"
+                        controls
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="block w-full cursor-zoom-in"
+                        onClick={() =>
+                          setLightbox({
+                            url: asset.storageUrl,
+                            video: false,
+                            label: asset.format,
+                          })
+                        }
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={asset.storageUrl}
+                          alt={asset.format}
+                          className="w-full object-cover max-h-72"
+                        />
+                      </button>
+                    )}
                     <figcaption className="px-2 py-1.5 text-[11px] text-muted">
                       {asset.format}
                     </figcaption>
                   </figure>
-                ))}
+                  );
+                })}
                 {!detail.assets?.length && detail.status === 'GENERATING' ? (
                   <p className="text-sm text-muted sm:col-span-2">
-                    Generando imagen…
+                    Generando {mediaKind === 'video' ? 'video' : 'imagen'}…
                   </p>
                 ) : null}
               </div>
@@ -931,7 +1081,7 @@ export function ContentCreator() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {CHANNELS.map((ch) => {
+                  {(mediaKind === 'video' ? VIDEO_CHANNELS : CHANNELS).map((ch) => {
                     const on = publishChannels.includes(ch.value);
                     return (
                       <button
@@ -951,8 +1101,8 @@ export function ContentCreator() {
                 </div>
                 {!detail.assets?.length ? (
                   <p className="text-sm text-amber-700">
-                    Este borrador no tiene imagen. Regeneralo antes de
-                    publicar.
+                    Este borrador todavía no tiene media. Esperá a que termine
+                    la generación o regeneralo antes de publicar.
                   </p>
                 ) : null}
                 <button
@@ -1045,11 +1195,12 @@ export function ContentCreator() {
       </div>
 
           {renderGallery(
-            imageItems,
-            'Todavía no hay imágenes generadas. Creá un borrador arriba para verlo acá.',
+            mediaKind === 'video' ? videoItems : imageItems,
+            mediaKind === 'video'
+              ? 'Todavía no hay videos generados. Creá un short arriba para verlo acá.'
+              : 'Todavía no hay imágenes generadas. Creá un borrador arriba para verlo acá.',
           )}
         </div>
-      )}
 
       <section className="panel rounded-2xl p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1211,6 +1362,9 @@ export function ContentCreator() {
           ) : null}
         </div>
       </section>
+      {lightbox ? (
+        <MediaLightbox media={lightbox} onClose={() => setLightbox(null)} />
+      ) : null}
     </div>
   );
 }

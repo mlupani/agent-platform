@@ -8,6 +8,7 @@ import type { LlmMessage } from '../ai/providers/llm-provider.interface';
 import { CostService } from '../analytics/cost.service';
 import type {
   ContentChannel,
+  ContentMediaType,
   ContentObjective,
   ContentStrategy,
 } from './content.types';
@@ -27,6 +28,7 @@ const strategySchema = z.object({
   caption: z.string().min(2).max(2200),
   cta: z.string().min(2).max(120),
   imagePrompt: z.string().min(10).max(2500),
+  videoPrompt: z.string().min(10).max(2500).optional(),
   visualStyle: z.string().min(2).max(400),
   serviceId: z.string().uuid().nullable().optional(),
   audience: z.string().max(300).nullable().optional(),
@@ -39,6 +41,8 @@ export interface ContentAgentInput {
   userInstructions?: string;
   serviceId?: string;
   referenceImageUrls?: string[];
+  mediaType?: ContentMediaType;
+  durationSeconds?: number;
 }
 
 export interface ContentAgentResult {
@@ -110,7 +114,10 @@ export class ContentAgentService {
       ? (business.services.find((s) => s.id === input.serviceId) ?? null)
       : null;
 
-    const system = this.buildSystemPrompt();
+    const system = this.buildSystemPrompt(
+      input.mediaType ?? 'IMAGE',
+      input.durationSeconds ?? 5,
+    );
     const logoUrl = business.brandingConfig?.logoUrl?.trim() || null;
     const userText = this.buildUserPrompt({
       business,
@@ -120,6 +127,8 @@ export class ContentAgentService {
       userInstructions: input.userInstructions,
       recent,
       referenceImageCount: input.referenceImageUrls?.length ?? 0,
+      mediaType: input.mediaType ?? 'IMAGE',
+      durationSeconds: input.durationSeconds ?? 5,
     });
 
     const referenceImageUrls = this.mergeLogoAndRefs(
@@ -220,11 +229,16 @@ export class ContentAgentService {
     }
 
     const parsed = this.parseStrategyJson(content);
+    const mediaType = input.mediaType ?? 'IMAGE';
     const strategy = strategySchema.parse({
       ...parsed,
       objective:
         input.objective === 'AUTOMATIC' ? parsed.objective : input.objective,
       serviceId: input.serviceId ?? parsed.serviceId ?? null,
+      videoPrompt:
+        mediaType === 'VIDEO'
+          ? parsed.videoPrompt || parsed.imagePrompt
+          : parsed.videoPrompt,
     });
 
     return {
@@ -262,7 +276,28 @@ export class ContentAgentService {
     return withLogo.slice(0, 4);
   }
 
-  private buildSystemPrompt(): string {
+  private buildSystemPrompt(
+    mediaType: ContentMediaType,
+    durationSeconds = 5,
+  ): string {
+    const videoBlock =
+      mediaType === 'VIDEO'
+        ? `
+Reglas de videoPrompt (CRÍTICO — el video es un SHORT vertical 9:16 de ${durationSeconds}s):
+- videoPrompt en inglés, cinematográfico, para text-to-video.
+- Plano vertical 9:16, movimiento de cámara suave, iluminación profesional.
+- Pieza de marketing para redes (Reels / Status / Story), no un video casero.
+- Incluí marca: logo si hay LOGO_URL, o el nombre del negocio tipografiado de forma legible.
+- Headline corto on-screen (pocas palabras, alto contraste). Nada de párrafos.
+- Sin texto ilegible, Lorem Ipsum ni letras inventadas.
+- Si hay REFERENCE IMAGES, usalas como look del local/producto/estilo.
+
+Respondé SOLO con un objeto JSON con las keys:
+  topic, objective, headline, caption, cta, imagePrompt, videoPrompt, visualStyle, serviceId, audience`
+        : `
+Respondé SOLO con un objeto JSON con las keys:
+  topic, objective, headline, caption, cta, imagePrompt, visualStyle, serviceId, audience`;
+
     return `Sos un Content Agent de marketing visual para un negocio local.
 Tu trabajo es crear UNA estrategia de publicación en JSON (sin markdown extra).
 
@@ -284,10 +319,7 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
 - Evitá texto ilegible, Lorem Ipsum, letras inventadas o párrafos largos dentro de la imagen.
 - Preferí tipografía sans limpia, contraste alto, márgenes seguros para story/feed.
 - Si hay REFERENCE IMAGES, usalas como contexto (producto/local/estilo) dentro de la pieza de marketing, no como foto cruda sin marca.
-- Si hay LOGO_URL, el imagePrompt debe indicar explícitamente usar ese logo como brand mark.
-
-Respondé SOLO con un objeto JSON con las keys:
-  topic, objective, headline, caption, cta, imagePrompt, visualStyle, serviceId, audience`;
+- Si hay LOGO_URL, el imagePrompt debe indicar explícitamente usar ese logo como brand mark.${videoBlock}`;
   }
 
   private buildUserPrompt(params: {
@@ -329,6 +361,8 @@ Respondé SOLO con un objeto JSON con las keys:
     channels: ContentChannel[];
     userInstructions?: string;
     referenceImageCount: number;
+    mediaType: ContentMediaType;
+    durationSeconds: number;
     recent: Array<{
       topic: string | null;
       headline: string | null;
@@ -387,11 +421,17 @@ Respondé SOLO con un objeto JSON con las keys:
         )
         .join('\n') || 'Sin publicaciones previas.';
 
-    const formatHint = params.channels.some(
-      (c) => c === 'INSTAGRAM_STORY' || c === 'WHATSAPP_STATUS',
-    )
-      ? 'Priorizar composición vertical 9:16 (story/status) con marca y headline seguros en zona central/superior.'
-      : 'Priorizar composición cuadrada/feed con marca visible y headline corto.';
+    const formatHint =
+      params.mediaType === 'VIDEO'
+        ? `Priorizar SHORT vertical 9:16 (${params.durationSeconds}s) para Reels / Status / Story, con marca y headline seguros (zona central/superior).`
+        : params.channels.some(
+              (c) =>
+                c === 'INSTAGRAM_STORY' ||
+                c === 'WHATSAPP_STATUS' ||
+                c === 'INSTAGRAM_REEL',
+            )
+          ? 'Priorizar composición vertical 9:16 (story/status) con marca y headline seguros en zona central/superior.'
+          : 'Priorizar composición cuadrada/feed con marca visible y headline corto.';
 
     const objectiveVisual =
       params.objective === 'OFFER'
@@ -423,6 +463,7 @@ Respondé SOLO con un objeto JSON con las keys:
       'USER REQUEST',
       `Objective: ${params.objective}`,
       objectiveVisual,
+      `Media type: ${params.mediaType}`,
       `Channels: ${params.channels.join(', ')}`,
       `Selected service: ${
         params.selectedService

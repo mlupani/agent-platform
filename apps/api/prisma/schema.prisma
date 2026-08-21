@@ -598,8 +598,13 @@ model GeneratedContent {
   referenceImageUrls String[] @default([])
   strategy           Json?
   imagePrompt        String?
+  videoPrompt        String?
   visualStyle        String?
-  /// Canales destino: WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED
+  /// IMAGE | VIDEO
+  mediaType          String   @default("IMAGE")
+  /// Duración del short en segundos (5 | 10 | 15). Null en imágenes.
+  durationSeconds    Int?
+  /// Canales destino: WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL
   channels           String[] @default([])
   /// DRAFT | READY | GENERATING | SCHEDULED | PUBLISHING | PUBLISHED | PARTIALLY_PUBLISHED | FAILED
   status             String   @default("DRAFT")
@@ -624,9 +629,9 @@ model ContentAsset {
   id               String   @id @default(uuid())
   contentId        String
   content          GeneratedContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  /// IMAGE | VIDEO (video futuro)
+  /// IMAGE | VIDEO
   type             String   @default("IMAGE")
-  /// STORY_VERTICAL | FEED_SQUARE | FEED_PORTRAIT | FEED_LANDSCAPE
+  /// STORY_VERTICAL | SHORT_VERTICAL | FEED_SQUARE | FEED_PORTRAIT | FEED_LANDSCAPE
   format           String
   aspectRatio      String?
   width            Int?
@@ -649,7 +654,7 @@ model ContentPublication {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   contentId   String
   content     GeneratedContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  /// WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED
+  /// WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL
   channel     String
   /// PENDING | PUBLISHING | PUBLISHED | FAILED
   status      String   @default("PENDING")

@@ -10,7 +10,10 @@ export type ContentObjective =
 export type ContentChannel =
   | 'WHATSAPP_STATUS'
   | 'INSTAGRAM_STORY'
-  | 'INSTAGRAM_FEED';
+  | 'INSTAGRAM_FEED'
+  | 'INSTAGRAM_REEL';
+
+export type ContentMediaType = 'IMAGE' | 'VIDEO';
 
 export type ContentStatus =
   | 'DRAFT'
@@ -24,6 +27,7 @@ export type ContentStatus =
 
 export type ContentAssetFormat =
   | 'STORY_VERTICAL'
+  | 'SHORT_VERTICAL'
   | 'FEED_SQUARE'
   | 'FEED_PORTRAIT'
   | 'FEED_LANDSCAPE';
@@ -35,6 +39,7 @@ export interface ContentStrategy {
   caption: string;
   cta: string;
   imagePrompt: string;
+  videoPrompt?: string;
   visualStyle: string;
   serviceId?: string | null;
   audience?: string | null;

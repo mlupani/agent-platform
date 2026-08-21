@@ -3,6 +3,7 @@ export interface StorageUploadInput {
   mimeType: string;
   folder: string;
   publicId?: string;
+  resourceType?: 'image' | 'video';
 }
 
 export interface StorageUploadResult {
@@ -16,7 +17,7 @@ export interface StorageUploadResult {
 
 export interface StorageProvider {
   upload(input: StorageUploadInput): Promise<StorageUploadResult>;
-  delete?(publicId: string): Promise<void>;
+  delete?(publicId: string, resourceType?: 'image' | 'video'): Promise<void>;
   /** URL con texto superpuesto (Story/Status). Si no hay publicId, devuelve fallbackUrl. */
   buildTextOverlayUrl?(input: {
     publicId?: string | null;

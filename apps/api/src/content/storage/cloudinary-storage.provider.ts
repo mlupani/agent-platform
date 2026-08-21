@@ -48,8 +48,14 @@ export class CloudinaryStorageProvider implements StorageProvider {
       );
     }
 
-    const dataUri = `data:${input.mimeType};base64,${input.buffer.toString('base64')}`;
+    const resourceType = input.resourceType ?? 'image';
     try {
+      if (resourceType === 'video') {
+        const result = await this.uploadVideo(input);
+        return result;
+      }
+
+      const dataUri = `data:${input.mimeType};base64,${input.buffer.toString('base64')}`;
       const result = await cloudinary.uploader.upload(dataUri, {
         folder: input.folder,
         public_id: input.publicId,
@@ -89,9 +95,37 @@ export class CloudinaryStorageProvider implements StorageProvider {
     }
   }
 
-  async delete(publicId: string): Promise<void> {
+  private uploadVideo(input: StorageUploadInput): Promise<StorageUploadResult> {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: input.folder,
+          public_id: input.publicId,
+          resource_type: 'video',
+          overwrite: true,
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(error ?? new Error('Cloudinary video upload vacío'));
+            return;
+          }
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+            width: result.width,
+            height: result.height,
+            bytes: result.bytes,
+            format: result.format,
+          });
+        },
+      );
+      stream.end(input.buffer);
+    });
+  }
+
+  async delete(publicId: string, resourceType: 'image' | 'video' = 'image'): Promise<void> {
     if (!this.configured) return;
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
   }
 
   /**

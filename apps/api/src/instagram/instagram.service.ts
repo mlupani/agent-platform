@@ -269,6 +269,49 @@ export class InstagramService {
     };
   }
 
+  /** Publica video a Stories desde URL pública. */
+  async uploadStoryVideoByUrl(params: {
+    businessId: string;
+    videoUrl: string;
+    caption?: string;
+  }): Promise<{ externalId?: string; raw?: unknown }> {
+    const sessionId = await this.requireSession(params.businessId);
+    const body = new URLSearchParams({
+      url: params.videoUrl,
+      caption: params.caption ?? '',
+      as_video: 'true',
+    });
+    const data = await this.requestJson<Record<string, unknown>>(
+      '/story/upload/by/url',
+      { method: 'POST', sessionId, body, form: true },
+    );
+    return {
+      externalId: this.extractMediaId(data),
+      raw: data,
+    };
+  }
+
+  /** Publica un Reel (clip) desde URL pública. */
+  async uploadReelByUrl(params: {
+    businessId: string;
+    videoUrl: string;
+    caption: string;
+  }): Promise<{ externalId?: string; raw?: unknown }> {
+    const sessionId = await this.requireSession(params.businessId);
+    const body = new URLSearchParams({
+      url: params.videoUrl,
+      caption: params.caption ?? '',
+    });
+    const data = await this.requestJson<Record<string, unknown>>(
+      '/clip/upload/by/url',
+      { method: 'POST', sessionId, body, form: true },
+    );
+    return {
+      externalId: this.extractMediaId(data),
+      raw: data,
+    };
+  }
+
   private extractMediaId(data: Record<string, unknown>): string | undefined {
     if (data.pk != null) return String(data.pk);
     if (data.id != null) return String(data.id);

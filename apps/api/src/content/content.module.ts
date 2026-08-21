@@ -12,10 +12,13 @@ import { ContentAutoGenerateProcessor } from './content-auto-generate.processor'
 import { CONTENT_AUTO_QUEUE } from './content-auto-generate.queue';
 import { ContentAutoGenerateScheduler } from './content-auto-generate.scheduler';
 import { ContentService } from './content.service';
+import { ContentVideoGenerateProcessor } from './content-video-generate.processor';
+import { CONTENT_VIDEO_QUEUE } from './content-video-generate.queue';
 import { IMAGE_GENERATION_PROVIDER } from './image/image-generation.provider';
 import { OpenAIImageGenerationProvider } from './image/openai-image.provider';
 import { CloudinaryStorageProvider } from './storage/cloudinary-storage.provider';
 import { STORAGE_PROVIDER } from './storage/storage.provider';
+import { VideoModule } from './video/video.module';
 
 @Module({
   imports: [
@@ -25,7 +28,9 @@ import { STORAGE_PROVIDER } from './storage/storage.provider';
     RealtimeModule,
     WhatsAppModule,
     InstagramModule,
+    VideoModule,
     BullModule.registerQueue({ name: CONTENT_AUTO_QUEUE }),
+    BullModule.registerQueue({ name: CONTENT_VIDEO_QUEUE }),
   ],
   controllers: [ContentAdminController],
   providers: [
@@ -33,6 +38,7 @@ import { STORAGE_PROVIDER } from './storage/storage.provider';
     ContentAgentService,
     ContentAutoGenerateScheduler,
     ContentAutoGenerateProcessor,
+    ContentVideoGenerateProcessor,
     OpenAIImageGenerationProvider,
     CloudinaryStorageProvider,
     {

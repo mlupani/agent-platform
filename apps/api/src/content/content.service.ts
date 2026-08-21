@@ -4,6 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
@@ -13,6 +16,10 @@ import { WahaWhatsAppProvider } from '../whatsapp/providers/waha.whatsapp-provid
 import { ContentAgentService } from './content-agent.service';
 import { ContentAutoGenerateScheduler } from './content-auto-generate.scheduler';
 import {
+  CONTENT_VIDEO_JOB,
+  CONTENT_VIDEO_QUEUE,
+} from './content-video-generate.queue';
+import {
   IMAGE_GENERATION_PROVIDER,
   type ImageGenerationProvider,
 } from './image/image-generation.provider';
@@ -20,9 +27,12 @@ import {
   STORAGE_PROVIDER,
   type StorageProvider,
 } from './storage/storage.provider';
+import { VideoRoutingService } from './video/video-routing.service';
+import { parseVideoDuration } from './video/video-duration';
 import type {
   ContentAssetFormat,
   ContentChannel,
+  ContentMediaType,
   ContentObjective,
   ContentStatus,
 } from './content.types';
@@ -41,6 +51,7 @@ const CHANNELS = new Set([
   'WHATSAPP_STATUS',
   'INSTAGRAM_STORY',
   'INSTAGRAM_FEED',
+  'INSTAGRAM_REEL',
 ]);
 
 @Injectable()
@@ -53,6 +64,10 @@ export class ContentService {
     private readonly waha: WahaWhatsAppProvider,
     private readonly instagram: InstagramService,
     private readonly autoGenerateScheduler: ContentAutoGenerateScheduler,
+    private readonly videos: VideoRoutingService,
+    private readonly config: ConfigService,
+    @InjectQueue(CONTENT_VIDEO_QUEUE)
+    private readonly videoQueue: Queue,
     @Inject(IMAGE_GENERATION_PROVIDER)
     private readonly images: ImageGenerationProvider,
     @Inject(STORAGE_PROVIDER)
@@ -90,7 +105,8 @@ export class ContentService {
         }),
       ]);
 
-    const [costAgg, imageGenerationsThisMonth] = await Promise.all([
+    const [costAgg, imageGenerationsThisMonth, videoGenerationsThisMonth] =
+      await Promise.all([
       this.prisma.contentGenerationExecution.aggregate({
         where: {
           businessId,
@@ -103,6 +119,17 @@ export class ContentService {
       this.prisma.contentAsset.count({
         where: {
           createdAt: { gte: monthStart.toJSDate() },
+          type: 'IMAGE',
+          content: {
+            businessId,
+            status: { not: 'FAILED' },
+          },
+        },
+      }),
+      this.prisma.contentAsset.count({
+        where: {
+          createdAt: { gte: monthStart.toJSDate() },
+          type: 'VIDEO',
           content: {
             businessId,
             status: { not: 'FAILED' },
@@ -118,6 +145,7 @@ export class ContentService {
       drafts,
       failed,
       imageGenerationsThisMonth,
+      videoGenerationsThisMonth,
       estimatedCostThisMonth: Number(costAgg._sum.estimatedCost ?? 0),
     };
   }
@@ -198,10 +226,23 @@ export class ContentService {
     referenceImageUrls?: string[];
     businessId?: string;
     generationMode?: 'MANUAL' | 'AUTOMATIC';
+    mediaType?: ContentMediaType;
+    durationSeconds?: number;
   }) {
     const businessId =
       input.businessId ?? (await this.businesses.getCurrentId());
     const generationMode = input.generationMode ?? 'MANUAL';
+    const mediaType = this.parseMediaType(input.mediaType);
+    const durationSeconds =
+      mediaType === 'VIDEO'
+        ? parseVideoDuration(
+            input.durationSeconds,
+            parseVideoDuration(
+              this.config.get<string>('VIDEO_DURATION_SECONDS'),
+              5,
+            ),
+          )
+        : null;
     const objective = this.parseObjective(input.objective);
     const channels = this.parseChannels(input.channels);
     if (!channels.length) {
@@ -237,6 +278,8 @@ export class ContentService {
           referenceImageUrls,
           status: 'GENERATING',
           generationMode,
+          mediaType,
+          durationSeconds,
         },
       });
     } else {
@@ -252,6 +295,8 @@ export class ContentService {
             : {}),
           status: 'GENERATING',
           generationMode,
+          mediaType,
+          durationSeconds,
           error: null,
         },
       });
@@ -259,51 +304,146 @@ export class ContentService {
 
     this.realtime.emit(
       'content.generation.started',
-      { contentId: content.id },
+      { contentId: content.id, mediaType },
       businessId,
     );
 
+    if (mediaType === 'VIDEO') {
+      await this.videoQueue.add(
+        CONTENT_VIDEO_JOB,
+        { contentId: content.id, businessId },
+        {
+          jobId: `video:${content.id}:${Date.now()}`,
+          attempts: 1,
+          removeOnComplete: 50,
+          removeOnFail: 50,
+        },
+      );
+      return this.prisma.generatedContent.findFirstOrThrow({
+        where: { id: content.id },
+        include: {
+          assets: { orderBy: { createdAt: 'desc' } },
+          service: { select: { id: true, name: true } },
+        },
+      });
+    }
+
     try {
-      const strategyResult = await this.contentAgent.buildStrategy({
+      return await this.runGenerationPipeline({
+        contentId: content.id,
         businessId,
         objective,
         channels,
         userInstructions: input.userInstructions,
         serviceId: input.serviceId,
         referenceImageUrls,
+        mediaType,
+        durationSeconds: input.durationSeconds,
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al generar';
+      await this.markGenerationFailed(content.id, businessId, message);
+      throw new BadRequestException(message);
+    }
+  }
 
-      await this.prisma.contentGenerationExecution.create({
-        data: {
-          businessId,
-          contentId: content.id,
-          stage: 'strategy',
-          provider: strategyResult.provider,
-          model: strategyResult.model,
-          success: true,
-          inputTokens: strategyResult.inputTokens,
-          outputTokens: strategyResult.outputTokens,
-          estimatedCost: strategyResult.estimatedCost,
-          durationMs: strategyResult.durationMs,
-        },
+  async processQueuedGeneration(contentId: string, businessId: string) {
+    const content = await this.prisma.generatedContent.findFirst({
+      where: { id: contentId, businessId },
+    });
+    if (!content) return;
+    try {
+      await this.runGenerationPipeline({
+        contentId: content.id,
+        businessId,
+        objective: this.parseObjective(content.objective),
+        channels: this.parseChannels(content.channels),
+        userInstructions: content.userInstructions ?? undefined,
+        serviceId: content.serviceId ?? undefined,
+        referenceImageUrls: content.referenceImageUrls,
+        mediaType: this.parseMediaType(content.mediaType),
+        durationSeconds: content.durationSeconds,
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al generar';
+      await this.markGenerationFailed(content.id, businessId, message);
+    }
+  }
 
-      const branding = await this.prisma.brandingConfig.findUnique({
-        where: { businessId },
-        select: { logoUrl: true, primaryColor: true, secondaryColor: true },
-      });
-      const business = await this.prisma.business.findUnique({
-        where: { id: businessId },
-        select: { name: true },
-      });
-      const businessName = business?.name?.trim() || 'the business';
-      const logoUrl = branding?.logoUrl?.trim() || null;
+  private async runGenerationPipeline(input: {
+    contentId: string;
+    businessId: string;
+    objective: ContentObjective;
+    channels: ContentChannel[];
+    userInstructions?: string;
+    serviceId?: string;
+    referenceImageUrls: string[];
+    mediaType: ContentMediaType;
+    durationSeconds?: number | null;
+  }) {
+    const { contentId, businessId, objective, channels, mediaType } = input;
+    const referenceImageUrls = input.referenceImageUrls;
 
-      // Logo primero como referencia visual de marca (máx 4 en total).
-      const imageRefUrls = this.normalizeReferenceUrls([
-        ...(logoUrl ? [logoUrl] : []),
-        ...referenceImageUrls,
-      ]);
+    const strategyResult = await this.contentAgent.buildStrategy({
+      businessId,
+      objective,
+      channels,
+      userInstructions: input.userInstructions,
+      serviceId: input.serviceId,
+      referenceImageUrls,
+      mediaType,
+      durationSeconds: parseVideoDuration(input.durationSeconds, 5),
+    });
+
+    await this.prisma.contentGenerationExecution.create({
+      data: {
+        businessId,
+        contentId,
+        stage: 'strategy',
+        provider: strategyResult.provider,
+        model: strategyResult.model,
+        success: true,
+        inputTokens: strategyResult.inputTokens,
+        outputTokens: strategyResult.outputTokens,
+        estimatedCost: strategyResult.estimatedCost,
+        durationMs: strategyResult.durationMs,
+      },
+    });
+
+    const branding = await this.prisma.brandingConfig.findUnique({
+      where: { businessId },
+      select: { logoUrl: true, primaryColor: true, secondaryColor: true },
+    });
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const businessName = business?.name?.trim() || 'the business';
+    const logoUrl = branding?.logoUrl?.trim() || null;
+
+    const imageRefUrls = this.normalizeReferenceUrls([
+      ...(logoUrl ? [logoUrl] : []),
+      ...referenceImageUrls,
+    ]);
+
+    if (mediaType === 'VIDEO') {
+      await this.generateVideoAsset({
+        contentId,
+        businessId,
+        prompt: this.enrichMarketingVideoPrompt({
+          basePrompt:
+            strategyResult.strategy.videoPrompt ||
+            strategyResult.strategy.imagePrompt,
+          headline: strategyResult.strategy.headline,
+          objective,
+          businessName,
+          hasLogo: Boolean(logoUrl),
+          durationSeconds: parseVideoDuration(input.durationSeconds, 5),
+        }),
+        referenceImageUrls: imageRefUrls,
+        durationSeconds: parseVideoDuration(input.durationSeconds, 5),
+      });
+    } else {
       const referenceImages = await this.loadReferenceImageBuffers(imageRefUrls);
       if (logoUrl && referenceImages[0]) {
         referenceImages[0].filename = 'brand-logo.png';
@@ -320,119 +460,204 @@ export class ContentService {
       });
 
       const formats = this.resolveFormats(channels);
-      const assets = [];
-
       for (const format of formats) {
-        const size = this.sizeForFormat(format);
-        const image = await this.images.generate({
+        await this.generateImageAsset({
+          contentId,
+          businessId,
+          format,
           prompt: marketingPrompt,
-          size,
-          quality: 'medium',
-          referenceImages:
-            referenceImages.length > 0 ? referenceImages : undefined,
-        });
-
-        const uploaded = await this.storage.upload({
-          buffer: image.buffer,
-          mimeType: image.mimeType,
-          folder: `${this.cloudinaryRoot()}/${businessId}/content`,
-          publicId: `${content.id}-${format}-${Date.now()}`,
-        });
-        const asset = await this.prisma.contentAsset.create({
-          data: {
-            contentId: content.id,
-            type: 'IMAGE',
-            format,
-            aspectRatio: this.aspectForFormat(format),
-            width: image.width ?? uploaded.width,
-            height: image.height ?? uploaded.height,
-            storageUrl: uploaded.url,
-            storagePublicId: uploaded.publicId,
-            provider: image.provider,
-            model: image.model,
-            generationPrompt: image.prompt,
-            generationCost: image.estimatedCost,
-          },
-        });
-        assets.push(asset);
-
-        await this.prisma.contentGenerationExecution.create({
-          data: {
-            businessId,
-            contentId: content.id,
-            stage: 'image',
-            provider: image.provider,
-            model: image.model,
-            success: true,
-            inputTokens: image.inputTokens,
-            outputTokens: image.outputTokens,
-            estimatedCost: image.estimatedCost,
-            durationMs: image.durationMs,
-            metadata: { format, size },
-          },
+          referenceImages,
         });
       }
-
-      const updated = await this.prisma.generatedContent.update({
-        where: { id: content.id },
-        data: {
-          status: 'READY',
-          topic: strategyResult.strategy.topic,
-          headline: strategyResult.strategy.headline,
-          caption: strategyResult.strategy.caption,
-          cta: strategyResult.strategy.cta,
-          imagePrompt: strategyResult.strategy.imagePrompt,
-          visualStyle: strategyResult.strategy.visualStyle,
-          strategy: strategyResult.strategy as object,
-          serviceId:
-            strategyResult.strategy.serviceId || input.serviceId || null,
-          error: null,
-        },
-        include: {
-          assets: { orderBy: { createdAt: 'desc' } },
-          service: { select: { id: true, name: true } },
-        },
-      });
-
-      this.realtime.emit(
-        'content.generation.completed',
-        { contentId: updated.id, status: updated.status },
-        businessId,
-      );
-      this.realtime.emit(
-        'content.updated',
-        { contentId: updated.id, status: updated.status },
-        businessId,
-      );
-
-      return updated;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al generar';
-      const failed = await this.prisma.generatedContent.update({
-        where: { id: content.id },
-        data: { status: 'FAILED', error: message },
-        include: {
-          assets: true,
-          service: { select: { id: true, name: true } },
-        },
-      });
-      await this.prisma.contentGenerationExecution.create({
-        data: {
-          businessId,
-          contentId: content.id,
-          stage: 'failed',
-          success: false,
-          error: message,
-          durationMs: 0,
-        },
-      });
-      this.realtime.emit(
-        'content.generation.failed',
-        { contentId: content.id, error: message },
-        businessId,
-      );
-      throw new BadRequestException(message);
     }
+
+    const updated = await this.prisma.generatedContent.update({
+      where: { id: contentId },
+      data: {
+        status: 'READY',
+        topic: strategyResult.strategy.topic,
+        headline: strategyResult.strategy.headline,
+        caption: strategyResult.strategy.caption,
+        cta: strategyResult.strategy.cta,
+        imagePrompt: strategyResult.strategy.imagePrompt,
+        videoPrompt: strategyResult.strategy.videoPrompt ?? null,
+        visualStyle: strategyResult.strategy.visualStyle,
+        strategy: strategyResult.strategy as object,
+        serviceId: strategyResult.strategy.serviceId || input.serviceId || null,
+        error: null,
+      },
+      include: {
+        assets: { orderBy: { createdAt: 'desc' } },
+        service: { select: { id: true, name: true } },
+      },
+    });
+
+    this.realtime.emit(
+      'content.generation.completed',
+      { contentId: updated.id, status: updated.status },
+      businessId,
+    );
+    this.realtime.emit(
+      'content.updated',
+      { contentId: updated.id, status: updated.status },
+      businessId,
+    );
+
+    return updated;
+  }
+
+  private async generateImageAsset(input: {
+    contentId: string;
+    businessId: string;
+    format: ContentAssetFormat;
+    prompt: string;
+    referenceImages: Array<{ buffer: Buffer; mimeType: string; filename: string }>;
+  }) {
+    const size = this.sizeForFormat(input.format);
+    const image = await this.images.generate({
+      prompt: input.prompt,
+      size,
+      quality: 'medium',
+      referenceImages:
+        input.referenceImages.length > 0 ? input.referenceImages : undefined,
+    });
+
+    const uploaded = await this.storage.upload({
+      buffer: image.buffer,
+      mimeType: image.mimeType,
+      folder: `${this.cloudinaryRoot()}/${input.businessId}/content`,
+      publicId: `${input.contentId}-${input.format}-${Date.now()}`,
+    });
+
+    await this.prisma.contentAsset.create({
+      data: {
+        contentId: input.contentId,
+        type: 'IMAGE',
+        format: input.format,
+        aspectRatio: this.aspectForFormat(input.format),
+        width: image.width ?? uploaded.width,
+        height: image.height ?? uploaded.height,
+        storageUrl: uploaded.url,
+        storagePublicId: uploaded.publicId,
+        provider: image.provider,
+        model: image.model,
+        generationPrompt: image.prompt,
+        generationCost: image.estimatedCost,
+      },
+    });
+
+    await this.prisma.contentGenerationExecution.create({
+      data: {
+        businessId: input.businessId,
+        contentId: input.contentId,
+        stage: 'image',
+        provider: image.provider,
+        model: image.model,
+        success: true,
+        inputTokens: image.inputTokens,
+        outputTokens: image.outputTokens,
+        estimatedCost: image.estimatedCost,
+        durationMs: image.durationMs,
+        metadata: { format: input.format, size },
+      },
+    });
+  }
+
+  private async generateVideoAsset(input: {
+    contentId: string;
+    businessId: string;
+    prompt: string;
+    referenceImageUrls: string[];
+    durationSeconds: number;
+  }) {
+    const durationSeconds = input.durationSeconds;
+    const aspectRatio = (this.config.get<string>('VIDEO_ASPECT_RATIO') ||
+      '9:16') as '9:16' | '16:9' | '1:1';
+    const resolution = (this.config.get<string>('VIDEO_RESOLUTION') ||
+      '720p') as '480p' | '720p' | '1080p';
+    const generateAudio =
+      (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'false')
+        .trim()
+        .toLowerCase() === 'true';
+
+    const video = await this.videos.generate({
+      prompt: input.prompt,
+      aspectRatio,
+      durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : 5,
+      resolution,
+      generateAudio,
+      referenceImageUrls: input.referenceImageUrls.slice(0, 2),
+    });
+
+    const uploaded = await this.storage.upload({
+      buffer: video.buffer,
+      mimeType: video.mimeType,
+      folder: `${this.cloudinaryRoot()}/${input.businessId}/content`,
+      publicId: `${input.contentId}-short-${Date.now()}`,
+      resourceType: 'video',
+    });
+
+    await this.prisma.contentAsset.create({
+      data: {
+        contentId: input.contentId,
+        type: 'VIDEO',
+        format: 'SHORT_VERTICAL',
+        aspectRatio,
+        width: video.width ?? uploaded.width,
+        height: video.height ?? uploaded.height,
+        storageUrl: uploaded.url,
+        storagePublicId: uploaded.publicId,
+        provider: video.provider,
+        model: video.model,
+        generationPrompt: video.prompt,
+        generationCost: video.estimatedCost,
+      },
+    });
+
+    await this.prisma.contentGenerationExecution.create({
+      data: {
+        businessId: input.businessId,
+        contentId: input.contentId,
+        stage: 'video',
+        provider: video.provider,
+        model: video.model,
+        success: true,
+        estimatedCost: video.estimatedCost,
+        durationMs: video.durationMs,
+        metadata: {
+          format: 'SHORT_VERTICAL',
+          aspectRatio,
+          durationSeconds: video.durationSeconds,
+          usedFallback: video.usedFallback ?? false,
+        },
+      },
+    });
+  }
+
+  private async markGenerationFailed(
+    contentId: string,
+    businessId: string,
+    message: string,
+  ) {
+    await this.prisma.generatedContent.update({
+      where: { id: contentId },
+      data: { status: 'FAILED', error: message },
+    });
+    await this.prisma.contentGenerationExecution.create({
+      data: {
+        businessId,
+        contentId,
+        stage: 'failed',
+        success: false,
+        error: message,
+        durationMs: 0,
+      },
+    });
+    this.realtime.emit(
+      'content.generation.failed',
+      { contentId, error: message },
+      businessId,
+    );
   }
 
   async publish(id: string, input?: { channels?: string[] }) {
@@ -446,14 +671,14 @@ export class ContentService {
     });
     if (!content) throw new NotFoundException('Contenido no encontrado');
     if (!content.assets.length) {
-      throw new BadRequestException('El contenido no tiene imagenes para publicar');
+      throw new BadRequestException('El contenido no tiene media para publicar');
     }
     if (['GENERATING', 'PUBLISHING'].includes(content.status)) {
       throw new BadRequestException('El contenido ya se esta procesando');
     }
     // Permitir reintento si falló la publicación pero hay assets
     if (content.status === 'FAILED' && !content.assets.length) {
-      throw new BadRequestException('El contenido falló y no tiene imagenes');
+      throw new BadRequestException('El contenido falló y no tiene media');
     }
 
     const channels = this.parseChannels(
@@ -496,11 +721,9 @@ export class ContentService {
         if (!asset?.storageUrl) {
           throw new Error('No hay asset compatible para este canal');
         }
-
-        // Instagram Story no muestra caption como texto visible → overlay en la imagen.
-        // WhatsApp Status sí usa caption nativo → imagen original.
+        const isVideo = (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO';
         const storyImageUrl =
-          channel === 'INSTAGRAM_STORY'
+          channel === 'INSTAGRAM_STORY' && !isVideo
             ? (this.storage.buildTextOverlayUrl?.({
                 publicId: asset.storagePublicId,
                 fallbackUrl: asset.storageUrl,
@@ -511,17 +734,37 @@ export class ContentService {
 
         let externalId: string | undefined;
         if (channel === 'WHATSAPP_STATUS') {
-          const sent = await this.waha.sendImageStatus({
-            businessId,
-            imageUrl: asset.storageUrl,
-            caption,
-            mimetype: 'image/jpeg',
-          });
+          const sent = isVideo
+            ? await this.waha.sendVideoStatus({
+                businessId,
+                videoUrl: asset.storageUrl,
+                caption,
+                mimetype: 'video/mp4',
+              })
+            : await this.waha.sendImageStatus({
+                businessId,
+                imageUrl: asset.storageUrl,
+                caption,
+                mimetype: 'image/jpeg',
+              });
           externalId = sent.externalId;
         } else if (channel === 'INSTAGRAM_STORY') {
-          const sent = await this.instagram.uploadStoryByUrl({
+          const sent = isVideo
+            ? await this.instagram.uploadStoryVideoByUrl({
+                businessId,
+                videoUrl: asset.storageUrl,
+                caption,
+              })
+            : await this.instagram.uploadStoryByUrl({
+                businessId,
+                imageUrl: storyImageUrl,
+                caption,
+              });
+          externalId = sent.externalId;
+        } else if (channel === 'INSTAGRAM_REEL' || (channel === 'INSTAGRAM_FEED' && isVideo)) {
+          const sent = await this.instagram.uploadReelByUrl({
             businessId,
-            imageUrl: storyImageUrl,
+            videoUrl: asset.storageUrl,
             caption,
           });
           externalId = sent.externalId;
@@ -659,7 +902,10 @@ export class ContentService {
     for (const asset of existing.assets) {
       if (asset.storagePublicId && this.storage.delete) {
         try {
-          await this.storage.delete(asset.storagePublicId);
+          await this.storage.delete(
+            asset.storagePublicId,
+            asset.type === 'VIDEO' ? 'video' : 'image',
+          );
         } catch {
           // ignore cleanup errors
         }
@@ -817,6 +1063,7 @@ export class ContentService {
 
   private pickAssetForChannel(
     assets: Array<{
+      type?: string;
       format: string;
       storageUrl: string;
       storagePublicId?: string | null;
@@ -824,18 +1071,31 @@ export class ContentService {
     channel: ContentChannel,
   ) {
     if (!assets.length) return null;
+    const videos = assets.filter((a) => (a.type ?? 'IMAGE') === 'VIDEO');
+    const images = assets.filter((a) => (a.type ?? 'IMAGE') !== 'VIDEO');
+    const preferVideo =
+      channel === 'INSTAGRAM_REEL' || videos.length > 0 && images.length === 0;
+    const pool = preferVideo && videos.length ? videos : images.length ? images : assets;
+
     if (channel === 'INSTAGRAM_FEED') {
       return (
-        assets.find((a) => a.format === 'FEED_SQUARE') ||
-        assets.find((a) => a.format.startsWith('FEED_')) ||
-        assets[0]
+        pool.find((a) => a.format === 'FEED_SQUARE') ||
+        pool.find((a) => a.format.startsWith('FEED_')) ||
+        pool[0]
       );
     }
-    // Status / Story → vertical preferido
+    if (channel === 'INSTAGRAM_REEL') {
+      return (
+        pool.find((a) => a.format === 'SHORT_VERTICAL') ||
+        pool.find((a) => a.format === 'STORY_VERTICAL') ||
+        pool[0]
+      );
+    }
     return (
-      assets.find((a) => a.format === 'STORY_VERTICAL') ||
-      assets.find((a) => a.format.startsWith('FEED_')) ||
-      assets[0]
+      pool.find((a) => a.format === 'SHORT_VERTICAL') ||
+      pool.find((a) => a.format === 'STORY_VERTICAL') ||
+      pool.find((a) => a.format.startsWith('FEED_')) ||
+      pool[0]
     );
   }
 
@@ -886,6 +1146,40 @@ export class ContentService {
       colorHint,
       'Clear visual hierarchy: hero visual + brand + message. Safe margins for feed/story.',
       'No illegible text, no lorem ipsum, no fake letters, no long paragraphs on the image.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private enrichMarketingVideoPrompt(input: {
+    basePrompt: string;
+    headline?: string | null;
+    objective: ContentObjective;
+    businessName: string;
+    hasLogo: boolean;
+    durationSeconds: number;
+  }): string {
+    const brand = input.hasLogo
+      ? 'Integrate the brand logo cleanly (corner or short brand bar). Do not distort the logo.'
+      : `Show the business name "${input.businessName}" as clean, legible on-screen typography.`;
+    const headline = input.headline?.trim()
+      ? `Short on-screen headline (few words): "${input.headline.trim()}".`
+      : 'Keep a clean area for a very short headline.';
+    const offer =
+      input.objective === 'OFFER'
+        ? 'Include a brief "OFERTA" / promo badge, readable, not gibberish.'
+        : '';
+
+    return [
+      input.basePrompt.trim(),
+      '',
+      'VERTICAL SHORT (mandatory):',
+      `9:16 social short (${input.durationSeconds} seconds), marketing creative, not a raw home video.`,
+      'Smooth cinematic camera, professional lighting, high contrast.',
+      brand,
+      headline,
+      offer,
+      'No illegible text, no long paragraphs, no lorem ipsum.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -947,9 +1241,18 @@ export class ContentService {
     return unique as ContentChannel[];
   }
 
+  private parseMediaType(value?: string | null): ContentMediaType {
+    const upper = (value ?? 'IMAGE').trim().toUpperCase();
+    if (upper === 'VIDEO') return 'VIDEO';
+    return 'IMAGE';
+  }
+
   private resolveFormats(channels: ContentChannel[]): ContentAssetFormat[] {
     const needsVertical = channels.some(
-      (c) => c === 'WHATSAPP_STATUS' || c === 'INSTAGRAM_STORY',
+      (c) =>
+        c === 'WHATSAPP_STATUS' ||
+        c === 'INSTAGRAM_STORY' ||
+        c === 'INSTAGRAM_REEL',
     );
     const needsFeed = channels.includes('INSTAGRAM_FEED');
     const formats: ContentAssetFormat[] = [];
@@ -966,7 +1269,7 @@ export class ContentService {
   }
 
   private aspectForFormat(format: ContentAssetFormat): string {
-    if (format === 'STORY_VERTICAL') return '9:16';
+    if (format === 'STORY_VERTICAL' || format === 'SHORT_VERTICAL') return '9:16';
     if (format === 'FEED_LANDSCAPE') return '16:9';
     if (format === 'FEED_PORTRAIT') return '4:5';
     return '1:1';
@@ -990,7 +1293,7 @@ export class ContentService {
       this.prisma.contentGenerationExecution.count({
         where: {
           businessId,
-          stage: 'image',
+          stage: { in: ['image', 'video'] },
           success: true,
           createdAt: { gte: dayStart },
         },
@@ -998,7 +1301,7 @@ export class ContentService {
       this.prisma.contentGenerationExecution.count({
         where: {
           businessId,
-          stage: 'image',
+          stage: { in: ['image', 'video'] },
           success: true,
           createdAt: { gte: monthStart },
         },

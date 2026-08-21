@@ -24,6 +24,8 @@ const generateSchema = z.object({
   serviceId: z.string().uuid().optional(),
   contentId: z.string().uuid().optional(),
   referenceImageUrls: z.array(z.string().url()).max(4).optional(),
+  mediaType: z.enum(['IMAGE', 'VIDEO']).optional(),
+  durationSeconds: z.union([z.literal(5), z.literal(10), z.literal(15)]).optional(),
 });
 
 const updateSchema = z.object({
