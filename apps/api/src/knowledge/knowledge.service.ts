@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
+import { LlmRoutingService } from '../ai/providers/llm-routing.service';
 import { RagService } from '../ai/rag/rag.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class KnowledgeService {
     private readonly prisma: PrismaService,
     private readonly rag: RagService,
     private readonly businesses: BusinessesService,
+    private readonly routing: LlmRoutingService,
   ) {}
 
   async getWorkspace() {
@@ -59,6 +61,7 @@ export class KnowledgeService {
 
     return {
       businessId,
+      vectorsEnabled: this.routing.getMode() !== 'free',
       knowledgeBase: this.toPublicBase(knowledgeBase),
     };
   }

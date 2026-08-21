@@ -6,7 +6,7 @@ describe('RagService', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
-    documentChunk: { create: jest.fn() },
+    documentChunk: { create: jest.fn(), findMany: jest.fn(async () => []) },
   };
   const chunker = { chunk: jest.fn(() => ['chunk-a', 'chunk-b']) };
   const loaders = {
@@ -46,6 +46,27 @@ describe('RagService', () => {
     vectors as never,
   );
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+    embeddings.embed.mockImplementation(async (input: string | string[]) =>
+      Array.isArray(input) ? input.map(() => [0.1, 0.2]) : [[0.1, 0.2]],
+    );
+    vectors.searchChunks.mockResolvedValue([
+      {
+        id: 'c1',
+        content: 'Horario 9 a 18',
+        score: 0.91,
+        metadata: { source: 'faq.md', title: 'FAQ', businessId: 'biz-1' },
+      },
+      {
+        id: 'c2',
+        content: 'ruido',
+        score: 0.2,
+        metadata: { source: 'other.md', title: 'Other' },
+      },
+    ]);
+  });
+
   it('ingests a document into chunks and embeddings', async () => {
     prisma.document.findFirst.mockResolvedValue({
       id: 'doc-1',
@@ -68,9 +89,38 @@ describe('RagService', () => {
 
     expect(result.chunks).toBe(2);
     expect(vectors.upsertChunks).toHaveBeenCalled();
+    expect(result.indexed).toBe(true);
     expect(prisma.document.update).toHaveBeenCalledWith({
       where: { id: 'doc-1' },
       data: { status: 'ready' },
+    });
+  });
+
+  it('keeps the document pending when embeddings are unavailable', async () => {
+    embeddings.embed.mockResolvedValueOnce([[], []]);
+    prisma.document.findFirst.mockResolvedValue({
+      id: 'doc-1',
+      businessId: 'biz-1',
+      category: 'faq',
+      source: 'faq.txt',
+    });
+    prisma.document.update.mockResolvedValue({});
+    prisma.documentChunk.create
+      .mockResolvedValueOnce({ id: 'chunk-1', content: 'chunk-a' })
+      .mockResolvedValueOnce({ id: 'chunk-2', content: 'chunk-b' });
+
+    const result = await service.ingestText({
+      documentId: 'doc-1',
+      businessId: 'biz-1',
+      text: 'contenido',
+    });
+
+    expect(result.chunks).toBe(2);
+    expect(result.indexed).toBe(false);
+    expect(vectors.upsertChunks).not.toHaveBeenCalled();
+    expect(prisma.document.update).toHaveBeenCalledWith({
+      where: { id: 'doc-1' },
+      data: { status: 'pending' },
     });
   });
 

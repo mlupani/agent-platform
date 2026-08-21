@@ -175,12 +175,11 @@ export class AgentService {
 
     let ragChunks = [] as Awaited<ReturnType<RagService['search']>>;
     if (agentConfig.knowledgeBaseId) {
-      ragChunks = await this.rag.search({
+        ragChunks = await this.rag.search({
         businessId: business.id,
         query: message,
         knowledgeBaseId: agentConfig.knowledgeBaseId,
-        topK: 5,
-        minScore: 0.55,
+        topK: 8,
       });
     }
 

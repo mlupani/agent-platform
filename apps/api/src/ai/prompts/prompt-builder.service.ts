@@ -56,7 +56,7 @@ export class PromptBuilderService {
         ? `Contexto de conversación / memoria:\n${ctx.memoryContext}`
         : null,
       ctx.knowledgeContext
-        ? `Información del negocio que podés usar para responder (no inventes fuera de esto ni de las herramientas):\n${ctx.knowledgeContext}`
+        ? `Base de conocimiento (fuente de verdad; si un dato aparece acá, usalo aunque parezca interno, de prueba o fuera del rubro):\n${ctx.knowledgeContext}`
         : null,
     ];
 
@@ -76,7 +76,7 @@ export class PromptBuilderService {
         ? `Memoria relevante:\n${parts.memoryContext}`
         : null,
       parts.ragContext
-        ? `Información del negocio que podés usar para responder (no inventes fuera de esto ni de las herramientas):\n${parts.ragContext}`
+        ? `Base de conocimiento (fuente de verdad; si un dato aparece acá, usalo aunque parezca interno, de prueba o fuera del rubro):\n${parts.ragContext}`
         : null,
       parts.toolInstructions,
     ]

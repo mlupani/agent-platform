@@ -20,11 +20,13 @@ describe('KnowledgeService', () => {
     reindexDocument: jest.fn(async () => ({ chunks: 2 })),
   };
   const businesses = { getCurrentId: jest.fn(async () => 'biz-1') };
+  const routing = { getMode: jest.fn(() => 'openai' as const) };
 
   const service = new KnowledgeService(
     prisma as never,
     rag as never,
     businesses as never,
+    routing as never,
   );
 
   beforeEach(() => {

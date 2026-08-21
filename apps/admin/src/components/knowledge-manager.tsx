@@ -19,6 +19,7 @@ interface KnowledgeDocument {
 
 interface KnowledgeWorkspace {
   businessId: string;
+  vectorsEnabled: boolean;
   knowledgeBase: {
     id: string;
     name: string;
@@ -28,9 +29,9 @@ interface KnowledgeWorkspace {
   };
 }
 
-const statusLabel: Record<string, string> = {
-  ready: 'Listo',
-  pending: 'Pendiente',
+const STATUS_LABEL: Record<string, string> = {
+  ready: 'Indexado',
+  pending: 'Guardado',
   processing: 'Procesando',
   failed: 'Error',
 };
@@ -46,6 +47,7 @@ export function KnowledgeManager() {
   const [content, setContent] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['knowledge-workspace'] });
@@ -54,21 +56,27 @@ export function KnowledgeManager() {
   const saveFaq = useMutation({
     mutationFn: async () => {
       if (editingId) {
-        return api(`/admin/knowledge/documents/${editingId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ title, content }),
-        });
+        return api<{ chunks: number; indexed?: boolean }>(
+          `/admin/knowledge/documents/${editingId}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ title, content }),
+          },
+        );
       }
-      return api('/admin/knowledge/faq', {
-        method: 'POST',
-        body: JSON.stringify({ title, content, category: 'faq' }),
-      });
+      return api<{ chunks: number; indexed?: boolean }>(
+        '/admin/knowledge/faq',
+        {
+          method: 'POST',
+          body: JSON.stringify({ title, content, category: 'faq' }),
+        },
+      );
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setTitle('');
       setContent('');
       setEditingId(null);
-      setMessage(editingId ? 'FAQ actualizada' : 'FAQ guardada');
+      setMessage(resultMessage(editingId ? 'Nota actualizada' : 'Nota guardada', result));
       await invalidate();
     },
     onError: (err) => {
@@ -92,11 +100,12 @@ export function KnowledgeManager() {
 
   const reindex = useMutation({
     mutationFn: (id: string) =>
-      api<{ chunks: number }>(`/admin/knowledge/documents/${id}/reindex`, {
-        method: 'POST',
-      }),
+      api<{ chunks: number; indexed?: boolean }>(
+        `/admin/knowledge/documents/${id}/reindex`,
+        { method: 'POST' },
+      ),
     onSuccess: async (result) => {
-      setMessage(`Reindexado · ${result.chunks} fragmentos`);
+      setMessage(resultMessage('Reindexado', result));
       await invalidate();
     },
     onError: (err) => {
@@ -111,19 +120,25 @@ export function KnowledgeManager() {
       form.append('file', file);
       form.append('title', file.name.replace(/\.[^.]+$/, ''));
       form.append('category', 'general');
-      return apiForm<{ chunks: number }>(
+      return apiForm<{ chunks: number; indexed?: boolean }>(
         `/admin/knowledge/bases/${data.knowledgeBase.id}/documents`,
         form,
       );
     },
     onSuccess: async (result) => {
-      setMessage(`Archivo cargado · ${result.chunks} fragmentos`);
+      setMessage(resultMessage('Archivo cargado', result));
       await invalidate();
     },
     onError: (err) => {
       setMessage(err instanceof Error ? err.message : 'Error al subir');
     },
   });
+
+  function handleFiles(files: FileList | File[] | null) {
+    const file = files?.[0];
+    if (!file) return;
+    upload.mutate(file);
+  }
 
   if (isLoading) {
     return <p className="text-sm text-muted">Cargando conocimiento…</p>;
@@ -138,17 +153,46 @@ export function KnowledgeManager() {
   }
 
   const docs = data.knowledgeBase.documents;
+  const vectorsOn = data.vectorsEnabled;
 
   return (
-    <div className="space-y-6">
-      <section className="panel rounded-xl p-5 space-y-4">
+    <div className="space-y-6 max-w-4xl">
+      <header>
+        <h2 className="text-2xl font-semibold tracking-tight">Conocimiento</h2>
+        <p className="text-sm text-muted mt-1 max-w-2xl">
+          Notas, políticas y archivos extra que el asistente consulta además de
+          la ficha del negocio. Pensado para catálogos o documentos largos.
+        </p>
+      </header>
+
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          vectorsOn
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+            : 'border-line bg-panel-2 text-muted'
+        }`}
+      >
+        {vectorsOn ? (
+          <p>
+            Los vectores están activos: al guardar se indexa para búsqueda
+            semántica.
+          </p>
+        ) : (
+          <p>
+            Podés cargar todo ahora. El texto queda guardado; los vectores se
+            generan cuando pases a modo OpenAI y pulses Reindexar.
+          </p>
+        )}
+      </div>
+
+      <section className="panel rounded-2xl p-5 space-y-4">
         <div>
           <h3 className="font-medium">
-            {editingId ? 'Editar información' : 'Agregar información'}
+            {editingId ? 'Editar nota' : 'Nueva nota'}
           </h3>
           <p className="text-sm text-muted mt-1">
-            Escribí lo que querés que el asistente sepa: horarios especiales,
-            políticas, precios, FAQs. Sin jerga técnica.
+            Políticas, precios, FAQs, excepciones. Lo que no entra en la ficha
+            del negocio.
           </p>
         </div>
         <form
@@ -158,102 +202,133 @@ export function KnowledgeManager() {
             saveFaq.mutate();
           }}
         >
-          <input
-            className="w-full rounded-md bg-ink border border-line px-3 py-2 text-sm"
-            placeholder="Título (ej. Políticas de cancelación)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-          <textarea
-            className="w-full rounded-md bg-ink border border-line px-3 py-2 text-sm min-h-36"
-            placeholder={`Podés usar secciones:\n\n## Horarios\n...\n\n## Contacto\n...`}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            required
-          />
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Título</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2 min-h-10"
+              placeholder="Políticas de cancelación"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Contenido</span>
+            <textarea
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2 min-h-36"
+              placeholder={'Horarios especiales, condiciones, precios…'}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              required
+            />
+          </label>
           <div className="flex flex-wrap gap-2">
             <button
               type="submit"
-              className="rounded-md bg-amber px-4 py-2 text-sm font-medium text-ink disabled:opacity-60"
+              className="rounded-lg bg-nav-active text-white px-4 py-2.5 text-sm min-h-10 disabled:opacity-60"
               disabled={saveFaq.isPending}
             >
               {saveFaq.isPending
                 ? 'Guardando…'
                 : editingId
                   ? 'Actualizar'
-                  : 'Guardar'}
+                  : 'Guardar nota'}
             </button>
             {editingId ? (
               <button
                 type="button"
-                className="text-sm text-muted"
+                className="rounded-lg border border-line px-4 py-2.5 text-sm min-h-10 text-muted"
                 onClick={() => {
                   setEditingId(null);
                   setTitle('');
                   setContent('');
                 }}
               >
-                Cancelar edición
+                Cancelar
               </button>
             ) : null}
           </div>
         </form>
       </section>
 
-      <section className="panel rounded-xl p-5 space-y-4">
+      <section className="panel rounded-2xl p-5 space-y-4">
         <div>
           <h3 className="font-medium">Subir archivo</h3>
-          <p className="text-sm text-muted mt-1">
-            PDF, texto o markdown (.pdf, .txt, .md).
-          </p>
+          <p className="text-sm text-muted mt-1">PDF, texto o markdown.</p>
         </div>
-        <label className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm w-full max-w-full overflow-hidden">
+        <label
+          className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-sm cursor-pointer transition ${
+            dragOver
+              ? 'border-nav-active bg-accent-soft'
+              : 'border-line bg-panel-2 text-muted'
+          }`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragOver(false);
+            handleFiles(event.dataTransfer.files);
+          }}
+        >
+          <span>
+            {upload.isPending
+              ? 'Subiendo…'
+              : 'Arrastrá un archivo o hacé clic para elegir'}
+          </span>
+          <span className="text-xs">.pdf · .txt · .md</span>
           <input
             type="file"
             accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
-            className="text-sm max-w-full"
+            className="sr-only"
+            disabled={upload.isPending}
             onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) upload.mutate(file);
+              handleFiles(event.target.files);
               event.currentTarget.value = '';
             }}
           />
-          {upload.isPending ? (
-            <span className="text-muted">Subiendo…</span>
-          ) : null}
         </label>
       </section>
 
-      <section className="panel rounded-xl p-5 space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="font-medium">{data.knowledgeBase.name}</h3>
-            <p className="text-sm text-muted mt-1">
-              {data.knowledgeBase.documentCount} ítems · lo que usa el asistente
-              para responder
-            </p>
-          </div>
+      <section className="panel rounded-2xl p-5 space-y-4">
+        <div>
+          <h3 className="font-medium">{data.knowledgeBase.name}</h3>
+          <p className="text-sm text-muted mt-1">
+            {data.knowledgeBase.documentCount}{' '}
+            {data.knowledgeBase.documentCount === 1 ? 'ítem' : 'ítems'}
+          </p>
         </div>
 
         {!docs.length ? (
           <p className="text-sm text-muted">
-            Todavía no hay información. Agregá una FAQ o subí un archivo.
+            Todavía no hay documentos. Agregá una nota o subí un archivo.
           </p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="divide-y divide-line">
             {docs.map((doc) => (
-              <li
-                key={doc.id}
-                className="border-b border-line/70 pb-3 last:border-0 last:pb-0"
-              >
+              <li key={doc.id} className="py-4 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium">{doc.title}</p>
-                    <p className="mono text-[11px] text-muted mt-1">
-                      {statusLabel[doc.status] ?? doc.status}
-                      {doc.category ? ` · ${doc.category}` : ''}
-                      {` · ${doc.chunkCount} fragmentos`}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{doc.title}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          doc.status === 'ready'
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : doc.status === 'failed'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-panel-2 text-muted'
+                        }`}
+                      >
+                        {STATUS_LABEL[doc.status] ?? doc.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted mt-1">
+                      {doc.category ? `${doc.category} · ` : ''}
+                      {doc.chunkCount}{' '}
+                      {doc.chunkCount === 1 ? 'fragmento' : 'fragmentos'}
                     </p>
                     {doc.content ? (
                       <p className="text-sm text-muted mt-2 line-clamp-2 whitespace-pre-wrap">
@@ -261,11 +336,11 @@ export function KnowledgeManager() {
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
+                  <div className="flex flex-wrap gap-2 text-sm">
                     {doc.content ? (
                       <button
                         type="button"
-                        className="rounded-md border border-line px-3 py-2 min-h-10 text-teal"
+                        className="rounded-lg border border-line px-3 py-2 min-h-10"
                         onClick={() => {
                           setEditingId(doc.id);
                           setTitle(doc.title);
@@ -276,19 +351,17 @@ export function KnowledgeManager() {
                         Editar
                       </button>
                     ) : null}
-                    {doc.content ? (
-                      <button
-                        type="button"
-                        className="rounded-md border border-line px-3 py-2 min-h-10 text-muted"
-                        disabled={reindex.isPending}
-                        onClick={() => reindex.mutate(doc.id)}
-                      >
-                        Reindexar
-                      </button>
-                    ) : null}
                     <button
                       type="button"
-                      className="rounded-md border border-rose/30 px-3 py-2 min-h-10 text-rose"
+                      className="rounded-lg border border-line px-3 py-2 min-h-10 text-muted"
+                      disabled={reindex.isPending}
+                      onClick={() => reindex.mutate(doc.id)}
+                    >
+                      Reindexar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-rose/30 px-3 py-2 min-h-10 text-rose"
                       disabled={remove.isPending}
                       onClick={() => {
                         if (confirm(`¿Eliminar “${doc.title}”?`)) {
@@ -306,7 +379,18 @@ export function KnowledgeManager() {
         )}
       </section>
 
-      {message ? <p className="text-sm text-teal">{message}</p> : null}
+      {message ? <p className="text-sm text-muted">{message}</p> : null}
     </div>
   );
+}
+
+function resultMessage(
+  prefix: string,
+  result: { chunks: number; indexed?: boolean },
+): string {
+  const parts = [`${prefix} · ${result.chunks} fragmentos`];
+  if (result.indexed === false) {
+    parts.push('vectores pendientes (modo free)');
+  }
+  return parts.join(' · ');
 }

@@ -55,6 +55,16 @@ const NAV = [
     ),
   },
   {
+    href: '/knowledge',
+    label: 'Conocimiento',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H12v16H6.5A1.5 1.5 0 0 1 5 18.5v-13Z" />
+        <path d="M19 5.5A1.5 1.5 0 0 0 17.5 4H12v16h5.5A1.5 1.5 0 0 0 19 18.5v-13Z" />
+      </svg>
+    ),
+  },
+  {
     href: '/playground',
     label: 'Playground',
     icon: (

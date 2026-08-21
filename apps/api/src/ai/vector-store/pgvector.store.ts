@@ -14,18 +14,18 @@ export class PgVectorStore implements VectorStore {
 
   async upsertChunks(records: VectorRecord[]): Promise<void> {
     for (const record of records) {
-      const embedding = this.toVectorLiteral(record.embedding);
+      const embedding = this.toVectorSql(record.embedding);
       await this.prisma.$executeRaw`
         UPDATE document_chunks
-        SET embedding = ${embedding}::vector
+        SET embedding = ${embedding}
         WHERE id = ${record.id} AND "businessId" = ${record.businessId}
       `;
     }
   }
 
   async searchChunks(options: VectorSearchOptions): Promise<VectorMatch[]> {
-    const topK = options.topK ?? 5;
-    const embedding = this.toVectorLiteral(options.embedding);
+    const topK = Math.max(1, Math.min(50, options.topK ?? 5));
+    const embedding = this.toVectorSql(options.embedding);
     const category = options.filters?.category ?? null;
     const documentId = options.filters?.documentId ?? null;
     const knowledgeBaseId = options.filters?.knowledgeBaseId ?? null;
@@ -50,7 +50,7 @@ export class PgVectorStore implements VectorStore {
         c.page,
         c."documentId",
         d.title,
-        1 - (c.embedding <=> ${embedding}::vector) AS score
+        1 - (c.embedding <=> ${embedding}) AS score
       FROM document_chunks c
       INNER JOIN documents d ON d.id = c."documentId"
       WHERE c."businessId" = ${options.businessId}
@@ -58,7 +58,7 @@ export class PgVectorStore implements VectorStore {
         AND (${category}::text IS NULL OR c.category = ${category})
         AND (${documentId}::text IS NULL OR c."documentId" = ${documentId})
         AND (${knowledgeBaseId}::text IS NULL OR d."knowledgeBaseId" = ${knowledgeBaseId})
-      ORDER BY c.embedding <=> ${embedding}::vector
+      ORDER BY c.embedding <=> ${embedding}
       LIMIT ${topK}
     `);
 
@@ -87,18 +87,18 @@ export class PgVectorStore implements VectorStore {
 
   async upsertMemories(records: VectorRecord[]): Promise<void> {
     for (const record of records) {
-      const embedding = this.toVectorLiteral(record.embedding);
+      const embedding = this.toVectorSql(record.embedding);
       await this.prisma.$executeRaw`
         UPDATE memories
-        SET embedding = ${embedding}::vector
+        SET embedding = ${embedding}
         WHERE id = ${record.id} AND "businessId" = ${record.businessId}
       `;
     }
   }
 
   async searchMemories(options: VectorSearchOptions): Promise<VectorMatch[]> {
-    const topK = options.topK ?? 3;
-    const embedding = this.toVectorLiteral(options.embedding);
+    const topK = Math.max(1, Math.min(50, options.topK ?? 3));
+    const embedding = this.toVectorSql(options.embedding);
     const userId = options.filters?.userId ?? null;
 
     const rows = await this.prisma.$queryRaw<
@@ -108,13 +108,13 @@ export class PgVectorStore implements VectorStore {
         m.id,
         m.content,
         m.key,
-        1 - (m.embedding <=> ${embedding}::vector) AS score
+        1 - (m.embedding <=> ${embedding}) AS score
       FROM memories m
       WHERE m."businessId" = ${options.businessId}
         AND m.embedding IS NOT NULL
         AND m.type = 'LONG_TERM'
         AND (${userId}::text IS NULL OR m."userId" = ${userId})
-      ORDER BY m.embedding <=> ${embedding}::vector
+      ORDER BY m.embedding <=> ${embedding}
       LIMIT ${topK}
     `);
 
@@ -126,7 +126,14 @@ export class PgVectorStore implements VectorStore {
     }));
   }
 
-  private toVectorLiteral(embedding: number[]): string {
-    return `[${embedding.join(',')}]`;
+  private toVectorSql(embedding: number[]): Prisma.Sql {
+    const values = embedding.map((n) => {
+      const x = Number(n);
+      if (!Number.isFinite(x)) {
+        throw new Error('Embedding inválido');
+      }
+      return x;
+    });
+    return Prisma.raw(`'[${values.join(',')}]'::vector`);
   }
 }
