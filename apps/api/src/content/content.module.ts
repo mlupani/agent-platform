@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { BusinessesModule } from '../businesses/businesses.module';
+import { EmailModule } from '../email/email.module';
 import { InstagramModule } from '../instagram/instagram.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
@@ -11,6 +12,7 @@ import { ContentAgentService } from './content-agent.service';
 import { ContentAutoGenerateProcessor } from './content-auto-generate.processor';
 import { CONTENT_AUTO_QUEUE } from './content-auto-generate.queue';
 import { ContentAutoGenerateScheduler } from './content-auto-generate.scheduler';
+import { ContentNotifyService } from './content-notify.service';
 import { ContentService } from './content.service';
 import { ContentVideoGenerateProcessor } from './content-video-generate.processor';
 import { CONTENT_VIDEO_QUEUE } from './content-video-generate.queue';
@@ -28,6 +30,7 @@ import { VideoModule } from './video/video.module';
     RealtimeModule,
     WhatsAppModule,
     InstagramModule,
+    EmailModule,
     VideoModule,
     BullModule.registerQueue({ name: CONTENT_AUTO_QUEUE }),
     BullModule.registerQueue({ name: CONTENT_VIDEO_QUEUE }),
@@ -36,6 +39,7 @@ import { VideoModule } from './video/video.module';
   providers: [
     ContentService,
     ContentAgentService,
+    ContentNotifyService,
     ContentAutoGenerateScheduler,
     ContentAutoGenerateProcessor,
     ContentVideoGenerateProcessor,

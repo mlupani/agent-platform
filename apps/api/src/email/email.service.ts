@@ -97,31 +97,38 @@ export class EmailService implements OnModuleInit {
 
     const replyTo = this.config.get<string>('EMAIL_REPLY_TO')?.trim();
     const provider = (
-      this.config.get<string>('EMAIL_PROVIDER') || 'resend'
+      this.config.get<string>('EMAIL_PROVIDER') || ''
     )
       .trim()
       .toLowerCase();
 
-    if (provider === 'smtp') {
-      const host = this.config.get<string>('SMTP_HOST')?.trim();
-      const user = this.config.get<string>('SMTP_USER')?.trim();
-      const pass = this.config.get<string>('SMTP_PASS')?.trim();
-      const port = Number(this.config.get<string>('SMTP_PORT') || '587');
-      const secure =
-        (this.config.get<string>('SMTP_SECURE') || '').toLowerCase() ===
-          'true' || port === 465;
-      if (!host || !user || !pass) return null;
+    const smtp = this.smtpFromEnv();
+    const resendApiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
+
+    if (provider === 'smtp' || (!resendApiKey && smtp)) {
+      if (!smtp) return null;
       return {
         provider: 'smtp',
         from,
         replyTo,
-        smtp: { host, port, secure, user, pass },
+        smtp,
       };
     }
 
-    const resendApiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
     if (!resendApiKey) return null;
     return { provider: 'resend', from, replyTo, resendApiKey };
+  }
+
+  private smtpFromEnv(): EmailTransportConfig['smtp'] | null {
+    const host = this.config.get<string>('SMTP_HOST')?.trim();
+    const user = this.config.get<string>('SMTP_USER')?.trim();
+    const pass = this.config.get<string>('SMTP_PASS')?.replace(/\s/g, '');
+    const port = Number(this.config.get<string>('SMTP_PORT') || '587');
+    const secure =
+      (this.config.get<string>('SMTP_SECURE') || '').toLowerCase() === 'true' ||
+      port === 465;
+    if (!host || !user || !pass) return null;
+    return { host, port, secure, user, pass };
   }
 
   private async fromIntegration(

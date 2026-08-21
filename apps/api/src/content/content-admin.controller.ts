@@ -65,6 +65,12 @@ const socialConfigSchema = z.object({
     .optional(),
   autoGenerateChannels: z.array(z.string()).optional(),
   autoGenerateObjective: z.string().min(1).optional(),
+  notifyWhatsAppPhone: z
+    .union([z.string().max(32), z.literal(''), z.null()])
+    .optional(),
+  notifyEmail: z
+    .union([z.string().email().max(200), z.literal(''), z.null()])
+    .optional(),
 });
 
 const publishSchema = z.object({
@@ -112,7 +118,12 @@ export class ContentAdminController {
     @Body(new ZodValidationPipe(socialConfigSchema))
     body: z.infer<typeof socialConfigSchema>,
   ) {
-    return this.content.upsertSocialConfig(body);
+    return this.content.upsertSocialConfig({
+      ...body,
+      notifyWhatsAppPhone:
+        body.notifyWhatsAppPhone === '' ? null : body.notifyWhatsAppPhone,
+      notifyEmail: body.notifyEmail === '' ? null : body.notifyEmail,
+    });
   }
 
   @Post('references')

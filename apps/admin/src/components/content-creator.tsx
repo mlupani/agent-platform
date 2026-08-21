@@ -59,8 +59,14 @@ interface SocialContentConfig {
   autoGenerateTime: string;
   autoGenerateChannels: string[];
   autoGenerateObjective: string;
+  notifyWhatsAppPhone?: string | null;
+  notifyEmail?: string | null;
   lastAutoGenerateAt?: string | null;
   defaultChannels: string[];
+}
+
+interface WhatsAppStatus {
+  status: string;
 }
 
 const WEEKDAYS = [
@@ -261,6 +267,8 @@ export function ContentCreator() {
     'INSTAGRAM_FEED',
   ]);
   const [autoObjective, setAutoObjective] = useState('AUTOMATIC');
+  const [notifyWhatsAppPhone, setNotifyWhatsAppPhone] = useState('');
+  const [notifyEmail, setNotifyEmail] = useState('');
   const [autoDirty, setAutoDirty] = useState(false);
   const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
   const [videoDuration, setVideoDuration] = useState<5 | 10 | 15>(5);
@@ -289,6 +297,12 @@ export function ContentCreator() {
       ),
   });
 
+  const whatsapp = useQuery({
+    queryKey: ['whatsapp-config'],
+    queryFn: () => api<WhatsAppStatus | null>('/admin/whatsapp'),
+  });
+  const waConnected = whatsapp.data?.status === 'connected';
+
   const servicesQuery = useQuery({
     queryKey: ['services', 'enabled'],
     queryFn: () =>
@@ -313,6 +327,8 @@ export function ContentCreator() {
           : ['INSTAGRAM_STORY', 'INSTAGRAM_FEED'],
     );
     setAutoObjective(cfg.autoGenerateObjective || 'AUTOMATIC');
+    setNotifyWhatsAppPhone(cfg.notifyWhatsAppPhone || '');
+    setNotifyEmail(cfg.notifyEmail || '');
   }, [socialConfig.data, autoDirty]);
 
   const selected = useQuery({
@@ -512,6 +528,8 @@ export function ContentCreator() {
           autoGenerateTime: autoTime,
           autoGenerateChannels: autoChannels,
           autoGenerateObjective: autoObjective,
+          notifyWhatsAppPhone,
+          notifyEmail,
         }),
       }),
     onSuccess: async () => {
@@ -1330,6 +1348,75 @@ export function ContentCreator() {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-line/80 bg-bg/40 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium">Avisos cuando se genera</p>
+            <p className="text-xs text-muted mt-1">
+              Si WhatsApp está conectado, te mandamos un mensaje al número.
+              Si no, usamos el email.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                waConnected
+                  ? 'bg-emerald-500/15 text-emerald-800'
+                  : 'bg-line/60 text-muted'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  waConnected ? 'bg-emerald-600' : 'bg-muted'
+                }`}
+              />
+              {waConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'}
+            </span>
+            {!waConnected ? (
+              <Link
+                href="/integrations"
+                className="text-muted underline-offset-2 hover:underline"
+              >
+                Conectar en Integraciones
+              </Link>
+            ) : null}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Número de WhatsApp</span>
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="54911..."
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+                value={notifyWhatsAppPhone}
+                onChange={(e) => {
+                  setAutoDirty(true);
+                  setNotifyWhatsAppPhone(e.target.value);
+                }}
+              />
+              <span className="block text-xs text-muted">
+                Con código de país, sin 0 ni 15. Ej. 54911...
+              </span>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Email de respaldo</span>
+              <input
+                type="email"
+                placeholder="vos@negocio.com"
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+                value={notifyEmail}
+                onChange={(e) => {
+                  setAutoDirty(true);
+                  setNotifyEmail(e.target.value);
+                }}
+              />
+              <span className="block text-xs text-muted">
+                Se usa si WhatsApp no está conectado o el envío falla.
+              </span>
+            </label>
           </div>
         </div>
 
