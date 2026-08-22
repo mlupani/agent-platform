@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Conversation } from '@prisma/client';
+import { Prisma, type Conversation } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { AgentService } from '../ai/agents/agent.service';
@@ -723,7 +723,7 @@ export class WhatsAppWebhookService {
             ...(reopen
               ? {
                   status: 'AI' as const,
-                  metadata: metaBase,
+                  metadata: metaBase as Prisma.InputJsonValue,
                 }
               : {}),
           },

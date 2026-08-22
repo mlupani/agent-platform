@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { PgVectorStore } from '../vector-store/pgvector.store';
@@ -113,7 +114,7 @@ export class RagService {
               source: params.source ?? document.source,
               category: params.category ?? document.category,
               page: index + 1,
-              metadata: params.metadata,
+              metadata: params.metadata as Prisma.InputJsonValue | undefined,
             },
           }),
         ),

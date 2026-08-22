@@ -91,7 +91,7 @@ export class AgentService {
             content: message,
             status: 'received',
             externalId: inboundExternalId,
-            metadata: input.metadata,
+            metadata: input.metadata as Prisma.InputJsonValue | undefined,
           },
         });
       }
@@ -136,7 +136,7 @@ export class AgentService {
             role: 'user',
             sender: 'CLIENT',
             status: 'received',
-            metadata: input.metadata,
+            metadata: input.metadata as Prisma.InputJsonValue | undefined,
           },
         });
       }
@@ -150,7 +150,7 @@ export class AgentService {
           content: message,
           status: 'received',
           externalId: inboundExternalId,
-          metadata: input.metadata,
+          metadata: input.metadata as Prisma.InputJsonValue | undefined,
         },
       });
     }

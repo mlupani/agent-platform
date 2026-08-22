@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { sanitizeToolResult } from '../../common/utils/sanitize';
@@ -160,8 +161,8 @@ export class ToolExecutorService {
         businessId: context.businessId,
         conversationId: context.conversationId,
         tool: toolName,
-        input: input as object,
-        output: result,
+        input: input as Prisma.InputJsonValue,
+        output: result as unknown as Prisma.InputJsonValue,
         durationMs,
         success: result.success,
         error: result.error,

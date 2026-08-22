@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Conversation } from '@prisma/client';
+import { Prisma, type Conversation } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
 import type {
@@ -291,7 +291,7 @@ export class WahaConversationsSyncService {
             lastMessageSender: lastSender ?? existing.lastMessageSender,
             hiddenAt: null,
             ...(reopen ? { status: 'AI' as const } : {}),
-            metadata: nextMeta,
+            metadata: nextMeta as Prisma.InputJsonValue,
           },
         });
 

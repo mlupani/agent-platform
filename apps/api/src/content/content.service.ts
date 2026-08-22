@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
@@ -641,7 +642,7 @@ export class ContentService {
         imagePrompt: strategyResult.strategy.imagePrompt,
         videoPrompt: strategyResult.strategy.videoPrompt ?? null,
         visualStyle: strategyResult.strategy.visualStyle,
-        strategy: strategyResult.strategy,
+        strategy: strategyResult.strategy as unknown as Prisma.InputJsonValue,
         serviceId: strategyResult.strategy.serviceId || input.serviceId || null,
         error: null,
       },
