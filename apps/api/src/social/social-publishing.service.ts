@@ -6,10 +6,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { SocialInboxService } from './social-inbox.service';
 import { SocialProviderFactory } from './social-provider.factory';
-import {
-  SocialAccountNotFoundError,
-  SocialOAuthError,
-} from './social.errors';
+import { SocialAccountNotFoundError, SocialOAuthError } from './social.errors';
 import type {
   SocialAccountHealth,
   SocialConnectionPublic,
@@ -89,7 +86,9 @@ export class SocialPublishingService {
     return { authUrl };
   }
 
-  async handleOAuthCallback(query: Record<string, string | undefined>): Promise<{
+  async handleOAuthCallback(
+    query: Record<string, string | undefined>,
+  ): Promise<{
     adminRedirect: string;
   }> {
     const adminBase = this.adminBaseUrl();
@@ -97,7 +96,8 @@ export class SocialPublishingService {
     if (zernioError) {
       return {
         adminRedirect: this.adminUrl(adminBase, {
-          socialError: query.error_description || query.error || 'Conexión cancelada',
+          socialError:
+            query.error_description || query.error || 'Conexión cancelada',
         }),
       };
     }
@@ -159,7 +159,11 @@ export class SocialPublishingService {
         }),
       };
     }
-    if (profileId && business.zernioProfileId && profileId !== business.zernioProfileId) {
+    if (
+      profileId &&
+      business.zernioProfileId &&
+      profileId !== business.zernioProfileId
+    ) {
       return {
         adminRedirect: this.adminUrl(adminBase, {
           socialError: 'El profile de Zernio no coincide con este negocio',
@@ -344,13 +348,14 @@ export class SocialPublishingService {
     }
     if (!businessId) return { applied: false };
 
-    const platform = isSocialPlatform(input.platform ?? existing?.platform ?? '')
+    const platform = isSocialPlatform(
+      input.platform ?? existing?.platform ?? '',
+    )
       ? ((input.platform ?? existing?.platform) as SocialPlatform)
       : null;
     if (!platform) return { applied: false };
 
-    const zernioProfileId =
-      input.profileId || existing?.zernioProfileId;
+    const zernioProfileId = input.profileId || existing?.zernioProfileId;
     if (!zernioProfileId) return { applied: false };
 
     try {
@@ -393,13 +398,17 @@ export class SocialPublishingService {
       data: {
         status: data.status,
         error: data.error ?? null,
-        publishedAt: data.status === 'PUBLISHED' ? new Date() : publication.publishedAt,
+        publishedAt:
+          data.status === 'PUBLISHED' ? new Date() : publication.publishedAt,
       },
     });
     return { applied: true };
   }
 
-  private async requireConnection(businessId: string, platform: SocialPlatform) {
+  private async requireConnection(
+    businessId: string,
+    platform: SocialPlatform,
+  ) {
     const connection = await this.prisma.socialConnection.findFirst({
       where: {
         businessId,
@@ -528,10 +537,7 @@ export class SocialPublishingService {
     );
   }
 
-  private adminUrl(
-    base: string,
-    params: Record<string, string>,
-  ): string {
+  private adminUrl(base: string, params: Record<string, string>): string {
     const url = new URL(`${base}/integrations`);
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
@@ -38,7 +42,10 @@ export class CancelAppointmentTool implements AgentTool {
           phone,
         );
         if (!upcoming.length) {
-          return { success: false, error: 'No encontré citas activas para cancelar.' };
+          return {
+            success: false,
+            error: 'No encontré citas activas para cancelar.',
+          };
         }
         id = upcoming[0].id;
       }
@@ -72,7 +79,9 @@ export class CancelAppointmentTool implements AgentTool {
       return {
         success: false,
         error:
-          error instanceof Error ? error.message : 'No se pudo cancelar la cita',
+          error instanceof Error
+            ? error.message
+            : 'No se pudo cancelar la cita',
       };
     }
   }

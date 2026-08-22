@@ -20,9 +20,7 @@ export interface SocialProvider {
   isConfigured(): boolean;
   createProfile(input: SocialCreateProfileInput): Promise<{ id: string }>;
   getProfile(profileId: string): Promise<{ id: string; name?: string }>;
-  getConnectUrl(
-    input: SocialConnectUrlInput,
-  ): Promise<SocialConnectUrlResult>;
+  getConnectUrl(input: SocialConnectUrlInput): Promise<SocialConnectUrlResult>;
   listAccounts(
     profileId: string,
     platform?: SocialPlatform,
@@ -31,7 +29,9 @@ export interface SocialProvider {
   disconnect(accountId: string): Promise<void>;
   getAccountHealth(accountId: string): Promise<SocialAccountHealth>;
   publish(input: SocialPublishInput): Promise<SocialPublishResult>;
-  sendInboxMessage(input: SocialInboxSendInput): Promise<{ externalId?: string }>;
+  sendInboxMessage(
+    input: SocialInboxSendInput,
+  ): Promise<{ externalId?: string }>;
   listInboxThreads(input: {
     accountId: string;
     profileId?: string;

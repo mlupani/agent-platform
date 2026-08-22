@@ -199,6 +199,8 @@ describe('ConversationsService inbox', () => {
 
     await service.list(undefined, { role: 'ADMIN' });
 
-    expect(socialInbox.syncChats).toHaveBeenCalledWith('biz-1', { force: true });
+    expect(socialInbox.syncChats).toHaveBeenCalledWith('biz-1', {
+      force: true,
+    });
   });
 });

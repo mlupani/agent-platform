@@ -38,7 +38,11 @@ describe('AgentService', () => {
     maxSteps: 3,
     knowledgeBaseId: null,
     enabledTools: ['getBusinessInformation'],
-    memoryStrategy: { recentMessages: 4, includeSummary: true, semanticTopK: 0 },
+    memoryStrategy: {
+      recentMessages: 4,
+      includeSummary: true,
+      semanticTopK: 0,
+    },
   };
   const conversation = {
     id: 'conv-1',
@@ -104,9 +108,7 @@ describe('AgentService', () => {
   };
   const memory = {
     parseStrategy: jest.fn(() => agentConfig.memoryStrategy),
-    getRecentMessages: jest.fn(async () => [
-      { role: 'user', content: 'Hola' },
-    ]),
+    getRecentMessages: jest.fn(async () => [{ role: 'user', content: 'Hola' }]),
     getLongTermContext: jest.fn(async () => ''),
   };
   const rag = {
@@ -143,9 +145,9 @@ describe('AgentService', () => {
     rag as never,
     tools as never,
     registry as never,
-    guardrails as never,
+    guardrails,
     costControl as never,
-    cost as never,
+    cost,
   );
 
   beforeEach(() => {

@@ -37,7 +37,9 @@ export class ContentNotifyService {
     const email = config.notifyEmail?.trim() || null;
     if (!phone && !email) return;
 
-    const waReady = phone ? await this.isWhatsAppReady(input.businessId) : false;
+    const waReady = phone
+      ? await this.isWhatsAppReady(input.businessId)
+      : false;
     const message = this.buildMessage(input);
 
     if (waReady && phone) {
@@ -111,7 +113,9 @@ export class ContentNotifyService {
   } {
     const failed = Boolean(input.error) || input.status === 'FAILED';
     const kind =
-      (input.mediaType ?? 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'imagen';
+      (input.mediaType ?? 'IMAGE').toUpperCase() === 'VIDEO'
+        ? 'video'
+        : 'imagen';
     const title = input.headline?.trim() || input.topic?.trim() || 'Sin título';
     const panelUrl = this.panelUrl();
     const subject = failed
@@ -149,9 +153,7 @@ export class ContentNotifyService {
 <p><strong>Título:</strong> ${escapeHtml(title)}</p>
 <p>Revisalo y publicalo cuando quieras.</p>
 ${
-  panelUrl
-    ? `<p><a href="${escapeHtml(panelUrl)}">Abrir el panel</a></p>`
-    : ''
+  panelUrl ? `<p><a href="${escapeHtml(panelUrl)}">Abrir el panel</a></p>` : ''
 }`;
 
     return { subject, text, html };

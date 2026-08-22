@@ -30,7 +30,11 @@ const FONT_CANDIDATES = [
   'C:/Windows/Fonts/arial.ttf',
 ];
 
-function envBool(config: ConfigService, key: string, fallback: boolean): boolean {
+function envBool(
+  config: ConfigService,
+  key: string,
+  fallback: boolean,
+): boolean {
   const raw = config.get<string>(key);
   if (raw == null || raw === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
@@ -42,7 +46,11 @@ function envInt(config: ConfigService, key: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function envFloat(config: ConfigService, key: string, fallback: number): number {
+function envFloat(
+  config: ConfigService,
+  key: string,
+  fallback: number,
+): number {
   const raw = config.get<string>(key);
   const parsed = raw != null && raw !== '' ? Number(raw) : NaN;
   return Number.isFinite(parsed) ? parsed : fallback;

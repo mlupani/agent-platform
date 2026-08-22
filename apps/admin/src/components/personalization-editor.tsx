@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 
 type Tab = 'general' | 'negocio' | 'marca' | 'horarios' | 'servicios' | 'mensajes';
@@ -118,9 +118,9 @@ export function PersonalizationEditor() {
   const [preferNotes, setPreferNotes] = useState('');
   const [avoidNotes, setAvoidNotes] = useState('');
   const [brandExtra, setBrandExtra] = useState('');
-
-  useEffect(() => {
-    if (!data) return;
+  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  if (data && data.id !== hydratedId) {
+    setHydratedId(data.id);
     setName(data.name ?? '');
     setDescription(data.description ?? '');
     setPhone(data.phone ?? '');
@@ -157,7 +157,7 @@ export function PersonalizationEditor() {
       setTone(agent.tone ?? 'professional_warm');
       setSystemPrompt(agent.systemPrompt ?? '');
     }
-  }, [data, agent]);
+  }
 
   const saveAssistant = useMutation({
     mutationFn: () =>
@@ -683,7 +683,9 @@ export function PersonalizationEditor() {
                   <p className="font-medium">{service.name}</p>
                   <p className="text-xs text-muted">
                     {service.durationMinutes} min
-                    {service.price != null ? ` · $${service.price}` : ''}
+                    {service.price !== null && service.price !== undefined
+                      ? ` · $${service.price}`
+                      : ''}
                   </p>
                 </div>
                 <span

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 
 interface GoogleCalendarPublicConfig {
@@ -27,12 +27,12 @@ export function GoogleCalendarConfigForm() {
   const [calendarId, setCalendarId] = useState('primary');
   const [refreshToken, setRefreshToken] = useState('');
   const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    if (!data) return;
+  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  if (data && data.id !== hydratedId) {
+    setHydratedId(data.id);
     setCalendarId(data.calendarId);
     setEnabled(data.enabled);
-  }, [data]);
+  }
 
   const save = useMutation({
     mutationFn: async () =>

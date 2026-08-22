@@ -96,9 +96,7 @@ export class EmailService implements OnModuleInit {
     if (!from) return null;
 
     const replyTo = this.config.get<string>('EMAIL_REPLY_TO')?.trim();
-    const provider = (
-      this.config.get<string>('EMAIL_PROVIDER') || ''
-    )
+    const provider = (this.config.get<string>('EMAIL_PROVIDER') || '')
       .trim()
       .toLowerCase();
 
@@ -154,10 +152,9 @@ export class EmailService implements OnModuleInit {
     let secrets: Record<string, unknown> = {};
     if (integration.secretsEnc) {
       try {
-        secrets = JSON.parse(this.secrets.decrypt(integration.secretsEnc)) as Record<
-          string,
-          unknown
-        >;
+        secrets = JSON.parse(
+          this.secrets.decrypt(integration.secretsEnc),
+        ) as Record<string, unknown>;
       } catch (error) {
         this.logger.warn(
           `No se pudieron desencriptar secrets de integración email ${integration.id}`,
@@ -185,9 +182,7 @@ export class EmailService implements OnModuleInit {
       const port = Number(
         secrets.port ?? config.port ?? this.config.get('SMTP_PORT') ?? 587,
       );
-      const secure =
-        Boolean(secrets.secure ?? config.secure) ||
-        port === 465;
+      const secure = Boolean(secrets.secure ?? config.secure) || port === 465;
       if (!host || !user || !pass) return null;
       return {
         provider: 'smtp',

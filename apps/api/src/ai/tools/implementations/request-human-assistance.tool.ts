@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 
 const schema = z.object({
   reason: z.string().max(500).optional(),

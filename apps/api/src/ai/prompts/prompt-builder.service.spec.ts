@@ -76,7 +76,9 @@ describe('PromptBuilderService', () => {
   });
 
   it('buildCurrentDateTime returns tomorrow relative to timezone', () => {
-    const value = builder.buildCurrentDateTime('America/Argentina/Buenos_Aires');
+    const value = builder.buildCurrentDateTime(
+      'America/Argentina/Buenos_Aires',
+    );
     expect(value.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(value.tomorrowDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(value.timezone).toBe('America/Argentina/Buenos_Aires');

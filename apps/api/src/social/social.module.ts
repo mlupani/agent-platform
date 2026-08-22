@@ -13,11 +13,7 @@ import { SocialWebhookController } from './social-webhook.controller';
 import { SocialWebhookService } from './social-webhook.service';
 
 @Module({
-  imports: [
-    BusinessesModule,
-    RealtimeModule,
-    forwardRef(() => AiModule),
-  ],
+  imports: [BusinessesModule, RealtimeModule, forwardRef(() => AiModule)],
   controllers: [
     SocialAdminController,
     SocialOAuthController,
@@ -35,10 +31,6 @@ import { SocialWebhookService } from './social-webhook.service';
     SocialInboxService,
     SocialWebhookService,
   ],
-  exports: [
-    SocialPublishingService,
-    SocialProviderFactory,
-    SocialInboxService,
-  ],
+  exports: [SocialPublishingService, SocialProviderFactory, SocialInboxService],
 })
 export class SocialModule {}

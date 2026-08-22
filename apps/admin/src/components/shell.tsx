@@ -172,6 +172,11 @@ export function Shell({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (pathname !== menuPath) {
+    setMenuPath(pathname);
+    setMenuOpen(false);
+  }
   const { data: business } = useQuery({
     queryKey: ['current-business'],
     queryFn: () => api<Business>('/admin/business'),
@@ -201,9 +206,6 @@ export function Shell({
     await queryClient.clear();
     router.replace('/login');
   }
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
 
   useEffect(() => {
     if (!menuOpen) return;

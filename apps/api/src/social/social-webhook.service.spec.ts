@@ -9,7 +9,9 @@ describe('SocialWebhookService', () => {
   };
   const publishing = {
     upsertFromWebhook: jest.fn().mockResolvedValue({ applied: true }),
-    updatePublicationByExternalId: jest.fn().mockResolvedValue({ applied: true }),
+    updatePublicationByExternalId: jest
+      .fn()
+      .mockResolvedValue({ applied: true }),
   };
   const inbox = {
     handleMessageEvent: jest.fn().mockResolvedValue(true),

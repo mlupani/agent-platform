@@ -26,8 +26,15 @@ export function sanitizeBrief(raw: string): string {
   if (text.startsWith('{')) {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
-      const fromJson = [parsed.instructions, parsed.guion, parsed.brief, parsed.script]
-        .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+      const fromJson = [
+        parsed.instructions,
+        parsed.guion,
+        parsed.brief,
+        parsed.script,
+      ].find(
+        (value): value is string =>
+          typeof value === 'string' && value.trim().length > 0,
+      );
       if (fromJson) text = fromJson.trim();
     } catch {
       // texto plano
@@ -39,7 +46,9 @@ export function sanitizeBrief(raw: string): string {
 
   const cut = text.slice(0, BRIEF_MAX_CHARS);
   const lastBreak = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf('. '));
-  return (lastBreak > BRIEF_MAX_CHARS * 0.65 ? cut.slice(0, lastBreak) : cut).trim();
+  return (
+    lastBreak > BRIEF_MAX_CHARS * 0.65 ? cut.slice(0, lastBreak) : cut
+  ).trim();
 }
 
 export function buildBriefSystemPrompt(input: {

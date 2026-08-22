@@ -13,7 +13,9 @@ export class VideoProviderFactory {
     @Inject(VIDEO_GENERATION_PROVIDERS)
     providers: VideoGenerationProvider[],
   ) {
-    this.byName = new Map(providers.map((provider) => [provider.name, provider]));
+    this.byName = new Map(
+      providers.map((provider) => [provider.name, provider]),
+    );
   }
 
   get(name: string): VideoGenerationProvider {

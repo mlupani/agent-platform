@@ -23,7 +23,10 @@ export class AutomationsController {
   }
 
   @Post()
-  create(@Body(new ZodValidationPipe(createSchema)) body: z.infer<typeof createSchema>) {
+  create(
+    @Body(new ZodValidationPipe(createSchema))
+    body: z.infer<typeof createSchema>,
+  ) {
     return this.automations.create(body);
   }
 }

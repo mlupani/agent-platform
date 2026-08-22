@@ -1,7 +1,4 @@
-import {
-  SocialInboxService,
-  parseInboxEvent,
-} from './social-inbox.service';
+import { SocialInboxService, parseInboxEvent } from './social-inbox.service';
 
 describe('parseInboxEvent', () => {
   it('parsea message.received de Instagram', () => {
@@ -154,13 +151,11 @@ describe('SocialInboxService', () => {
   });
 
   it('persiste un inbound y corre el agente', async () => {
-    prisma.message.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'msg-local',
-        sender: 'CLIENT',
-        externalId: 'msg_1',
-      });
+    prisma.message.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'msg-local',
+      sender: 'CLIENT',
+      externalId: 'msg_1',
+    });
 
     const applied = await service.handleMessageEvent({
       event: 'message.received',
@@ -332,13 +327,11 @@ describe('SocialInboxService', () => {
   });
 
   it('marca el inbox live cuando llega un webhook de Instagram', async () => {
-    prisma.message.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'msg-local',
-        sender: 'CLIENT',
-        externalId: 'msg_1',
-      });
+    prisma.message.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'msg-local',
+      sender: 'CLIENT',
+      externalId: 'msg_1',
+    });
 
     await service.handleMessageEvent({
       event: 'message.received',

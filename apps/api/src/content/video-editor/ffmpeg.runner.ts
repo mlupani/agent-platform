@@ -3,7 +3,10 @@ import { promisify } from 'node:util';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { loadVideoEditorSettings } from './video-editor.config';
-import { VideoEditError, VideoEditUnavailableError } from './video-editor.errors';
+import {
+  VideoEditError,
+  VideoEditUnavailableError,
+} from './video-editor.errors';
 import type { FfmpegRunResult, FfmpegRunner } from './video-editor.types';
 
 const execFileAsync = promisify(execFile);
@@ -44,7 +47,10 @@ export class FfmpegProcessRunner implements FfmpegRunner {
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
       });
-      return { stdout: stdout?.toString() ?? '', stderr: stderr?.toString() ?? '' };
+      return {
+        stdout: stdout?.toString() ?? '',
+        stderr: stderr?.toString() ?? '',
+      };
     } catch (error) {
       if (isMissingBinary(error)) {
         throw new VideoEditUnavailableError(

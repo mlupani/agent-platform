@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { resolveServiceId } from '../resolve-service';

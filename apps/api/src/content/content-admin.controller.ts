@@ -23,7 +23,9 @@ const suggestBriefSchema = z.object({
   userInstructions: z.string().max(2000).optional(),
   serviceId: z.string().uuid().optional(),
   mediaType: z.enum(['IMAGE', 'VIDEO']).optional(),
-  durationSeconds: z.union([z.literal(5), z.literal(10), z.literal(15)]).optional(),
+  durationSeconds: z
+    .union([z.literal(5), z.literal(10), z.literal(15)])
+    .optional(),
 });
 
 const generateSchema = z.object({
@@ -34,7 +36,9 @@ const generateSchema = z.object({
   contentId: z.string().uuid().optional(),
   referenceImageUrls: z.array(z.string().url()).max(4).optional(),
   mediaType: z.enum(['IMAGE', 'VIDEO']).optional(),
-  durationSeconds: z.union([z.literal(5), z.literal(10), z.literal(15)]).optional(),
+  durationSeconds: z
+    .union([z.literal(5), z.literal(10), z.literal(15)])
+    .optional(),
 });
 
 const updateSchema = z.object({
@@ -46,9 +50,7 @@ const updateSchema = z.object({
 });
 
 const brandingSchema = z.object({
-  logoUrl: z
-    .union([z.string().url(), z.literal(''), z.null()])
-    .optional(),
+  logoUrl: z.union([z.string().url(), z.literal(''), z.null()]).optional(),
   primaryColor: z.string().max(32).nullable().optional(),
   secondaryColor: z.string().max(32).nullable().optional(),
   visualStyle: z.string().max(1000).nullable().optional(),

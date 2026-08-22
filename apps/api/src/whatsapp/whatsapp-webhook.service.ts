@@ -115,13 +115,15 @@ export class WhatsAppWebhookService {
     if (sessionStatus === 'STOPPED') {
       await this.wahaSync.purgeChats(businessId);
     } else if (sessionStatus === 'WORKING') {
-      void this.wahaSync.syncChats(businessId, { force: true }).catch((error) => {
-        this.logger.warn(
-          `WAHA reconnect sync skipped: ${
-            error instanceof Error ? error.message : 'unknown'
-          }`,
-        );
-      });
+      void this.wahaSync
+        .syncChats(businessId, { force: true })
+        .catch((error) => {
+          this.logger.warn(
+            `WAHA reconnect sync skipped: ${
+              error instanceof Error ? error.message : 'unknown'
+            }`,
+          );
+        });
     }
 
     if (sessionStatus === 'SCAN_QR_CODE') {
@@ -168,19 +170,13 @@ export class WhatsAppWebhookService {
       this.waha.phoneFromMeId(waConfig?.meId) ||
       waConfig?.displayPhoneNumber ||
       null;
-    const phoneCandidate = this.phoneFromPayload(
-      payload,
-      chatId,
-      ownerPhone,
-    );
-    const phone =
-      phoneCandidate ||
-      (selfChat ? ownerPhone || null : null);
+    const phoneCandidate = this.phoneFromPayload(payload, chatId, ownerPhone);
+    const phone = phoneCandidate || (selfChat ? ownerPhone || null : null);
     const contactName = selfChat
       ? 'Yo'
       : typeof payload._data === 'object' &&
           payload._data &&
-          'notifyName' in (payload._data as object)
+          'notifyName' in payload._data
         ? String((payload._data as { notifyName?: string }).notifyName)
         : undefined;
 
@@ -222,7 +218,7 @@ export class WhatsAppWebhookService {
               ...meta,
               statusReason: 'auto_enabled_inbound',
               statusChangedAt: new Date().toISOString(),
-            } as object,
+            },
           },
         });
         conversation.status = updated.status;
@@ -524,11 +520,7 @@ export class WhatsAppWebhookService {
     );
   }
 
-  private async upsertUser(
-    businessId: string,
-    phone: string,
-    name?: string,
-  ) {
+  private async upsertUser(businessId: string, phone: string, name?: string) {
     const existing = await this.prisma.user.findFirst({
       where: { businessId, phone },
     });
@@ -670,16 +662,14 @@ export class WhatsAppWebhookService {
     const primary = fromMe ? payload.to : payload.from;
     const secondary = fromMe ? payload.from : payload.to;
     for (const value of [primary, secondary]) {
-      const phone = phoneFromJid(
-        typeof value === 'string' ? value : null,
-      );
+      const phone = phoneFromJid(typeof value === 'string' ? value : null);
       if (phone && phone !== ownerPhone) return phone;
     }
 
     const notifyName =
       typeof payload._data === 'object' &&
       payload._data &&
-      'notifyName' in (payload._data as object)
+      'notifyName' in payload._data
         ? String((payload._data as { notifyName?: string }).notifyName)
         : null;
     const fromName = phoneFromDisplayName(notifyName);
@@ -712,8 +702,7 @@ export class WhatsAppWebhookService {
         existing.metadata && typeof existing.metadata === 'object'
           ? { ...(existing.metadata as Record<string, unknown>) }
           : {};
-      const reopen =
-        existing.status === 'CLOSED' || existing.hiddenAt != null;
+      const reopen = existing.status === 'CLOSED' || existing.hiddenAt != null;
       if (reopen) {
         delete metaBase.hiddenReason;
         delete metaBase.hiddenAt;
@@ -721,55 +710,57 @@ export class WhatsAppWebhookService {
         metaBase.reopenedReason = 'inbound_message';
       }
 
-      return this.prisma.conversation.update({
-        where: { id: existing.id },
-        data: {
-          externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
-          contactPhone: phone ?? existing.contactPhone,
-          contactName: contactName ?? existing.contactName,
-          userId,
-          // Actividad nueva vuelve a mostrar chats ocultos/cerrados
-          hiddenAt: null,
-          ...(reopen
-            ? {
-                status: 'AI' as const,
-                metadata: metaBase as object,
-              }
-            : {}),
-        },
-      }).then(async (updated) => {
-        if (isWhatsAppLid(updated.externalId)) {
-          const or: Array<Record<string, unknown>> = [];
-          if (updated.contactName && updated.contactName !== 'Yo') {
-            or.push({ contactName: updated.contactName });
+      return this.prisma.conversation
+        .update({
+          where: { id: existing.id },
+          data: {
+            externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
+            contactPhone: phone ?? existing.contactPhone,
+            contactName: contactName ?? existing.contactName,
+            userId,
+            // Actividad nueva vuelve a mostrar chats ocultos/cerrados
+            hiddenAt: null,
+            ...(reopen
+              ? {
+                  status: 'AI' as const,
+                  metadata: metaBase,
+                }
+              : {}),
+          },
+        })
+        .then(async (updated) => {
+          if (isWhatsAppLid(updated.externalId)) {
+            const or: Array<Record<string, unknown>> = [];
+            if (updated.contactName && updated.contactName !== 'Yo') {
+              or.push({ contactName: updated.contactName });
+            }
+            if (updated.contactPhone) {
+              or.push({ contactPhone: updated.contactPhone });
+              or.push({
+                externalId: {
+                  in: alternateWhatsAppExternalIds(updated.contactPhone),
+                },
+              });
+            }
+            if (or.length) {
+              await this.prisma.conversation.updateMany({
+                where: {
+                  businessId,
+                  channel: 'WHATSAPP',
+                  id: { not: updated.id },
+                  hiddenAt: null,
+                  externalId: { endsWith: '@c.us' },
+                  OR: or,
+                },
+                data: {
+                  hiddenAt: new Date(),
+                  status: 'CLOSED',
+                },
+              });
+            }
           }
-          if (updated.contactPhone) {
-            or.push({ contactPhone: updated.contactPhone });
-            or.push({
-              externalId: {
-                in: alternateWhatsAppExternalIds(updated.contactPhone),
-              },
-            });
-          }
-          if (or.length) {
-            await this.prisma.conversation.updateMany({
-              where: {
-                businessId,
-                channel: 'WHATSAPP',
-                id: { not: updated.id },
-                hiddenAt: null,
-                externalId: { endsWith: '@c.us' },
-                OR: or,
-              },
-              data: {
-                hiddenAt: new Date(),
-                status: 'CLOSED',
-              },
-            });
-          }
-        }
-        return updated;
-      });
+          return updated;
+        });
     }
 
     const agent = await this.prisma.agentConfig.findFirst({

@@ -45,7 +45,7 @@ export function isWhatsAppLid(externalId?: string | null): boolean {
 export function isWhatsAppLegacyPhoneId(externalId?: string | null): boolean {
   return Boolean(
     externalId &&
-      (/@c\.us$/i.test(externalId) || /@s\.whatsapp\.net$/i.test(externalId)),
+    (/@c\.us$/i.test(externalId) || /@s\.whatsapp\.net$/i.test(externalId)),
   );
 }
 

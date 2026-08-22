@@ -91,7 +91,7 @@ export class AgentService {
             content: message,
             status: 'received',
             externalId: inboundExternalId,
-            metadata: input.metadata as object | undefined,
+            metadata: input.metadata,
           },
         });
       }
@@ -136,7 +136,7 @@ export class AgentService {
             role: 'user',
             sender: 'CLIENT',
             status: 'received',
-            metadata: input.metadata as object | undefined,
+            metadata: input.metadata,
           },
         });
       }
@@ -150,7 +150,7 @@ export class AgentService {
           content: message,
           status: 'received',
           externalId: inboundExternalId,
-          metadata: input.metadata as object | undefined,
+          metadata: input.metadata,
         },
       });
     }
@@ -183,7 +183,7 @@ export class AgentService {
 
     let ragChunks = [] as Awaited<ReturnType<RagService['search']>>;
     if (agentConfig.knowledgeBaseId) {
-        ragChunks = await this.rag.search({
+      ragChunks = await this.rag.search({
         businessId: business.id,
         query: message,
         knowledgeBaseId: agentConfig.knowledgeBaseId,
@@ -293,8 +293,7 @@ export class AgentService {
           temperature: agentConfig.temperature,
           maxTokens: agentConfig.maxTokens,
           messages: llmMessages,
-          tools:
-            forceFinalAnswer || !toolDefs.length ? undefined : toolDefs,
+          tools: forceFinalAnswer || !toolDefs.length ? undefined : toolDefs,
         }).then((result) => {
           llmTarget = result.target;
           usedProvider = result.target.providerName;
@@ -464,7 +463,11 @@ export class AgentService {
     }
 
     const durationMs = Date.now() - started;
-    const estimatedCost = this.cost.estimate(usedModel, inputTokens, outputTokens);
+    const estimatedCost = this.cost.estimate(
+      usedModel,
+      inputTokens,
+      outputTokens,
+    );
 
     await this.prisma.message.create({
       data: {
@@ -563,10 +566,7 @@ export class AgentService {
       return { response, target };
     } catch (error) {
       const fallback = this.llmRouting.resolveFallback(target.providerName);
-      if (
-        !fallback ||
-        !this.llmRouting.isRetryableLlmError(error)
-      ) {
+      if (!fallback || !this.llmRouting.isRetryableLlmError(error)) {
         throw error;
       }
 
@@ -634,7 +634,7 @@ export class AgentService {
         userId: input.userId,
         channel,
         status: 'AI',
-        metadata: metadata as Prisma.InputJsonValue,
+        metadata: metadata,
       },
     });
   }
@@ -698,7 +698,9 @@ export class AgentService {
     return `${name}:${JSON.stringify(args ?? {})}`;
   }
 
-  private fallbackFromToolResults(executedTools: ExecutedTool[]): string | null {
+  private fallbackFromToolResults(
+    executedTools: ExecutedTool[],
+  ): string | null {
     for (let i = executedTools.length - 1; i >= 0; i -= 1) {
       const item = executedTools[i];
       if (item.call.name !== 'checkAvailability' || !item.success) continue;

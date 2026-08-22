@@ -299,7 +299,9 @@ export function PlaygroundClient() {
             <div>
               <dt className="text-muted">Latencia</dt>
               <dd className="mono">
-                {debug?.latencyMs != null ? `${debug.latencyMs} ms` : '—'}
+                {debug?.latencyMs !== undefined && debug.latencyMs !== null
+                  ? `${debug.latencyMs} ms`
+                  : '—'}
               </dd>
             </div>
             <div>
@@ -428,11 +430,15 @@ export function PlaygroundClient() {
                     <span
                       className={tool.success ? 'text-teal' : 'text-rose'}
                     >
-                      {tool.step != null ? `#${tool.step} · ` : ''}
+                      {tool.step !== undefined && tool.step !== null
+                        ? `#${tool.step} · `
+                        : ''}
                       {tool.name}
                     </span>
                     <span className="mono text-[11px] text-muted">
-                      {tool.durationMs != null ? `${tool.durationMs} ms` : '—'}
+                      {tool.durationMs !== undefined && tool.durationMs !== null
+                        ? `${tool.durationMs} ms`
+                        : '—'}
                     </span>
                   </div>
                   {tool.error ? (

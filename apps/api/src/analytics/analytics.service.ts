@@ -221,9 +221,7 @@ export class AnalyticsService {
         outputTokensWeek: executionsWeek._sum.outputTokens ?? 0,
         estimatedCostWeek: executionsWeek._sum.estimatedCost ?? 0,
         avgLatencyMs: Math.round(
-          latency._avg.latencyMs ??
-            executionsWeek._avg.durationMs ??
-            0,
+          latency._avg.latencyMs ?? executionsWeek._avg.durationMs ?? 0,
         ),
         contentGeneratedMonth,
         contentPhotosMonth: assetCounts.IMAGE ?? 0,

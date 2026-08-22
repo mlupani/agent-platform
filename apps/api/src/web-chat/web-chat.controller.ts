@@ -10,7 +10,10 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { WebChatApiKeyGuard, type WidgetAuthedRequest } from './web-chat-api-key.guard';
+import {
+  WebChatApiKeyGuard,
+  type WidgetAuthedRequest,
+} from './web-chat-api-key.guard';
 import { WebChatService } from './web-chat.service';
 
 const messageSchema = z.object({

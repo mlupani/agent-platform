@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { AutomationsService } from '../../../automations/automations.service';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 
 const schema = z.object({
   automationName: z.string().min(1).max(120),

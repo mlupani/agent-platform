@@ -53,10 +53,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const sid = this.readSid(req);
     await this.auth.destroySession(sid);
     res.clearCookie(ADMIN_SESSION_COOKIE, {
@@ -86,9 +83,8 @@ export class AuthController {
   }
 
   private readSid(req: Request): string | undefined {
-    const fromCookie = (
-      req as Request & { cookies?: Record<string, string> }
-    ).cookies?.[ADMIN_SESSION_COOKIE];
+    const fromCookie = (req as Request & { cookies?: Record<string, string> })
+      .cookies?.[ADMIN_SESSION_COOKIE];
     if (fromCookie) return fromCookie;
     // Fallback por si cookie-parser no corrió
     const header = req.headers.cookie ?? '';

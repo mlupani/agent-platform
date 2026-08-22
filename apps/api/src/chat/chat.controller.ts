@@ -32,7 +32,8 @@ export class ChatController {
     @Body(new ZodValidationPipe(chatSchema))
     body: z.infer<typeof chatSchema>,
   ) {
-    const businessId = body.businessId ?? (await this.businesses.getCurrentId());
+    const businessId =
+      body.businessId ?? (await this.businesses.getCurrentId());
     return this.agent.run({
       ...body,
       businessId,
@@ -46,7 +47,8 @@ export class ChatController {
     body: z.infer<typeof chatSchema>,
     @Res() res: Response,
   ) {
-    const businessId = body.businessId ?? (await this.businesses.getCurrentId());
+    const businessId =
+      body.businessId ?? (await this.businesses.getCurrentId());
     const result = await this.agent.run({
       ...body,
       businessId,

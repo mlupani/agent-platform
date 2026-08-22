@@ -17,9 +17,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 401 && typeof window !== 'undefined') {
     const onLogin = window.location.pathname.startsWith('/login');
     if (!onLogin) {
-      window.location.href = `/login?next=${encodeURIComponent(
-        window.location.pathname,
-      )}`;
+      // Helper de fetch, no es un Client Component: no hay useRouter acá.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(
+        `${window.location.origin}/login?next=${encodeURIComponent(
+          window.location.pathname,
+        )}`,
+      );
     }
   }
 
@@ -39,7 +43,8 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
     body: form,
   });
   if (res.status === 401 && typeof window !== 'undefined') {
-    window.location.href = '/login';
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`${window.location.origin}/login`);
   }
   if (!res.ok) {
     throw new Error(await res.text());

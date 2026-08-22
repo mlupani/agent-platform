@@ -14,9 +14,9 @@ describe('web-chat-api-key.util', () => {
     expect(widgetApiKeyPrefix(key)).toBe(key.slice(0, 12));
     expect(hashWidgetApiKey(key)).toHaveLength(64);
     expect(hashWidgetApiKey(key)).toBe(hashWidgetApiKey(key));
-    expect(widgetApiKeysEqual(hashWidgetApiKey(key), hashWidgetApiKey(key))).toBe(
-      true,
-    );
+    expect(
+      widgetApiKeysEqual(hashWidgetApiKey(key), hashWidgetApiKey(key)),
+    ).toBe(true);
   });
 
   it('reads the key from x-api-key or Bearer', () => {
@@ -36,9 +36,9 @@ describe('web-chat-api-key.util', () => {
     expect(
       originAllowed('https://landing.test', ['https://landing.test']),
     ).toBe(true);
-    expect(
-      originAllowed('https://other.test', ['https://landing.test']),
-    ).toBe(false);
+    expect(originAllowed('https://other.test', ['https://landing.test'])).toBe(
+      false,
+    );
     expect(originAllowed(undefined, ['https://landing.test'])).toBe(false);
   });
 });

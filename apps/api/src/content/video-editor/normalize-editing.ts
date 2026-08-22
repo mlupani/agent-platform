@@ -30,11 +30,14 @@ function asBoolean(value: unknown): boolean | undefined {
 }
 
 function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function asPosition(value: unknown): OverlayVerticalPosition | undefined {
-  return typeof value === 'string' && POSITIONS.has(value as OverlayVerticalPosition)
+  return typeof value === 'string' &&
+    POSITIONS.has(value as OverlayVerticalPosition)
     ? (value as OverlayVerticalPosition)
     : undefined;
 }
@@ -62,7 +65,8 @@ export function normalizeVideoEditing(input: {
 
   const addHook = asBoolean(editing?.add_hook) ?? Boolean(hookText);
   const addCta = asBoolean(editing?.add_cta) ?? Boolean(ctaText);
-  const addLogo = (asBoolean(editing?.add_logo) ?? input.hasLogo) && input.hasLogo;
+  const addLogo =
+    (asBoolean(editing?.add_logo) ?? input.hasLogo) && input.hasLogo;
 
   const hookRange = resolveOverlayRange(
     asNumber(editing?.hook_start),
@@ -80,7 +84,8 @@ export function normalizeVideoEditing(input: {
   );
 
   const requestedLogo = asLogoPosition(editing?.logo_position);
-  const ctaOnBottom = (asPosition(editing?.cta_position) ?? 'bottom') === 'bottom';
+  const ctaOnBottom =
+    (asPosition(editing?.cta_position) ?? 'bottom') === 'bottom';
   const logoPosition =
     requestedLogo === 'top-left'
       ? 'top-left'
@@ -110,6 +115,8 @@ export function normalizeVideoEditing(input: {
   };
 }
 
-export function hasVisibleEdits(instructions: VideoEditingInstructions): boolean {
+export function hasVisibleEdits(
+  instructions: VideoEditingInstructions,
+): boolean {
   return instructions.addHook || instructions.addCta || instructions.addLogo;
 }

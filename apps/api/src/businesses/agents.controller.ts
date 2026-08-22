@@ -26,7 +26,9 @@ const createSchema = z.object({
   maxSteps: z.number().int().min(1).max(20).optional(),
   knowledgeBaseId: z.string().uuid().optional(),
   enabledTools: z.array(z.string()).default([]),
-  enabledChannels: z.array(z.string()).default(['WEB', 'WHATSAPP', 'INSTAGRAM']),
+  enabledChannels: z
+    .array(z.string())
+    .default(['WEB', 'WHATSAPP', 'INSTAGRAM']),
   memoryStrategy: z
     .object({
       recentMessages: z.number().int().min(1).max(50).optional(),
@@ -61,10 +63,14 @@ export class AgentsController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(createSchema.partial().omit({ businessId: true })))
+    @Body(
+      new ZodValidationPipe(createSchema.partial().omit({ businessId: true })),
+    )
     body: Partial<z.infer<typeof createSchema>>,
   ) {
-    const existing = await this.prisma.agentConfig.findUnique({ where: { id } });
+    const existing = await this.prisma.agentConfig.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Agent not found');
     return this.prisma.agentConfig.update({ where: { id }, data: body });
   }

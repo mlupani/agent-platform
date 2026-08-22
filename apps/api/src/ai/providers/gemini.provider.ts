@@ -70,11 +70,11 @@ export class GeminiProvider implements LLMProvider {
       },
     });
 
-    const toolCalls = this.extractToolCalls(response as unknown);
+    const toolCalls = this.extractToolCalls(response);
     const content =
       typeof response.text === 'string' && response.text.trim()
         ? response.text
-        : this.extractText(response as unknown);
+        : this.extractText(response);
 
     const usageMeta = response.usageMetadata;
     return {
@@ -83,9 +83,7 @@ export class GeminiProvider implements LLMProvider {
       usage: {
         inputTokens: usageMeta?.promptTokenCount ?? 0,
         outputTokens:
-          usageMeta?.candidatesTokenCount ??
-          usageMeta?.totalTokenCount ??
-          0,
+          usageMeta?.candidatesTokenCount ?? usageMeta?.totalTokenCount ?? 0,
       },
       model: request.model,
       finishReason: toolCalls.length ? 'tool_calls' : 'stop',
@@ -206,7 +204,9 @@ export class GeminiProvider implements LLMProvider {
     };
   }
 
-  private isReplayableToolCall(call: LlmToolCall | unknown): call is LlmToolCall {
+  private isReplayableToolCall(
+    call: LlmToolCall | unknown,
+  ): call is LlmToolCall {
     if (!call || typeof call !== 'object') return false;
     const value = call as Partial<LlmToolCall>;
     return (
@@ -304,7 +304,7 @@ export class GeminiProvider implements LLMProvider {
       node.additionalProperties &&
       typeof node.additionalProperties === 'object' &&
       !Array.isArray(node.additionalProperties) &&
-      Object.keys(node.additionalProperties as object).length === 0
+      Object.keys(node.additionalProperties).length === 0
     ) {
       node.additionalProperties = true;
     }

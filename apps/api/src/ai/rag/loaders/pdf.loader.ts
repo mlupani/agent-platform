@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PDFParse } from 'pdf-parse';
-import type { DocumentLoader, LoadedDocument } from './document-loader.interface';
+import type {
+  DocumentLoader,
+  LoadedDocument,
+} from './document-loader.interface';
 
 @Injectable()
 export class PdfLoader implements DocumentLoader {

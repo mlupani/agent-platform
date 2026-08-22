@@ -4,7 +4,11 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import { appendGoogleReviewsCta } from '../../../common/utils/google-reviews-cta';
 import { WhatsAppProviderFactory } from '../../../whatsapp/providers/whatsapp-provider.factory';
 import { WhatsAppConfigService } from '../../../whatsapp/whatsapp-config.service';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 
 const schema = z.object({
   to: z
@@ -41,7 +45,9 @@ export class SendWhatsAppMessageTool implements AgentTool {
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
     const data = schema.parse(input);
 
-    const waConfig = await this.whatsappConfig.getForRuntime(context.businessId);
+    const waConfig = await this.whatsappConfig.getForRuntime(
+      context.businessId,
+    );
     if (!waConfig?.enabled) {
       return {
         success: false,

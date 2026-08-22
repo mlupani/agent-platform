@@ -79,7 +79,11 @@ export function fitOverlayText(input: {
     const chars = Math.max(8, Math.floor(boxWidth / (size * GLYPH_WIDTH)));
     const lines = wrapOverlayLines(cleaned, chars);
     if (fits(lines, size)) {
-      return { text: lines.join('\n'), fontSize: size, lineCount: lines.length };
+      return {
+        text: lines.join('\n'),
+        fontSize: size,
+        lineCount: lines.length,
+      };
     }
   }
 
@@ -92,7 +96,11 @@ export function fitOverlayText(input: {
   };
 }
 
-export function charsPerLine(width: number, fontSize: number, sideMargin: number): number {
+export function charsPerLine(
+  width: number,
+  fontSize: number,
+  sideMargin: number,
+): number {
   const usable = Math.max(120, width - sideMargin * 2);
   return Math.max(10, Math.floor(usable / (fontSize * 0.58)));
 }
@@ -109,14 +117,20 @@ export function clampTimeRange(
     Number.isFinite(end) ? end : durationSeconds,
   );
   if (safeEnd - safeStart < 0.2) return null;
-  return { start: Number(safeStart.toFixed(2)), end: Number(safeEnd.toFixed(2)) };
+  return {
+    start: Number(safeStart.toFixed(2)),
+    end: Number(safeEnd.toFixed(2)),
+  };
 }
 
 export function defaultHookWindow(durationSeconds: number): {
   start: number;
   end: number;
 } {
-  return { start: 0, end: Math.min(durationSeconds, Math.max(3, durationSeconds * 0.55)) };
+  return {
+    start: 0,
+    end: Math.min(durationSeconds, Math.max(3, durationSeconds * 0.55)),
+  };
 }
 
 export function defaultCtaWindow(durationSeconds: number): {

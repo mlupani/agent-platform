@@ -51,9 +51,7 @@ export async function probeVideoFile(
   const streams = parsed.streams ?? [];
   const video = streams.find((s) => s.codec_type === 'video');
   const audio = streams.find((s) => s.codec_type === 'audio');
-  const duration = Number(
-    video?.duration || parsed.format?.duration || 0,
-  );
+  const duration = Number(video?.duration || parsed.format?.duration || 0);
   const width = Number(video?.width ?? 0);
   const height = Number(video?.height ?? 0);
 
@@ -92,7 +90,9 @@ export function assertPlayableMp4(probe: VideoProbe): void {
     );
   }
   if (!probe.hasVideo) {
-    throw new VideoProbeError('El video final no se puede reproducir (sin video)');
+    throw new VideoProbeError(
+      'El video final no se puede reproducir (sin video)',
+    );
   }
 }
 

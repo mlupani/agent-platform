@@ -1,8 +1,5 @@
 import { SocialPublishingService } from './social-publishing.service';
-import {
-  SocialAccountNotFoundError,
-  SocialOAuthError,
-} from './social.errors';
+import { SocialAccountNotFoundError, SocialOAuthError } from './social.errors';
 
 describe('SocialPublishingService', () => {
   const prisma = {

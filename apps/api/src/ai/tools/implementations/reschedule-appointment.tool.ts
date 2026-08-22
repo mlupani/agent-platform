@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 
 const schema = z.object({
   appointmentId: z.string().uuid(),
-  startsAt: z
-    .string()
-    .describe('Nuevo inicio ISO 8601 con offset'),
+  startsAt: z.string().describe('Nuevo inicio ISO 8601 con offset'),
 });
 
 @Injectable()

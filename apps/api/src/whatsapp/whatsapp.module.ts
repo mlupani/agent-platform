@@ -14,11 +14,7 @@ import { WahaMessagingProvider } from './providers/waha.messaging-provider';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
 
 @Module({
-  imports: [
-    BusinessesModule,
-    RealtimeModule,
-    forwardRef(() => AiModule),
-  ],
+  imports: [BusinessesModule, RealtimeModule, forwardRef(() => AiModule)],
   controllers: [WhatsAppWebhookController, WhatsAppAdminController],
   providers: [
     SecretsService,

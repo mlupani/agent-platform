@@ -8,10 +8,7 @@ import { WebChatChannel } from './web-chat.channel';
 import { WhatsAppChannel } from './whatsapp.channel';
 
 @Module({
-  imports: [
-    forwardRef(() => WhatsAppModule),
-    forwardRef(() => SocialModule),
-  ],
+  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => SocialModule)],
   providers: [
     WebChatChannel,
     WhatsAppChannel,

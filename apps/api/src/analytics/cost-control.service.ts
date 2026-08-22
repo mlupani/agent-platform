@@ -49,10 +49,7 @@ export class CostControlService {
     }
   }
 
-  async incrementUsage(
-    businessId: string,
-    tokens: number,
-  ): Promise<void> {
+  async incrementUsage(businessId: string, tokens: number): Promise<void> {
     const day = new Date().toISOString().slice(0, 10);
     const requestsKey = `usage:${businessId}:${day}:requests`;
     const tokensKey = `usage:${businessId}:${day}:tokens`;

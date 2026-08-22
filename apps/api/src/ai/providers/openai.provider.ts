@@ -135,7 +135,10 @@ export class OpenAIProvider implements LLMProvider {
   private buildTokenLimitParams(
     model: string,
     maxTokens?: number,
-  ): { max_tokens: number } | { max_completion_tokens: number } | Record<string, never> {
+  ):
+    | { max_tokens: number }
+    | { max_completion_tokens: number }
+    | Record<string, never> {
     if (maxTokens == null) return {};
     if (this.requiresMaxCompletionTokens(model)) {
       return { max_completion_tokens: maxTokens };

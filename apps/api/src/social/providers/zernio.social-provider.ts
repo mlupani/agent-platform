@@ -335,8 +335,7 @@ export class ZernioSocialProvider implements SocialProvider {
       participantPicture: stringOf(row.participantPicture) ?? null,
       lastMessage: stringOf(row.lastMessage) ?? null,
       updatedAt: dateOf(row.updatedTime ?? row.updatedAt),
-      unreadCount:
-        typeof row.unreadCount === 'number' ? row.unreadCount : null,
+      unreadCount: typeof row.unreadCount === 'number' ? row.unreadCount : null,
     };
   }
 
@@ -359,7 +358,9 @@ export class ZernioSocialProvider implements SocialProvider {
       fromMe: direction === 'outgoing' || direction === 'outbound',
       senderId: stringOf(row.senderId) ?? stringOf(asRecord(row.sender)?.id),
       senderName:
-        stringOf(row.senderName) ?? stringOf(asRecord(row.sender)?.name) ?? null,
+        stringOf(row.senderName) ??
+        stringOf(asRecord(row.sender)?.name) ??
+        null,
       createdAt: dateOf(row.createdAt ?? row.timestamp),
     };
   }
@@ -417,7 +418,9 @@ export class ZernioSocialProvider implements SocialProvider {
       if (error.isNotFound() || error.statusCode === 404) {
         throw new SocialAccountNotFoundError();
       }
-      this.logger.warn(`Zernio API error ${error.statusCode}: ${error.message}`);
+      this.logger.warn(
+        `Zernio API error ${error.statusCode}: ${error.message}`,
+      );
       throw new SocialProviderError(safeSocialMessage(error.message));
     }
 

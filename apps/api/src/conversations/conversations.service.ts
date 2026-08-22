@@ -88,10 +88,7 @@ export class ConversationsService {
     }));
   }
 
-  async get(
-    id: string,
-    options?: { markRead?: boolean; role?: AdminRole },
-  ) {
+  async get(id: string, options?: { markRead?: boolean; role?: AdminRole }) {
     const businessId = await this.businesses.getCurrentId();
     const channelFilter = await this.inboxChannelFilter(
       businessId,
@@ -170,7 +167,11 @@ export class ConversationsService {
 
   async markRead(id: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.assertVisible(id, businessId, options?.role);
+    const conversation = await this.assertVisible(
+      id,
+      businessId,
+      options?.role,
+    );
     await this.markReadById(businessId, conversation.id, conversation);
     return {
       id: conversation.id,
@@ -229,7 +230,11 @@ export class ConversationsService {
   /** Oculta la conversación de la bandeja. El sync no la revive salvo mensaje nuevo del cliente. */
   async hide(id: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.assertVisible(id, businessId, options?.role);
+    const conversation = await this.assertVisible(
+      id,
+      businessId,
+      options?.role,
+    );
 
     const updated = await this.prisma.conversation.update({
       where: { id: conversation.id },
@@ -297,16 +302,16 @@ export class ConversationsService {
     return updated;
   }
 
-  async sendHumanMessage(
-    id: string,
-    content: string,
-    options?: RoleOptions,
-  ) {
+  async sendHumanMessage(id: string, content: string, options?: RoleOptions) {
     const text = content.trim();
     if (!text) throw new BadRequestException('El mensaje no puede estar vacío');
 
     const businessId = await this.businesses.getCurrentId();
-    const conversation = await this.assertVisible(id, businessId, options?.role);
+    const conversation = await this.assertVisible(
+      id,
+      businessId,
+      options?.role,
+    );
     if (conversation.status === 'CLOSED') {
       throw new BadRequestException('La conversación está cerrada');
     }
@@ -382,9 +387,7 @@ export class ConversationsService {
         lastMessageAt: new Date(),
         lastMessagePreview: options.preview.slice(0, 280),
         lastMessageSender: options.sender,
-        unreadCount: options.incrementUnread
-          ? { increment: 1 }
-          : undefined,
+        unreadCount: options.incrementUnread ? { increment: 1 } : undefined,
         status: options.forceStatus,
         contactName: options.contactName ?? undefined,
         contactPhone: options.contactPhone ?? undefined,

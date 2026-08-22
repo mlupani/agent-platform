@@ -38,6 +38,10 @@ export class IntegrationsService {
           : undefined,
       },
     });
-    return { ...created, secretsEnc: undefined, hasSecrets: Boolean(data.secrets) };
+    return {
+      ...created,
+      secretsEnc: undefined,
+      hasSecrets: Boolean(data.secrets),
+    };
   }
 }

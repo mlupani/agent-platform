@@ -82,37 +82,41 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
 
     try {
       const response = await withExponentialBackoff(() =>
-        withTimeout(async () => {
-          const res = await fetch(`${baseUrl}/api/sendText`, {
-            method: 'POST',
-            headers: this.headers(apiKey),
-            body: JSON.stringify({
-              session,
-              chatId,
-              text: params.body,
-            }),
-          });
-          const json = (await res.json().catch(() => ({}))) as {
-            id?:
-              | string
-              | {
-                  id?: string;
-                  _serialized?: string;
-                  fromMe?: boolean;
-                  remote?: string;
-                };
-            key?: { id?: string };
-            error?: string | { message?: string };
-          };
-          if (!res.ok) {
-            const message =
-              typeof json.error === 'string'
-                ? json.error
-                : json.error?.message ?? `WAHA ${res.status}`;
-            throw Object.assign(new Error(message), { status: res.status });
-          }
-          return json;
-        }, 12_000, 'waha sendText'),
+        withTimeout(
+          async () => {
+            const res = await fetch(`${baseUrl}/api/sendText`, {
+              method: 'POST',
+              headers: this.headers(apiKey),
+              body: JSON.stringify({
+                session,
+                chatId,
+                text: params.body,
+              }),
+            });
+            const json = (await res.json().catch(() => ({}))) as {
+              id?:
+                | string
+                | {
+                    id?: string;
+                    _serialized?: string;
+                    fromMe?: boolean;
+                    remote?: string;
+                  };
+              key?: { id?: string };
+              error?: string | { message?: string };
+            };
+            if (!res.ok) {
+              const message =
+                typeof json.error === 'string'
+                  ? json.error
+                  : (json.error?.message ?? `WAHA ${res.status}`);
+              throw Object.assign(new Error(message), { status: res.status });
+            }
+            return json;
+          },
+          12_000,
+          'waha sendText',
+        ),
       );
 
       await this.config.setStatus(params.businessId, 'connected', null, {
@@ -235,16 +239,11 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
       ) {
         qrDataUrl = await this.fetchQrDataUrl(businessId);
       }
-      await this.config.setStatus(
-        businessId,
-        status.status,
-        null,
-        {
-          sessionStatus: status.sessionStatus,
-          meId: status.meId,
-          displayPhoneNumber: status.displayPhoneNumber,
-        },
-      );
+      await this.config.setStatus(businessId, status.status, null, {
+        sessionStatus: status.sessionStatus,
+        meId: status.meId,
+        displayPhoneNumber: status.displayPhoneNumber,
+      });
       return { ...status, qrDataUrl };
     }
 
@@ -316,7 +315,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
           : `No se pudo conectar a WAHA (${baseUrl})`;
       this.logger.error(message);
       await this.config.setStatus(businessId, 'error', message);
-      throw new Error(message);
+      throw new Error(message, { cause: error });
     }
 
     // 422 = ya iniciada → no es error, seguimos con status/QR
@@ -335,7 +334,10 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     await new Promise((r) => setTimeout(r, 1200));
     const status = await this.getStatus(businessId);
     let qrDataUrl: string | null = null;
-    if (status.status === 'scan_qr' || status.sessionStatus === 'SCAN_QR_CODE') {
+    if (
+      status.status === 'scan_qr' ||
+      status.sessionStatus === 'SCAN_QR_CODE'
+    ) {
       // Una sola lectura de QR tras start (no en cada poll)
       qrDataUrl = await this.fetchQrDataUrl(businessId);
     }
@@ -516,8 +518,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     const session = waConfig.sessionName || 'default';
     const mimetype = params.mimetype || 'image/jpeg';
     const filename =
-      params.filename ||
-      `status.${mimetype.includes('png') ? 'png' : 'jpg'}`;
+      params.filename || `status.${mimetype.includes('png') ? 'png' : 'jpg'}`;
 
     const res = await fetch(
       `${baseUrl}/api/${encodeURIComponent(session)}/status/image`,
@@ -537,7 +538,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     );
 
     const text = await res.text();
-    let json: Record<string, unknown> = {};
+    let json: Record<string, unknown>;
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
     } catch {
@@ -550,7 +551,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
         typeof json.exception === 'object' &&
         json.exception &&
         'message' in json.exception
-          ? String((json.exception as { message: unknown }).message)
+          ? String(json.exception.message)
           : '';
       const raw =
         nested ||
@@ -573,11 +574,9 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
 
     return {
       externalId: this.normalizeMessageId(
-        (json.id as string | { id?: string; _serialized?: string } | undefined) ??
-          null,
-        typeof json.key === 'object' &&
-          json.key &&
-          'id' in (json.key as object)
+        (json.id as
+          string | { id?: string; _serialized?: string } | undefined) ?? null,
+        typeof json.key === 'object' && json.key && 'id' in json.key
           ? String((json.key as { id?: unknown }).id ?? '')
           : undefined,
       ),
@@ -622,7 +621,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     );
 
     const text = await res.text();
-    let json: Record<string, unknown> = {};
+    let json: Record<string, unknown>;
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
     } catch {
@@ -635,7 +634,7 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
         typeof json.exception === 'object' &&
         json.exception &&
         'message' in json.exception
-          ? String((json.exception as { message: unknown }).message)
+          ? String(json.exception.message)
           : '';
       const raw =
         nested ||
@@ -658,11 +657,9 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
 
     return {
       externalId: this.normalizeMessageId(
-        (json.id as string | { id?: string; _serialized?: string } | undefined) ??
-          null,
-        typeof json.key === 'object' &&
-          json.key &&
-          'id' in (json.key as object)
+        (json.id as
+          string | { id?: string; _serialized?: string } | undefined) ?? null,
+        typeof json.key === 'object' && json.key && 'id' in json.key
           ? String((json.key as { id?: unknown }).id ?? '')
           : undefined,
       ),

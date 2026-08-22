@@ -171,10 +171,7 @@ export class SocialInboxService {
   ): Promise<number> {
     const now = Date.now();
     const last = this.lastChatSync.get(businessId) ?? 0;
-    if (
-      !options?.force &&
-      now - last < SocialInboxService.CHAT_SYNC_TTL_MS
-    ) {
+    if (!options?.force && now - last < SocialInboxService.CHAT_SYNC_TTL_MS) {
       return 0;
     }
     if (options?.force) this.lastChatSync.delete(businessId);
@@ -356,19 +353,23 @@ export class SocialInboxService {
       let upserted = 0;
       for (const thread of threads) {
         if (!thread.id) continue;
-        const conversation = await this.upsertConversation(businessId, {
-          accountId: connection.externalAccountId,
-          conversationId: thread.id,
-          messageId: `backfill:${thread.id}`,
-          text: thread.lastMessage?.trim() || 'Conversación de Instagram',
-          fromMe: false,
-          participantId: thread.participantId || thread.id,
-          participantName: thread.participantName,
-          participantUsername: thread.participantUsername,
-          participantPicture: thread.participantPicture,
-        }, {
-          zernioAccountId: connection.externalAccountId,
-        });
+        const conversation = await this.upsertConversation(
+          businessId,
+          {
+            accountId: connection.externalAccountId,
+            conversationId: thread.id,
+            messageId: `backfill:${thread.id}`,
+            text: thread.lastMessage?.trim() || 'Conversación de Instagram',
+            fromMe: false,
+            participantId: thread.participantId || thread.id,
+            participantName: thread.participantName,
+            participantUsername: thread.participantUsername,
+            participantPicture: thread.participantPicture,
+          },
+          {
+            zernioAccountId: connection.externalAccountId,
+          },
+        );
         if (!conversation.hiddenAt) {
           const previousAt = conversation.lastMessageAt?.getTime() ?? 0;
           const threadAt = thread.updatedAt?.getTime() ?? 0;
@@ -385,9 +386,13 @@ export class SocialInboxService {
             Boolean(thread.lastMessage) &&
             thread.lastMessage !== conversation.lastMessagePreview;
           if (threadAt > previousAt + 1_000 || previewChanged) {
-            const pulled = await this.syncMessages(businessId, conversation.id, {
-              force: true,
-            });
+            const pulled = await this.syncMessages(
+              businessId,
+              conversation.id,
+              {
+                force: true,
+              },
+            );
             if (pulled > 0) {
               this.realtime.conversationUpdated(businessId, {
                 conversationId: conversation.id,
@@ -538,7 +543,13 @@ export class SocialInboxService {
       });
 
       if (previousStatus === 'AI' && result.status === 'AI' && result.message) {
-        await this.sendAgentOutbound(businessId, conversation, inbound, opts, result.message);
+        await this.sendAgentOutbound(
+          businessId,
+          conversation,
+          inbound,
+          opts,
+          result.message,
+        );
       } else if (result.status !== previousStatus) {
         this.realtime.conversationBotStatusChanged(businessId, {
           conversationId: conversation.id,
@@ -609,7 +620,11 @@ export class SocialInboxService {
     const conversation = await this.prisma.conversation.findFirst({
       where: { id: existing.conversationId, businessId, channel: 'INSTAGRAM' },
     });
-    if (!conversation || conversation.hiddenAt || conversation.status !== 'AI') {
+    if (
+      !conversation ||
+      conversation.hiddenAt ||
+      conversation.status !== 'AI'
+    ) {
       return false;
     }
 
@@ -866,13 +881,9 @@ export class SocialInboxService {
     }
   }
 
-  private async upsertUser(
-    businessId: string,
-    inbound: SocialInboxInbound,
-  ) {
+  private async upsertUser(businessId: string, inbound: SocialInboxInbound) {
     const externalId = `ig:${inbound.participantId ?? inbound.conversationId}`;
-    const name =
-      inbound.participantName ?? inbound.participantUsername ?? null;
+    const name = inbound.participantName ?? inbound.participantUsername ?? null;
     const existing = await this.prisma.user.findFirst({
       where: { businessId, externalId },
     });
@@ -1016,9 +1027,7 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
       stringOf(sender?.name) ??
       null,
     participantUsername:
-      stringOf(participant?.username) ??
-      stringOf(sender?.username) ??
-      null,
+      stringOf(participant?.username) ?? stringOf(sender?.username) ?? null,
     participantPicture:
       stringOf(participant?.picture) ??
       stringOf(participant?.profilePicture) ??

@@ -58,11 +58,6 @@ export function WhatsAppConfigForm() {
     },
   });
 
-  useEffect(() => {
-    if (data?.qrDataUrl) setQr(data.qrDataUrl);
-    if (data?.status === 'connected') setQr(null);
-  }, [data?.qrDataUrl, data?.status]);
-
   const start = useMutation({
     mutationFn: async () =>
       api<SessionStatus>('/admin/whatsapp/session/start', {
@@ -125,7 +120,6 @@ export function WhatsAppConfigForm() {
     if (data.status === 'connected') return;
 
     if (data.status === 'scan_qr' && data.qrDataUrl) {
-      setQr(data.qrDataUrl);
       return;
     }
 

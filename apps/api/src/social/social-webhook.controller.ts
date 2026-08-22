@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Headers,
-  HttpCode,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { Controller, Headers, HttpCode, Post, Req } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';

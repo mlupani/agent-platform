@@ -29,7 +29,8 @@ export async function requestJson<T = Record<string, unknown>>(
           : {}),
         ...options.headers,
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body:
+        options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     });
     const text = await response.text();
@@ -54,7 +55,10 @@ export async function requestJson<T = Record<string, unknown>>(
   }
 }
 
-export async function downloadBinary(url: string, timeoutMs = 120_000): Promise<{
+export async function downloadBinary(
+  url: string,
+  timeoutMs = 120_000,
+): Promise<{
   buffer: Buffer;
   mimeType: string;
 }> {

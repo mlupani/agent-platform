@@ -20,29 +20,34 @@ export class N8nService {
     idempotencyKey?: string,
   ): Promise<unknown> {
     const response = await withExponentialBackoff(() =>
-      withTimeout(async () => {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idempotencyKey
-              ? { 'Idempotency-Key': idempotencyKey }
-              : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-        const text = await res.text();
-        if (!res.ok) {
-          throw Object.assign(new Error(`n8n webhook failed: ${res.status}`), {
-            status: res.status,
+      withTimeout(
+        async () => {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            },
+            body: JSON.stringify(payload),
           });
-        }
-        try {
-          return JSON.parse(text) as unknown;
-        } catch {
-          return { raw: text };
-        }
-      }, this.timeoutMs, 'n8n webhook'),
+          const text = await res.text();
+          if (!res.ok) {
+            throw Object.assign(
+              new Error(`n8n webhook failed: ${res.status}`),
+              {
+                status: res.status,
+              },
+            );
+          }
+          try {
+            return JSON.parse(text) as unknown;
+          } catch {
+            return { raw: text };
+          }
+        },
+        this.timeoutMs,
+        'n8n webhook',
+      ),
     );
 
     this.logger.log('n8n webhook triggered');

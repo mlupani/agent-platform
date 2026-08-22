@@ -6,7 +6,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { hashWidgetApiKey, extractWidgetApiKey, originAllowed } from './web-chat-api-key.util';
+import {
+  hashWidgetApiKey,
+  extractWidgetApiKey,
+  originAllowed,
+} from './web-chat-api-key.util';
 import { WebChatConfigService } from './web-chat-config.service';
 import type { WebChatAuthContext } from './web-chat.types';
 
@@ -28,7 +32,9 @@ export class WebChatApiKeyGuard implements CanActivate {
     const hashed = hashWidgetApiKey(apiKey);
     const config = await this.config.findByApiKeyHash(hashed);
     if (!config?.enabled || !config.apiKeyHash) {
-      throw new UnauthorizedException('API key inválida o canal web deshabilitado');
+      throw new UnauthorizedException(
+        'API key inválida o canal web deshabilitado',
+      );
     }
 
     const origin = request.headers.origin;

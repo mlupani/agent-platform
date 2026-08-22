@@ -10,11 +10,7 @@ import { RealtimeGateway } from './realtime.gateway';
 export class RealtimeEventsService {
   constructor(private readonly gateway: RealtimeGateway) {}
 
-  emit<T>(
-    event: RealtimeEventName | string,
-    payload: T,
-    businessId?: string,
-  ) {
+  emit<T>(event: RealtimeEventName | string, payload: T, businessId?: string) {
     const envelope: RealtimeEnvelope<T> = {
       event,
       businessId,
@@ -28,7 +24,11 @@ export class RealtimeEventsService {
     businessId: string,
     payload: Record<string, unknown>,
   ) {
-    this.emit(REALTIME_EVENTS.CONVERSATION_MESSAGE_CREATED, payload, businessId);
+    this.emit(
+      REALTIME_EVENTS.CONVERSATION_MESSAGE_CREATED,
+      payload,
+      businessId,
+    );
   }
 
   conversationUpdated(businessId: string, payload: Record<string, unknown>) {
@@ -50,11 +50,7 @@ export class RealtimeEventsService {
     businessId: string,
     payload: Record<string, unknown>,
   ) {
-    this.emit(
-      REALTIME_EVENTS.CONVERSATION_INBOX_CLEARED,
-      payload,
-      businessId,
-    );
+    this.emit(REALTIME_EVENTS.CONVERSATION_INBOX_CLEARED, payload, businessId);
   }
 
   whatsappStatusChanged(

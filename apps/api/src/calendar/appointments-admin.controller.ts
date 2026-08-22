@@ -86,9 +86,7 @@ export class AppointmentsAdminController {
       businessId,
       date,
       serviceId,
-      durationMinutes: durationMinutes
-        ? Number(durationMinutes)
-        : undefined,
+      durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
     });
   }
 

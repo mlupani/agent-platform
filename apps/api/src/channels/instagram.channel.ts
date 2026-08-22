@@ -19,9 +19,7 @@ export class InstagramChannel implements ChannelAdapter {
       conversationId: data.conversationId
         ? String(data.conversationId)
         : undefined,
-      externalId: data.externalUserId
-        ? String(data.externalUserId)
-        : undefined,
+      externalId: data.externalUserId ? String(data.externalUserId) : undefined,
       message: String(data.message ?? data.text ?? ''),
       metadata: { provider: 'zernio', channel: 'INSTAGRAM', raw: data },
     };

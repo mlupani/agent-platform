@@ -1,17 +1,10 @@
 export type OverlayVerticalPosition = 'top' | 'center' | 'bottom';
 
 export type LogoCornerPosition =
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+  'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 export type AutoEditStatus =
-  | 'NONE'
-  | 'PROCESSING'
-  | 'COMPLETED'
-  | 'SKIPPED'
-  | 'FAILED';
+  'NONE' | 'PROCESSING' | 'COMPLETED' | 'SKIPPED' | 'FAILED';
 
 export type ContentAssetRole = 'ORIGINAL' | 'EDITED';
 

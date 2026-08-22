@@ -8,11 +8,7 @@ import type { DocumentLoader } from './document-loader.interface';
 export class LoaderRegistry {
   private readonly loaders: DocumentLoader[];
 
-  constructor(
-    txt: TxtLoader,
-    markdown: MarkdownLoader,
-    pdf: PdfLoader,
-  ) {
+  constructor(txt: TxtLoader, markdown: MarkdownLoader, pdf: PdfLoader) {
     this.loaders = [txt, markdown, pdf];
   }
 

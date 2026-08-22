@@ -39,6 +39,10 @@ export class WhatsAppWebhookController {
   @Post('whatsapp')
   @HttpCode(200)
   receiveMeta(@Body() body: unknown) {
-    return { ok: true, deprecated: true, hint: 'Use WAHA webhook /api/webhooks/waha' };
+    return {
+      ok: true,
+      deprecated: true,
+      hint: 'Use WAHA webhook /api/webhooks/waha',
+    };
   }
 }

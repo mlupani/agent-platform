@@ -35,10 +35,14 @@ describe('ToolExecutorService permissions', () => {
   };
 
   it('blocks tools that are not enabled for the agent', async () => {
-    const result = await executor.execute('getOpeningHours', {}, {
-      ...baseContext,
-      enabledTools: [],
-    });
+    const result = await executor.execute(
+      'getOpeningHours',
+      {},
+      {
+        ...baseContext,
+        enabledTools: [],
+      },
+    );
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/not enabled/i);
   });

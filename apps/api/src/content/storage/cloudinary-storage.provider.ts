@@ -83,15 +83,21 @@ export class CloudinaryStorageProvider implements StorageProvider {
           ? Number((error as { http_code: unknown }).http_code)
           : undefined;
 
-      this.logger.error(`Cloudinary upload failed (${httpCode ?? '?'}): ${raw}`);
+      this.logger.error(
+        `Cloudinary upload failed (${httpCode ?? '?'}): ${raw}`,
+      );
 
-      if (httpCode === 403 || /missing permissions|actions=\["create"\]/i.test(raw)) {
+      if (
+        httpCode === 403 ||
+        /missing permissions|actions=\["create"\]/i.test(raw)
+      ) {
         throw new Error(
           'Cloudinary rechazó el upload (403): la API Key no tiene permiso "create/upload". En Cloudinary → Settings → API Keys, editá la key (o creá una nueva con rol Full/Editor) y actualizá CLOUDINARY_API_KEY/SECRET en el .env.',
+          { cause: error },
         );
       }
 
-      throw new Error(`Cloudinary upload falló: ${raw}`);
+      throw new Error(`Cloudinary upload falló: ${raw}`, { cause: error });
     }
   }
 
@@ -123,9 +129,14 @@ export class CloudinaryStorageProvider implements StorageProvider {
     });
   }
 
-  async delete(publicId: string, resourceType: 'image' | 'video' = 'image'): Promise<void> {
+  async delete(
+    publicId: string,
+    resourceType: 'image' | 'video' = 'image',
+  ): Promise<void> {
     if (!this.configured) return;
-    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
   }
 
   /**
@@ -211,7 +222,9 @@ export class CloudinaryStorageProvider implements StorageProvider {
     if (cleaned.length <= maxLen) return cleaned;
     const cut = cleaned.slice(0, maxLen);
     const atSpace = cut.lastIndexOf(' ');
-    const safe = (atSpace > maxLen * 0.6 ? cut.slice(0, atSpace) : cut).trimEnd();
+    const safe = (
+      atSpace > maxLen * 0.6 ? cut.slice(0, atSpace) : cut
+    ).trimEnd();
     return safe;
   }
 }

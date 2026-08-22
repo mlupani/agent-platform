@@ -13,8 +13,10 @@ export function parseVideoDuration(
 /** Seedance 1.5 Pro: 4–12s. Kling 3.x: 3–15s. */
 export function clampDurationForKie(model: string, seconds: number): number {
   const m = model.toLowerCase();
-  if (m.includes('seedance')) return Math.min(12, Math.max(4, Math.round(seconds)));
-  if (m.includes('kling')) return Math.min(15, Math.max(3, Math.round(seconds)));
+  if (m.includes('seedance'))
+    return Math.min(12, Math.max(4, Math.round(seconds)));
+  if (m.includes('kling'))
+    return Math.min(15, Math.max(3, Math.round(seconds)));
   return Math.min(15, Math.max(4, Math.round(seconds)));
 }
 

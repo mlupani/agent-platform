@@ -114,7 +114,6 @@ export function AppointmentsCalendar() {
       ),
   });
 
-  const items = data?.items ?? [];
   const googleConnected = data?.googleConnected ?? false;
 
   const remove = useMutation({
@@ -134,6 +133,7 @@ export function AppointmentsCalendar() {
   });
 
   const byDay = useMemo(() => {
+    const items = data?.items ?? [];
     const map = new Map<string, CalendarFeedItem[]>();
     for (const cell of range.cells) map.set(toIsoDate(cell), []);
     for (const item of items) {
@@ -149,7 +149,7 @@ export function AppointmentsCalendar() {
       );
     }
     return map;
-  }, [items, range.cells]);
+  }, [data?.items, range.cells]);
 
   const todayKey = toIsoDate(new Date());
   const monthIndex = month.getMonth();

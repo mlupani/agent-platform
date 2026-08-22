@@ -82,10 +82,8 @@ export const TONE_GUIDANCE: Record<AssistantTone | string, string> = {
     'Tono profesional y cálido: claro, respetuoso y cercano, sin sonar frío ni informal en exceso.',
   formal:
     'Tono formal: lenguaje cuidado, cortesía y precisión. Evitá muletillas y emojis.',
-  friendly:
-    'Tono amigable: cercano y positivo, manteniendo profesionalismo.',
-  casual:
-    'Tono casual: natural y relajado, sin perder claridad ni respeto.',
+  friendly: 'Tono amigable: cercano y positivo, manteniendo profesionalismo.',
+  casual: 'Tono casual: natural y relajado, sin perder claridad ni respeto.',
   custom:
     'Tono personalizado: seguí las instrucciones de comportamiento configuradas.',
 };

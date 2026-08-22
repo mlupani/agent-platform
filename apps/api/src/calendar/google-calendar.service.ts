@@ -115,7 +115,7 @@ export class GoogleCalendarService {
         .map((item) => {
           const allDay = Boolean(item.start?.date && !item.start?.dateTime);
           const startsAt = item.start?.dateTime || item.start?.date || '';
-          let endsAt = item.end?.dateTime || item.end?.date || startsAt;
+          const endsAt = item.end?.dateTime || item.end?.date || startsAt;
           // all-day end is exclusive in Google; keep as-is for display
           return {
             id: item.id!,

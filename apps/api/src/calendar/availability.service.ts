@@ -94,8 +94,8 @@ export class AvailabilityService {
           slots.push({
             start: cursor.toFormat('HH:mm'),
             end: end.toFormat('HH:mm'),
-            startIso: cursor.toISO()!,
-            endIso: end.toISO()!,
+            startIso: cursor.toISO(),
+            endIso: end.toISO(),
           });
         }
         cursor = cursor.plus(duration);
@@ -117,9 +117,7 @@ export class AvailabilityService {
         status: { in: ['pending', 'confirmed'] },
         startsAt: { lt: to },
         endsAt: { gt: from },
-        ...(excludeAppointmentId
-          ? { id: { not: excludeAppointmentId } }
-          : {}),
+        ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
       },
       select: { startsAt: true, endsAt: true },
     });
@@ -137,10 +135,7 @@ export class AvailabilityService {
       .filter((item): item is { start: string; end: string } => Boolean(item));
   }
 
-  private subtractBusy(
-    open: Interval[],
-    busy: Interval[],
-  ): Interval[] {
+  private subtractBusy(open: Interval[], busy: Interval[]): Interval[] {
     let free = [...open];
     for (const block of busy) {
       if (!block.isValid) continue;

@@ -11,7 +11,9 @@ export class SocialProviderFactory {
     @Inject(SOCIAL_PROVIDERS)
     providers: SocialProvider[],
   ) {
-    this.byName = new Map(providers.map((provider) => [provider.name, provider]));
+    this.byName = new Map(
+      providers.map((provider) => [provider.name, provider]),
+    );
   }
 
   get(name: SocialProviderName = 'zernio'): SocialProvider {

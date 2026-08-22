@@ -145,9 +145,9 @@ describe('planOperations / buildFilterGraph', () => {
     expect(graph.filterComplex).toContain('overlay=');
     expect(graph.filterComplex).toContain('[1:v]scale=');
     expect(graph.filterComplex).toContain('drawbox=');
-    expect(ops.some((op) => op.type === 'logo' && op.position === 'top-right')).toBe(
-      true,
-    );
+    expect(
+      ops.some((op) => op.type === 'logo' && op.position === 'top-right'),
+    ).toBe(true);
   });
 
   it('usa el color de marca en el botón de CTA', () => {

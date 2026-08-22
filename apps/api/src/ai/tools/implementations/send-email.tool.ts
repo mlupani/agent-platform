@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { EmailService } from '../../../email/email.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { appendGoogleReviewsCta } from '../../../common/utils/google-reviews-cta';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 
 const schema = z.object({
   to: z
@@ -80,9 +84,7 @@ export class SendEmailTool implements AgentTool {
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : 'No se pudo enviar el email',
+          error instanceof Error ? error.message : 'No se pudo enviar el email',
       };
     }
   }

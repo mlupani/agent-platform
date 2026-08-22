@@ -30,11 +30,7 @@ export class OpenAIImageGenerationProvider implements ImageGenerationProvider {
     const started = Date.now();
     const size = this.normalizeSize(input.size);
     const prompt = input.prompt.slice(0, 3000);
-    const quality = (input.quality ?? 'medium') as
-      | 'low'
-      | 'medium'
-      | 'high'
-      | 'auto';
+    const quality = input.quality ?? 'medium';
 
     try {
       const refs = input.referenceImages?.slice(0, 4) ?? [];
@@ -44,7 +40,7 @@ export class OpenAIImageGenerationProvider implements ImageGenerationProvider {
               model: this.model,
               prompt,
               n: 1,
-              size: size as '1024x1024' | '1024x1536' | '1536x1024',
+              size: size,
               quality,
               image: await Promise.all(
                 refs.map((ref, index) =>
@@ -60,7 +56,7 @@ export class OpenAIImageGenerationProvider implements ImageGenerationProvider {
               model: this.model,
               prompt,
               n: 1,
-              size: size as '1024x1024' | '1024x1536' | '1536x1024',
+              size: size,
               quality,
             });
 

@@ -29,8 +29,7 @@ export class LlmRoutingService {
 
   getGeminiModel(): string {
     return (
-      this.env.get<string>('GEMINI_DEFAULT_MODEL') ||
-      'gemini-flash-lite-latest'
+      this.env.get<string>('GEMINI_DEFAULT_MODEL') || 'gemini-flash-lite-latest'
     );
   }
 

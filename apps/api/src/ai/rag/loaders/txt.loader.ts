@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { DocumentLoader, LoadedDocument } from './document-loader.interface';
+import type {
+  DocumentLoader,
+  LoadedDocument,
+} from './document-loader.interface';
 
 @Injectable()
 export class TxtLoader implements DocumentLoader {

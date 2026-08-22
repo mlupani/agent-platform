@@ -3,10 +3,7 @@ export type SocialPlatform = 'instagram' | 'tiktok';
 export type SocialProviderName = 'zernio';
 
 export type SocialConnectionStatus =
-  | 'connected'
-  | 'disconnected'
-  | 'revoked'
-  | 'error';
+  'connected' | 'disconnected' | 'revoked' | 'error';
 
 export type SocialContentType = 'feed' | 'story' | 'reel' | 'video';
 

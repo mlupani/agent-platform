@@ -15,7 +15,9 @@ export class ContentVideoGenerateProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ contentId: string; businessId: string }>): Promise<void> {
+  async process(
+    job: Job<{ contentId: string; businessId: string }>,
+  ): Promise<void> {
     const contentId = job.data?.contentId;
     const businessId = job.data?.businessId;
     if (!contentId || !businessId) {

@@ -34,12 +34,15 @@ const strategySchema = z.object({
   caption: z.string().min(2).max(2200),
   cta: z.string().min(2).max(120),
   hook: z.string().max(160).nullish(),
-  hashtags: z.preprocess((value) => {
-    if (typeof value === 'string') {
-      return value.split(/[\s,]+/).filter(Boolean);
-    }
-    return value;
-  }, z.array(z.string().max(40)).max(5).optional()),
+  hashtags: z.preprocess(
+    (value) => {
+      if (typeof value === 'string') {
+        return value.split(/[\s,]+/).filter(Boolean);
+      }
+      return value;
+    },
+    z.array(z.string().max(40)).max(5).optional(),
+  ),
   imagePrompt: z.string().min(10).max(2500),
   videoPrompt: z.string().min(10).max(2500).optional(),
   visualStyle: z.string().min(2).max(400),
@@ -183,8 +186,8 @@ export class ContentAgentService {
     let providerName: string;
     let model: string;
     let content: string;
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let inputTokens: number;
+    let outputTokens: number;
 
     if (referenceImageUrls.length > 0) {
       if (!this.openai) {
@@ -252,7 +255,8 @@ export class ContentAgentService {
         });
       } catch (error) {
         const fallback = this.llmRouting.resolveFallback(used.providerName);
-        if (!fallback || !this.llmRouting.isRetryableLlmError(error)) throw error;
+        if (!fallback || !this.llmRouting.isRetryableLlmError(error))
+          throw error;
         this.logger.warn(
           `Content LLM fallback ${used.providerName} → ${fallback.providerName}`,
         );
@@ -399,7 +403,10 @@ export class ContentAgentService {
       durationSeconds,
       channels: input.channels,
       selectedService: selectedService
-        ? { name: selectedService.name, description: selectedService.description }
+        ? {
+            name: selectedService.name,
+            description: selectedService.description,
+          }
         : null,
       services,
       hours,
@@ -505,8 +512,12 @@ export class ContentAgentService {
     logoUrl: string | null,
     refs: string[] | undefined,
   ): string[] {
-    const cleaned = [...new Set((refs ?? []).map((u) => u.trim()).filter(Boolean))];
-    const withLogo = logoUrl ? [logoUrl, ...cleaned.filter((u) => u !== logoUrl)] : cleaned;
+    const cleaned = [
+      ...new Set((refs ?? []).map((u) => u.trim()).filter(Boolean)),
+    ];
+    const withLogo = logoUrl
+      ? [logoUrl, ...cleaned.filter((u) => u !== logoUrl)]
+      : cleaned;
     return withLogo.slice(0, 4);
   }
 

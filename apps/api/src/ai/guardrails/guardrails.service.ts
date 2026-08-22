@@ -8,6 +8,8 @@ export class GuardrailsService {
   }
 
   isBlockedConversationStatus(status: string): boolean {
-    return status === 'HUMAN' || status === 'WAITING_HUMAN' || status === 'CLOSED';
+    return (
+      status === 'HUMAN' || status === 'WAITING_HUMAN' || status === 'CLOSED'
+    );
   }
 }

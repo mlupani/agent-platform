@@ -39,7 +39,9 @@ export class FalVideoProvider implements VideoGenerationProvider {
     this.timeoutMs = Number(
       this.config.get<string>('VIDEO_TIMEOUT_MS') || 12 * 60 * 1000,
     );
-    this.pollMs = Number(this.config.get<string>('VIDEO_POLL_INTERVAL_MS') || 4000);
+    this.pollMs = Number(
+      this.config.get<string>('VIDEO_POLL_INTERVAL_MS') || 4000,
+    );
     this.estimatedCost = Number(
       this.config.get<string>('FAL_VIDEO_ESTIMATED_COST') || 0.18,
     );
@@ -66,8 +68,16 @@ export class FalVideoProvider implements VideoGenerationProvider {
     const prompt = input.prompt.slice(0, 2500);
 
     try {
-      const submitted = await this.submit(input, prompt, aspectRatio, durationSeconds);
-      const videoUrl = await this.pollResult(submitted.statusUrl, submitted.responseUrl);
+      const submitted = await this.submit(
+        input,
+        prompt,
+        aspectRatio,
+        durationSeconds,
+      );
+      const videoUrl = await this.pollResult(
+        submitted.statusUrl,
+        submitted.responseUrl,
+      );
       const file = await downloadBinary(videoUrl);
       const [width, height] = this.dimsForAspect(aspectRatio);
 
@@ -162,7 +172,10 @@ export class FalVideoProvider implements VideoGenerationProvider {
     );
   }
 
-  private async pollResult(statusUrl: string, responseUrl: string): Promise<string> {
+  private async pollResult(
+    statusUrl: string,
+    responseUrl: string,
+  ): Promise<string> {
     const deadline = Date.now() + this.timeoutMs;
     while (Date.now() < deadline) {
       const res = await requestJson<Record<string, unknown>>({

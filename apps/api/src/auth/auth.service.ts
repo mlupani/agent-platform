@@ -65,9 +65,7 @@ export class AuthService implements OnModuleInit {
           displayName: seed.displayName,
         },
       });
-      this.logger.log(
-        `Usuario panel creado: ${seed.username} (${seed.role})`,
-      );
+      this.logger.log(`Usuario panel creado: ${seed.username} (${seed.role})`);
     }
   }
 

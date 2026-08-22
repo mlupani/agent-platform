@@ -17,7 +17,11 @@ describe('video duration', () => {
   });
 
   it('clampa Kling v1 de fal a 5 o 10', () => {
-    expect(clampDurationForFal('fal-ai/kling-video/v1/standard/text-to-video', 15)).toBe(10);
-    expect(clampDurationForFal('fal-ai/kling-video/v1/standard/text-to-video', 5)).toBe(5);
+    expect(
+      clampDurationForFal('fal-ai/kling-video/v1/standard/text-to-video', 15),
+    ).toBe(10);
+    expect(
+      clampDurationForFal('fal-ai/kling-video/v1/standard/text-to-video', 5),
+    ).toBe(5);
   });
 });

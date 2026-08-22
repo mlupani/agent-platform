@@ -17,7 +17,7 @@ export class GoogleCalendarConfigService {
   oauthConfigured(): boolean {
     return Boolean(
       this.env.get<string>('GOOGLE_CLIENT_ID') &&
-        this.env.get<string>('GOOGLE_CLIENT_SECRET'),
+      this.env.get<string>('GOOGLE_CLIENT_SECRET'),
     );
   }
 

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { resolveServiceId } from '../resolve-service';
@@ -102,8 +106,7 @@ export class CreateAppointmentTool implements AgentTool {
             contactEmail: appointment.contactEmail,
           },
           confirmationMessage:
-            messages.appointmentConfirmation ??
-            'Tu cita quedó confirmada.',
+            messages.appointmentConfirmation ?? 'Tu cita quedó confirmada.',
           googleReviewsUrl: business.googleReviewsUrl ?? undefined,
           reviewHint: business.googleReviewsUrl
             ? `Incluí este link de reseñas de Google en el email/WhatsApp de confirmación: ${business.googleReviewsUrl}`
@@ -119,7 +122,8 @@ export class CreateAppointmentTool implements AgentTool {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'No se pudo crear la cita',
+        error:
+          error instanceof Error ? error.message : 'No se pudo crear la cita',
       };
     }
   }

@@ -46,7 +46,9 @@ export class KieVideoProvider implements VideoGenerationProvider {
     this.timeoutMs = Number(
       this.config.get<string>('VIDEO_TIMEOUT_MS') || 12 * 60 * 1000,
     );
-    this.pollMs = Number(this.config.get<string>('VIDEO_POLL_INTERVAL_MS') || 5000);
+    this.pollMs = Number(
+      this.config.get<string>('VIDEO_POLL_INTERVAL_MS') || 5000,
+    );
     this.estimatedCost = Number(
       this.config.get<string>('KIE_VIDEO_ESTIMATED_COST') || 0.08,
     );
@@ -75,7 +77,12 @@ export class KieVideoProvider implements VideoGenerationProvider {
     try {
       const taskId = this.isVeoModel(this.model)
         ? await this.createVeoTask(prompt, aspectRatio)
-        : await this.createMarketTask(input, prompt, aspectRatio, durationSeconds);
+        : await this.createMarketTask(
+            input,
+            prompt,
+            aspectRatio,
+            durationSeconds,
+          );
 
       const result = await this.pollTask(taskId);
       if (!result.videoUrl) {
@@ -130,12 +137,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
   ): Promise<string> {
     const payload = {
       model: this.model,
-      input: this.buildMarketInput(
-        input,
-        prompt,
-        aspectRatio,
-        durationSeconds,
-      ),
+      input: this.buildMarketInput(input, prompt, aspectRatio, durationSeconds),
     };
 
     const res = await requestJson<{
@@ -151,7 +153,11 @@ export class KieVideoProvider implements VideoGenerationProvider {
       timeoutMs: 30_000,
     });
 
-    this.assertKieOk(res.status, res.json.code, res.json.msg || res.json.message);
+    this.assertKieOk(
+      res.status,
+      res.json.code,
+      res.json.msg || res.json.message,
+    );
     const taskId = res.json.data?.taskId || res.json.data?.task_id;
     if (!taskId) {
       throw new VideoGenerationFailedError(
@@ -252,7 +258,8 @@ export class KieVideoProvider implements VideoGenerationProvider {
     if (state === 'fail' || state === 'failed') {
       return {
         state: 'fail',
-        error: asString(data.failMsg) || asString(data.errorMessage) || res.json.msg,
+        error:
+          asString(data.failMsg) || asString(data.errorMessage) || res.json.msg,
       };
     }
     if (state === 'success') {
@@ -280,7 +287,10 @@ export class KieVideoProvider implements VideoGenerationProvider {
     if (flag === 2 || flag === 3) {
       return {
         state: 'fail',
-        error: asString(data.errorMessage) || res.json.msg || 'Veo generation failed',
+        error:
+          asString(data.errorMessage) ||
+          res.json.msg ||
+          'Veo generation failed',
       };
     }
     return { state: 'generating' };
@@ -294,11 +304,15 @@ export class KieVideoProvider implements VideoGenerationProvider {
       asString(asRecord(data.response)?.resultUrl);
     if (direct) return direct;
 
-    const parsed = this.parseMaybeJson(data.resultJson) ?? this.parseMaybeJson(data.resultUrls);
+    const parsed =
+      this.parseMaybeJson(data.resultJson) ??
+      this.parseMaybeJson(data.resultUrls);
     const fromParsed = this.firstUrl(parsed);
     if (fromParsed) return fromParsed;
 
-    return this.firstUrl(data.resultUrls) || this.firstUrl(asRecord(data.response));
+    return (
+      this.firstUrl(data.resultUrls) || this.firstUrl(asRecord(data.response))
+    );
   }
 
   private parseMaybeJson(value: unknown): unknown {
@@ -350,7 +364,10 @@ export class KieVideoProvider implements VideoGenerationProvider {
     }
     if (code != null && code !== 200) {
       const message = msg || `Kie.ai code ${code}`;
-      if ([429, 500, 502, 503].includes(code) || /busy|demand|queue|overloaded/i.test(message)) {
+      if (
+        [429, 500, 502, 503].includes(code) ||
+        /busy|demand|queue|overloaded/i.test(message)
+      ) {
         throw new VideoProviderUnavailableError(this.name, message);
       }
       throw new VideoGenerationFailedError(this.name, message);

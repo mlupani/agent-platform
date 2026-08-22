@@ -87,7 +87,8 @@ export class ToolExecutorService {
 
     const started = Date.now();
     try {
-      const run = () => tool.execute(parsed.data, { ...context, idempotencyKey });
+      const run = () =>
+        tool.execute(parsed.data, { ...context, idempotencyKey });
       const result =
         risk === 'READ'
           ? await withExponentialBackoff(() =>
@@ -101,7 +102,13 @@ export class ToolExecutorService {
         durationMs: Date.now() - started,
       };
 
-      await this.record(toolName, parsed.data, sanitized, context, sanitized.durationMs ?? 0);
+      await this.record(
+        toolName,
+        parsed.data,
+        sanitized,
+        context,
+        sanitized.durationMs ?? 0,
+      );
       return sanitized;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Tool failed';
@@ -111,7 +118,13 @@ export class ToolExecutorService {
         error: message,
         durationMs: Date.now() - started,
       };
-      await this.record(toolName, parsed.data, failed, context, failed.durationMs ?? 0);
+      await this.record(
+        toolName,
+        parsed.data,
+        failed,
+        context,
+        failed.durationMs ?? 0,
+      );
       return failed;
     }
   }
@@ -148,7 +161,7 @@ export class ToolExecutorService {
         conversationId: context.conversationId,
         tool: toolName,
         input: input as object,
-        output: result as object,
+        output: result,
         durationMs,
         success: result.success,
         error: result.error,

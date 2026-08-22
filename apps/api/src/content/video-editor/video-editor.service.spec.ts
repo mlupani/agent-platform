@@ -135,9 +135,9 @@ describe('VideoEditorService', () => {
         branding: {},
       });
       expect(result.skipped).toBe(false);
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('drawtext=');
       expect(filter).toContain('hook.txt');
       expect(filter).not.toContain('cta.txt');
@@ -165,9 +165,9 @@ describe('VideoEditorService', () => {
         branding: { primaryColor: '#111111' },
         expectedDurationSeconds: 5,
       });
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('cta.txt');
       expect(filter).toContain('drawbox=');
       expect(filter).toContain('0x111111');
@@ -188,9 +188,9 @@ describe('VideoEditorService', () => {
         }),
         branding: {},
       });
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('cta.txt');
       expect(filter).not.toContain('hook.txt');
     });
@@ -212,9 +212,9 @@ describe('VideoEditorService', () => {
         }),
         branding: {},
       });
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('hook.txt');
       expect(filter).toContain('cta.txt');
     });
@@ -268,9 +268,9 @@ describe('VideoEditorService', () => {
         }),
         branding: { logoUrl: 'https://cdn.example/logo.png' },
       });
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('hook.txt');
       expect(filter).toContain('cta.txt');
       expect(filter).toContain('overlay=');
@@ -295,9 +295,9 @@ describe('VideoEditorService', () => {
         branding: {},
       });
       expect(result.skipped).toBe(false);
-      const filter = ((runner.run as jest.Mock).mock.calls[0][0] as string[]).join(
-        ' ',
-      );
+      const filter = (
+        (runner.run as jest.Mock).mock.calls[0][0] as string[]
+      ).join(' ');
       expect(filter).toContain('force_original_aspect_ratio=increase');
       expect(filter).toContain('crop=720:1280');
     });
@@ -366,8 +366,7 @@ async function withOutputFile(
 describe('loadVideoEditorSettings', () => {
   it('usa 9:16 720p por defecto', () => {
     const settings = loadVideoEditorSettings({
-      get: (key: string) =>
-        key === 'VIDEO_RESOLUTION' ? '720p' : undefined,
+      get: (key: string) => (key === 'VIDEO_RESOLUTION' ? '720p' : undefined),
     } as never);
     expect(settings.targetWidth).toBe(720);
     expect(settings.targetHeight).toBe(1280);

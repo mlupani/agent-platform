@@ -31,7 +31,11 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
     params: WhatsAppSendTextParams,
   ): Promise<WhatsAppSendTextResult> {
     const waConfig = await this.config.getForRuntime(params.businessId);
-    if (!waConfig?.enabled || !waConfig.accessTokenEnc || !waConfig.phoneNumberId) {
+    if (
+      !waConfig?.enabled ||
+      !waConfig.accessTokenEnc ||
+      !waConfig.phoneNumberId
+    ) {
       throw new Error('Meta Cloud WhatsApp no está conectado');
     }
     const token = await this.config.getAccessToken(params.businessId);
@@ -42,35 +46,40 @@ export class MetaCloudWhatsAppProvider implements WhatsAppProvider {
 
     try {
       const response = await withExponentialBackoff(() =>
-        withTimeout(async () => {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to,
-              type: 'text',
-              text: { preview_url: false, body: params.body },
-            }),
-          });
-          const json = (await res.json()) as {
-            messages?: Array<{ id: string }>;
-            error?: { message?: string };
-          };
-          if (!res.ok) {
-            throw new Error(json.error?.message ?? `Meta API ${res.status}`);
-          }
-          return json;
-        }, 12_000, 'meta sendText'),
+        withTimeout(
+          async () => {
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to,
+                type: 'text',
+                text: { preview_url: false, body: params.body },
+              }),
+            });
+            const json = (await res.json()) as {
+              messages?: Array<{ id: string }>;
+              error?: { message?: string };
+            };
+            if (!res.ok) {
+              throw new Error(json.error?.message ?? `Meta API ${res.status}`);
+            }
+            return json;
+          },
+          12_000,
+          'meta sendText',
+        ),
       );
       await this.config.setStatus(params.businessId, 'connected', null);
       return { externalId: response.messages?.[0]?.id };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Meta send failed';
+      const message =
+        error instanceof Error ? error.message : 'Meta send failed';
       this.logger.warn(message);
       await this.config.setStatus(params.businessId, 'error', message);
       throw error;

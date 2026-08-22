@@ -14,7 +14,9 @@ export class TelegramChannel implements ChannelAdapter {
     const data = payload as Record<string, unknown>;
     return {
       businessId: String(data.businessId ?? ''),
-      conversationId: data.conversationId ? String(data.conversationId) : undefined,
+      conversationId: data.conversationId
+        ? String(data.conversationId)
+        : undefined,
       externalId: data.chatId ? String(data.chatId) : undefined,
       message: String(data.message ?? data.text ?? ''),
       metadata: { provider: 'telegram', raw: data },

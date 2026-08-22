@@ -105,8 +105,7 @@ export function buildFilterGraph(input: {
 
   for (const op of operations) {
     if (op.type !== 'text') continue;
-    const textFile =
-      op.id === 'hook' ? input.hookTextFile : input.ctaTextFile;
+    const textFile = op.id === 'hook' ? input.hookTextFile : input.ctaTextFile;
     if (!textFile || !fontfile) continue;
     const fontSize = Math.max(12, Math.round(op.fontSize));
 
@@ -116,7 +115,11 @@ export function buildFilterGraph(input: {
       const textH = Math.round(fontSize * lineCount * 1.28);
       const btnH = Math.min(
         barH - 12,
-        Math.max(48, textH + 22, Math.round(barH * (lineCount > 1 ? 0.62 : 0.5))),
+        Math.max(
+          48,
+          textH + 22,
+          Math.round(barH * (lineCount > 1 ? 0.62 : 0.5)),
+        ),
       );
       const btnX = Math.round((width - btnW) / 2);
       const btnY = height - barH + Math.round((barH - btnH) / 2);

@@ -230,14 +230,10 @@ export class BusinessesService {
     }>,
   ) {
     const current = await this.getCurrent();
-    const email =
-      data.email === '' ? null : (data.email as string | null | undefined);
-    const website =
-      data.website === '' ? null : (data.website as string | null | undefined);
+    const email = data.email === '' ? null : data.email;
+    const website = data.website === '' ? null : data.website;
     const googleReviewsUrl =
-      data.googleReviewsUrl === ''
-        ? null
-        : (data.googleReviewsUrl as string | null | undefined);
+      data.googleReviewsUrl === '' ? null : data.googleReviewsUrl;
 
     return this.prisma.business.update({
       where: { id: current.id },
@@ -365,11 +361,18 @@ export class BusinessesService {
       const legacy = Object.fromEntries(
         synced.map((row) => {
           const key = legacyKeys[row.dayOfWeek];
-          if (row.isClosed || !Array.isArray(row.ranges) || !row.ranges.length) {
+          if (
+            row.isClosed ||
+            !Array.isArray(row.ranges) ||
+            !row.ranges.length
+          ) {
             return [key, null];
           }
           const first = row.ranges[0] as { start?: string; end?: string };
-          return [key, { open: first.start, close: first.end, ranges: row.ranges }];
+          return [
+            key,
+            { open: first.start, close: first.end, ranges: row.ranges },
+          ];
         }),
       );
       await tx.business.update({

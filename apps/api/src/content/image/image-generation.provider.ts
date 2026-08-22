@@ -4,7 +4,11 @@ export interface ImageGenerationInput {
   size: string;
   quality?: 'low' | 'medium' | 'high' | 'auto';
   /** Imágenes de referencia (producto, local, estilo) para images.edit */
-  referenceImages?: Array<{ buffer: Buffer; mimeType: string; filename?: string }>;
+  referenceImages?: Array<{
+    buffer: Buffer;
+    mimeType: string;
+    filename?: string;
+  }>;
 }
 
 export interface GeneratedImage {

@@ -113,7 +113,7 @@ export class RagService {
               source: params.source ?? document.source,
               category: params.category ?? document.category,
               page: index + 1,
-              metadata: params.metadata as object | undefined,
+              metadata: params.metadata,
             },
           }),
         ),
@@ -276,8 +276,6 @@ export class RagService {
       const prev = byId.get(match.id);
       if (!prev || match.score > prev.score) byId.set(match.id, match);
     }
-    return [...byId.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK);
+    return [...byId.values()].sort((a, b) => b.score - a.score).slice(0, topK);
   }
 }

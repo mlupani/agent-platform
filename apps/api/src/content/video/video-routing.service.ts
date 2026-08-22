@@ -85,7 +85,10 @@ export class VideoRoutingService {
     }
   }
 
-  private readName(key: string, fallback: VideoProviderName): VideoProviderName {
+  private readName(
+    key: string,
+    fallback: VideoProviderName,
+  ): VideoProviderName {
     const raw = (this.env.get<string>(key) || fallback).trim().toLowerCase();
     if (raw === 'kie' || raw === 'kie.ai') return 'kie';
     if (raw === 'fal' || raw === 'fal.ai') return 'fal';

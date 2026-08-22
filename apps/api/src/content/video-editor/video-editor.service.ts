@@ -7,7 +7,11 @@ import { loadVideoEditorSettings } from './video-editor.config';
 import { VideoEditError } from './video-editor.errors';
 import { FFMPEG_RUNNER } from './ffmpeg.runner';
 import { buildFilterGraph, planOperations } from './filter-graph.builder';
-import { defaultCtaWindow, defaultHookWindow, resolveOverlayRange } from './text-overlay';
+import {
+  defaultCtaWindow,
+  defaultHookWindow,
+  resolveOverlayRange,
+} from './text-overlay';
 import {
   assertDurationClose,
   assertPlayableMp4,
@@ -156,7 +160,9 @@ export class VideoEditorService {
         graph.filterComplex,
         '-map',
         `[${graph.outputLabel}]`,
-        ...(probe.hasAudio ? ['-map', '0:a', '-c:a', 'aac', '-b:a', '128k'] : ['-an']),
+        ...(probe.hasAudio
+          ? ['-map', '0:a', '-c:a', 'aac', '-b:a', '128k']
+          : ['-an']),
         '-c:v',
         'libx264',
         '-preset',

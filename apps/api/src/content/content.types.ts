@@ -36,11 +36,7 @@ export type ContentAssetFormat =
 export type ContentAssetRole = 'ORIGINAL' | 'EDITED';
 
 export type AutoEditStatus =
-  | 'NONE'
-  | 'PROCESSING'
-  | 'COMPLETED'
-  | 'SKIPPED'
-  | 'FAILED';
+  'NONE' | 'PROCESSING' | 'COMPLETED' | 'SKIPPED' | 'FAILED';
 
 export interface VideoEditingPlan {
   add_hook?: boolean;

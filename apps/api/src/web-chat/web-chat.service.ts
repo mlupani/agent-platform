@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AgentService } from '../ai/agents/agent.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WebChatConfigService } from './web-chat-config.service';

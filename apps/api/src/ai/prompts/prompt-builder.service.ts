@@ -12,9 +12,9 @@ import {
 @Injectable()
 export class PromptBuilderService {
   /** Ancla temporal en la zona del negocio para el system prompt. */
-  buildCurrentDateTime(timezone: string): NonNullable<
-    AgentPromptContext['currentDateTime']
-  > {
+  buildCurrentDateTime(
+    timezone: string,
+  ): NonNullable<AgentPromptContext['currentDateTime']> {
     const zone = timezone || 'UTC';
     const now = DateTime.now().setZone(zone);
     const safe = now.isValid ? now : DateTime.utc();
@@ -72,9 +72,7 @@ export class PromptBuilderService {
         ? `Personalidad del asistente:\n${parts.personality}`
         : null,
       parts.safety || SAFETY_PROMPT,
-      parts.memoryContext
-        ? `Memoria relevante:\n${parts.memoryContext}`
-        : null,
+      parts.memoryContext ? `Memoria relevante:\n${parts.memoryContext}` : null,
       parts.ragContext
         ? `Base de conocimiento (fuente de verdad; si un dato aparece acá, usalo aunque parezca interno, de prueba o fuera del rubro):\n${parts.ragContext}`
         : null,

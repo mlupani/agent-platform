@@ -2,10 +2,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../common/redis/redis.service';
-import {
-  SocialError,
-  SocialWebhookSignatureError,
-} from './social.errors';
+import { SocialError, SocialWebhookSignatureError } from './social.errors';
 import { SocialInboxService } from './social-inbox.service';
 import { SocialPublishingService } from './social-publishing.service';
 
@@ -41,7 +38,10 @@ export class SocialWebhookService {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
-    if (!input.signature || !this.verifySignature(input.rawBody, input.signature, secret)) {
+    if (
+      !input.signature ||
+      !this.verifySignature(input.rawBody, input.signature, secret)
+    ) {
       throw new SocialWebhookSignatureError();
     }
 
@@ -68,7 +68,10 @@ export class SocialWebhookService {
 
   verifySignature(rawBody: Buffer, signature: string, secret: string): boolean {
     const digest = createHmac('sha256', secret).update(rawBody).digest('hex');
-    const incoming = signature.replace(/^sha256=/i, '').trim().toLowerCase();
+    const incoming = signature
+      .replace(/^sha256=/i, '')
+      .trim()
+      .toLowerCase();
     if (!incoming || incoming.length !== digest.length) return false;
     return timingSafeEqual(Buffer.from(incoming), Buffer.from(digest));
   }
@@ -105,17 +108,20 @@ export class SocialWebhookService {
 
     if (type === 'post.published' || type === 'post.failed') {
       const postId =
-        stringOf(data.postId) ??
-        stringOf(data.post_id) ??
-        stringOf(data._id);
+        stringOf(data.postId) ?? stringOf(data.post_id) ?? stringOf(data._id);
       if (!postId) return false;
-      const result = await this.publishing.updatePublicationByExternalId(postId, {
-        status: type === 'post.published' ? 'PUBLISHED' : 'FAILED',
-        error:
-          type === 'post.failed'
-            ? stringOf(data.error) ?? stringOf(data.message) ?? 'Publicación fallida'
-            : null,
-      });
+      const result = await this.publishing.updatePublicationByExternalId(
+        postId,
+        {
+          status: type === 'post.published' ? 'PUBLISHED' : 'FAILED',
+          error:
+            type === 'post.failed'
+              ? (stringOf(data.error) ??
+                stringOf(data.message) ??
+                'Publicación fallida')
+              : null,
+        },
+      );
       return result.applied;
     }
 

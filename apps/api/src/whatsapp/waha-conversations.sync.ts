@@ -88,7 +88,7 @@ export class WahaConversationsSyncService {
     if (!conversation?.externalId) return 0;
 
     const chatId = conversation.externalId;
-    let messages: WahaChatMessage[] = [];
+    let messages: WahaChatMessage[];
     try {
       messages = await this.waha.getChatMessages(businessId, chatId, {
         limit: 80,
@@ -191,11 +191,10 @@ export class WahaConversationsSyncService {
     const waConfig = await this.config.getForRuntime(businessId);
     if (!waConfig) return 0;
     const ready =
-      waConfig.status === 'connected' ||
-      waConfig.sessionStatus === 'WORKING';
+      waConfig.status === 'connected' || waConfig.sessionStatus === 'WORKING';
     if (!ready) return 0;
 
-    let chats: WahaChatOverview[] = [];
+    let chats: WahaChatOverview[];
     try {
       chats = await this.waha.listChatsOverview(businessId, { limit: 100 });
     } catch (error) {
@@ -227,9 +226,7 @@ export class WahaConversationsSyncService {
       const phone =
         this.phoneFromChat(chat, chatId, ownerPhone) ||
         (selfChat ? ownerPhone : null);
-      const name = selfChat
-        ? 'Yo'
-        : chat.name?.trim() || null;
+      const name = selfChat ? 'Yo' : chat.name?.trim() || null;
       const contactPhone = selfChat ? ownerPhone || phone : phone;
       const last = chat.lastMessage;
       const preview = last ? this.messageContent(last) : null;
@@ -238,11 +235,7 @@ export class WahaConversationsSyncService {
         this.toDate(chat._chat?.timestamp) ??
         this.toDate(chat.timestamp) ??
         this.toDate(last?.timestamp);
-      const lastSender = last
-        ? last.fromMe
-          ? 'HUMAN'
-          : 'CLIENT'
-        : null;
+      const lastSender = last ? (last.fromMe ? 'HUMAN' : 'CLIENT') : null;
 
       const existing = await this.findExistingConversation(
         businessId,
@@ -298,7 +291,7 @@ export class WahaConversationsSyncService {
             lastMessageSender: lastSender ?? existing.lastMessageSender,
             hiddenAt: null,
             ...(reopen ? { status: 'AI' as const } : {}),
-            metadata: nextMeta as object,
+            metadata: nextMeta,
           },
         });
 

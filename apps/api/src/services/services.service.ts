@@ -111,7 +111,9 @@ export class ServicesService {
       .map((service) => {
         const price =
           service.priceDescription ||
-          (service.price != null ? `$${service.price.toString()}` : 'Consultar');
+          (service.price != null
+            ? `$${service.price.toString()}`
+            : 'Consultar');
         return `- ${service.name} (${service.durationMinutes} min) — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;

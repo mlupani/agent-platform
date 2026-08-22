@@ -17,11 +17,14 @@ export class AppointmentsService {
     private readonly google: GoogleCalendarService,
   ) {}
 
-  async list(businessId: string, filters?: {
-    from?: string;
-    to?: string;
-    status?: string;
-  }) {
+  async list(
+    businessId: string,
+    filters?: {
+      from?: string;
+      to?: string;
+      status?: string;
+    },
+  ) {
     return this.prisma.appointment.findMany({
       where: {
         businessId,
@@ -44,11 +47,7 @@ export class AppointmentsService {
   }
 
   /** Citas locales + eventos de Google Calendar (dedupe por googleEventId). */
-  async listFeed(
-    businessId: string,
-    from: string,
-    to: string,
-  ) {
+  async listFeed(businessId: string, from: string, to: string) {
     const fromDate = new Date(from);
     const toDate = new Date(to);
     const [local, googleEvents, googleConnected] = await Promise.all([
@@ -115,8 +114,7 @@ export class AppointmentsService {
       }));
 
     const items = [...localItems, ...googleItems].sort(
-      (a, b) =>
-        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+      (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
     );
 
     return {
@@ -192,9 +190,7 @@ export class AppointmentsService {
     const today = DateTime.now().setZone(zone).startOf('day');
     const day = DateTime.fromISO(params.date, { zone }).startOf('day');
     const dayValid = day.isValid;
-    const dayLabel = dayValid
-      ? day.setLocale('es').toFormat('cccc')
-      : null;
+    const dayLabel = dayValid ? day.setLocale('es').toFormat('cccc') : null;
     const isPast = dayValid && day < today;
     const isToday = dayValid && day.equals(today);
 
@@ -221,9 +217,8 @@ export class AppointmentsService {
       where: { id: input.businessId },
     });
 
-    let service:
-      | { id: string; name: string; durationMinutes: number }
-      | null = null;
+    let service: { id: string; name: string; durationMinutes: number } | null =
+      null;
     if (input.serviceId) {
       service = await this.prisma.service.findFirst({
         where: {
@@ -330,11 +325,7 @@ export class AppointmentsService {
     });
   }
 
-  async reschedule(
-    businessId: string,
-    id: string,
-    startsAtInput: Date,
-  ) {
+  async reschedule(businessId: string, id: string, startsAtInput: Date) {
     const appointment = await this.get(businessId, id);
     if (appointment.status === 'cancelled') {
       throw new BadRequestException('La cita ya está cancelada');

@@ -96,11 +96,13 @@ describe('AppointmentsService', () => {
         endIso: '2026-08-12T10:30:00.000-03:00',
       },
     ]);
-    prisma.appointment.create.mockImplementation(async ({ data }: { data: unknown }) => ({
-      id: 'apt-1',
-      ...(data as object),
-      service: { id: 'svc-1', name: 'Consulta', durationMinutes: 30 },
-    }));
+    prisma.appointment.create.mockImplementation(
+      async ({ data }: { data: unknown }) => ({
+        id: 'apt-1',
+        ...(data as object),
+        service: { id: 'svc-1', name: 'Consulta', durationMinutes: 30 },
+      }),
+    );
 
     const appointment = await service.create({
       businessId: 'biz-1',

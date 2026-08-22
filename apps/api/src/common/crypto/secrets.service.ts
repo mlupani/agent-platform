@@ -30,9 +30,10 @@ export class SecretsService {
     const encrypted = buffer.subarray(28);
     const decipher = createDecipheriv('aes-256-gcm', this.key(), iv);
     decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
-      'utf8',
-    );
+    return Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString('utf8');
   }
 
   private key(): Buffer {

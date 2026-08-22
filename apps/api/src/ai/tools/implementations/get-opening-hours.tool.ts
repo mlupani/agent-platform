@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { WEEKDAY_LABELS } from '../../../common/constants';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import type {
+  AgentTool,
+  ToolContext,
+  ToolResult,
+} from '../agent-tool.interface';
 
 const schema = z.object({});
 
@@ -47,9 +51,7 @@ export class GetOpeningHoursTool implements AgentTool {
       success: true,
       data: {
         timezone: business.timezone,
-        hours: structured.length
-          ? structured
-          : business.openingHours,
+        hours: structured.length ? structured : business.openingHours,
         offlineMessage:
           business.defaultMessages &&
           typeof business.defaultMessages === 'object' &&

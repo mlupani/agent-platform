@@ -121,36 +121,36 @@ export class ContentService {
 
     const [costAgg, imageGenerationsThisMonth, videoGenerationsThisMonth] =
       await Promise.all([
-      this.prisma.contentGenerationExecution.aggregate({
-        where: {
-          businessId,
-          createdAt: { gte: monthStart.toJSDate() },
-          success: true,
-          content: { status: { not: 'FAILED' } },
-        },
-        _sum: { estimatedCost: true },
-      }),
-      this.prisma.contentAsset.count({
-        where: {
-          createdAt: { gte: monthStart.toJSDate() },
-          type: 'IMAGE',
-          content: {
+        this.prisma.contentGenerationExecution.aggregate({
+          where: {
             businessId,
-            status: { not: 'FAILED' },
+            createdAt: { gte: monthStart.toJSDate() },
+            success: true,
+            content: { status: { not: 'FAILED' } },
           },
-        },
-      }),
-      this.prisma.contentAsset.count({
-        where: {
-          createdAt: { gte: monthStart.toJSDate() },
-          type: 'VIDEO',
-          content: {
-            businessId,
-            status: { not: 'FAILED' },
+          _sum: { estimatedCost: true },
+        }),
+        this.prisma.contentAsset.count({
+          where: {
+            createdAt: { gte: monthStart.toJSDate() },
+            type: 'IMAGE',
+            content: {
+              businessId,
+              status: { not: 'FAILED' },
+            },
           },
-        },
-      }),
-    ]);
+        }),
+        this.prisma.contentAsset.count({
+          where: {
+            createdAt: { gte: monthStart.toJSDate() },
+            type: 'VIDEO',
+            content: {
+              businessId,
+              status: { not: 'FAILED' },
+            },
+          },
+        }),
+      ]);
 
     return {
       generatedThisMonth: generatedMonth,
@@ -306,9 +306,7 @@ export class ContentService {
       ? this.parseChannels(input.channels)
       : [];
     const durationSeconds =
-      mediaType === 'VIDEO'
-        ? parseVideoDuration(input.durationSeconds, 5)
-        : 5;
+      mediaType === 'VIDEO' ? parseVideoDuration(input.durationSeconds, 5) : 5;
 
     try {
       const result = await this.contentAgent.suggestBrief({
@@ -477,7 +475,8 @@ export class ContentService {
         durationSeconds: input.durationSeconds,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al generar';
+      const message =
+        error instanceof Error ? error.message : 'Error al generar';
       await this.markGenerationFailed(content.id, businessId, message);
       throw new BadRequestException(message);
     }
@@ -511,7 +510,8 @@ export class ContentService {
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al generar';
+      const message =
+        error instanceof Error ? error.message : 'Error al generar';
       await this.markGenerationFailed(content.id, businessId, message);
       if (content.generationMode === 'AUTOMATIC') {
         await this.notify.notifyAutoGeneration({
@@ -598,7 +598,8 @@ export class ContentService {
         primaryColor: branding?.primaryColor,
       });
     } else {
-      const referenceImages = await this.loadReferenceImageBuffers(imageRefUrls);
+      const referenceImages =
+        await this.loadReferenceImageBuffers(imageRefUrls);
       if (logoUrl && referenceImages[0]) {
         referenceImages[0].filename = 'brand-logo.png';
       }
@@ -640,7 +641,7 @@ export class ContentService {
         imagePrompt: strategyResult.strategy.imagePrompt,
         videoPrompt: strategyResult.strategy.videoPrompt ?? null,
         visualStyle: strategyResult.strategy.visualStyle,
-        strategy: strategyResult.strategy as object,
+        strategy: strategyResult.strategy,
         serviceId: strategyResult.strategy.serviceId || input.serviceId || null,
         error: null,
       },
@@ -669,7 +670,11 @@ export class ContentService {
     businessId: string;
     format: ContentAssetFormat;
     prompt: string;
-    referenceImages: Array<{ buffer: Buffer; mimeType: string; filename: string }>;
+    referenceImages: Array<{
+      buffer: Buffer;
+      mimeType: string;
+      filename: string;
+    }>;
   }) {
     const size = this.sizeForFormat(input.format);
     const image = await this.images.generate({
@@ -1044,7 +1049,9 @@ export class ContentService {
         String(stored.imagePrompt || 'social marketing visual'),
       videoPrompt:
         content.videoPrompt ||
-        (typeof stored.videoPrompt === 'string' ? stored.videoPrompt : undefined),
+        (typeof stored.videoPrompt === 'string'
+          ? stored.videoPrompt
+          : undefined),
       visualStyle: content.visualStyle || String(stored.visualStyle || ''),
       editing: storedEditing,
     };
@@ -1087,7 +1094,9 @@ export class ContentService {
     });
     if (!content) throw new NotFoundException('Contenido no encontrado');
     if (!content.assets.length) {
-      throw new BadRequestException('El contenido no tiene media para publicar');
+      throw new BadRequestException(
+        'El contenido no tiene media para publicar',
+      );
     }
     if (['GENERATING', 'PUBLISHING'].includes(content.status)) {
       throw new BadRequestException('El contenido ya se esta procesando');
@@ -1101,7 +1110,9 @@ export class ContentService {
       input?.channels?.length ? input.channels : content.channels,
     );
     if (!channels.length) {
-      throw new BadRequestException('Seleccioná al menos un canal para publicar');
+      throw new BadRequestException(
+        'Seleccioná al menos un canal para publicar',
+      );
     }
 
     await this.prisma.generatedContent.update({
@@ -1216,7 +1227,9 @@ export class ContentService {
       }
     }
 
-    const publishedCount = results.filter((r) => r.status === 'PUBLISHED').length;
+    const publishedCount = results.filter(
+      (r) => r.status === 'PUBLISHED',
+    ).length;
     const failedCount = results.length - publishedCount;
     const finalStatus: ContentStatus =
       publishedCount === 0
@@ -1280,8 +1293,7 @@ export class ContentService {
     if (!existing) throw new NotFoundException('Contenido no encontrado');
 
     const status =
-      input.status &&
-      ['DRAFT', 'READY'].includes(input.status)
+      input.status && ['DRAFT', 'READY'].includes(input.status)
         ? (input.status as ContentStatus)
         : existing.status === 'READY' || existing.status === 'DRAFT'
           ? existing.status
@@ -1338,7 +1350,11 @@ export class ContentService {
     }
 
     await this.prisma.generatedContent.delete({ where: { id } });
-    this.realtime.emit('content.updated', { contentId: id, deleted: true }, businessId);
+    this.realtime.emit(
+      'content.updated',
+      { contentId: id, deleted: true },
+      businessId,
+    );
     return { ok: true };
   }
 
@@ -1392,7 +1408,11 @@ export class ContentService {
   }) {
     const businessId = await this.businesses.getCurrentId();
     const days = input.autoGenerateDaysOfWeek
-      ? [...new Set(input.autoGenerateDaysOfWeek.filter((d) => d >= 1 && d <= 7))]
+      ? [
+          ...new Set(
+            input.autoGenerateDaysOfWeek.filter((d) => d >= 1 && d <= 7),
+          ),
+        ]
       : undefined;
     const channels = input.autoGenerateChannels
       ? this.parseChannels(input.autoGenerateChannels)
@@ -1542,7 +1562,8 @@ export class ContentService {
       (videos.length > 0 && images.length === 0);
     const editedVideo = videos.find((a) => a.role === 'EDITED');
     if (preferVideo && editedVideo) return editedVideo;
-    const pool = preferVideo && videos.length ? videos : images.length ? images : assets;
+    const pool =
+      preferVideo && videos.length ? videos : images.length ? images : assets;
 
     if (channel === 'INSTAGRAM_FEED') {
       return (
@@ -1586,10 +1607,9 @@ export class ContentService {
           ? `Add a short occasion badge (readable, not decorative gibberish).`
           : '';
 
-    const headline =
-      input.headline?.trim()
-        ? `Short headline text on image (few words only): "${input.headline.trim()}".`
-        : 'Leave a clean area for a short headline (few words, high contrast).';
+    const headline = input.headline?.trim()
+      ? `Short headline text on image (few words only): "${input.headline.trim()}".`
+      : 'Leave a clean area for a short headline (few words, high contrast).';
 
     const colors = [
       input.primaryColor ? `primary ${input.primaryColor}` : null,
@@ -1598,9 +1618,7 @@ export class ContentService {
       .filter(Boolean)
       .join(', ');
 
-    const colorHint = colors
-      ? `Prefer brand colors: ${colors}.`
-      : '';
+    const colorHint = colors ? `Prefer brand colors: ${colors}.` : '';
 
     return [
       input.basePrompt.trim(),
@@ -1623,10 +1641,9 @@ export class ContentService {
   }
 
   private normalizeReferenceUrls(urls: string[] | undefined): string[] {
-    return [...new Set((urls ?? []).map((u) => u.trim()).filter(Boolean))].slice(
-      0,
-      4,
-    );
+    return [
+      ...new Set((urls ?? []).map((u) => u.trim()).filter(Boolean)),
+    ].slice(0, 4);
   }
 
   private async loadReferenceImageBuffers(urls: string[]) {
@@ -1727,7 +1744,8 @@ export class ContentService {
   }
 
   private aspectForFormat(format: ContentAssetFormat): string {
-    if (format === 'STORY_VERTICAL' || format === 'SHORT_VERTICAL') return '9:16';
+    if (format === 'STORY_VERTICAL' || format === 'SHORT_VERTICAL')
+      return '9:16';
     if (format === 'FEED_LANDSCAPE') return '16:9';
     if (format === 'FEED_PORTRAIT') return '4:5';
     return '1:1';

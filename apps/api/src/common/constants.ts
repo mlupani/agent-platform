@@ -96,8 +96,7 @@ export const DEFAULT_MEMORY_STRATEGY = {
 } as const;
 
 export const DEFAULT_CONFIGURED_MESSAGES = {
-  welcome:
-    'Hola, soy el asistente virtual. ¿En qué puedo ayudarte?',
+  welcome: 'Hola, soy el asistente virtual. ¿En qué puedo ayudarte?',
   offline:
     'Ahora mismo estamos fuera de horario. Dejá tus datos y te contactamos.',
   handoff: 'Te derivo con una persona del equipo.',
