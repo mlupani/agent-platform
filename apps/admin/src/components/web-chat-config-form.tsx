@@ -116,7 +116,8 @@ export function WebChatConfigForm() {
             <div>
               <h3 className="font-medium">Web</h3>
               <p className="text-sm text-muted mt-1">
-                Widget de chat para tu landing. El agente responde por HTTP.
+                Widget de chat para tu landing. Al conectar este canal, el
+                agente ya responde: no hay un interruptor aparte.
               </p>
             </div>
           </div>

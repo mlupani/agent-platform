@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { WhatsAppIcon } from '@/components/channel-icons';
+import { ChannelAgentRadios } from '@/components/channel-agent-radios';
 import { api } from '@/lib/api';
 
 interface WhatsAppPublicConfig {
@@ -15,6 +16,7 @@ interface WhatsAppPublicConfig {
   displayPhoneNumber: string | null;
   meId: string | null;
   enabled: boolean;
+  agentEnabled: boolean;
   status: string;
   sessionStatus: string | null;
   lastError: string | null;
@@ -82,6 +84,17 @@ export function WhatsAppConfigForm() {
     onSuccess: async () => {
       setQr(null);
       autoStarted.current = false;
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-config'] });
+    },
+  });
+
+  const setAgent = useMutation({
+    mutationFn: async (agentEnabled: boolean) =>
+      api<WhatsAppPublicConfig>('/admin/whatsapp', {
+        method: 'PUT',
+        body: JSON.stringify({ agentEnabled }),
+      }),
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-config'] });
     },
   });
@@ -275,6 +288,21 @@ export function WhatsAppConfigForm() {
           Logout
         </button>
       </div>
+
+      <ChannelAgentRadios
+        name="whatsapp-agent"
+        value={data?.agentEnabled !== false}
+        disabled={!data || setAgent.isPending}
+        onChange={(next) => setAgent.mutate(next)}
+        hint="WhatsApp puede quedar conectado al inbox sin que el agente conteste."
+      />
+      {setAgent.error ? (
+        <p className="text-sm text-rose">
+          {setAgent.error instanceof Error
+            ? setAgent.error.message
+            : 'No se pudo guardar el agente'}
+        </p>
+      ) : null}
     </section>
   );
 }

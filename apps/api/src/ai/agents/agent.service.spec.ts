@@ -59,8 +59,14 @@ describe('AgentService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
-    message: { create: jest.fn(), findMany: jest.fn() },
+    message: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
     agentExecution: { create: jest.fn(), update: jest.fn() },
+    toolExecution: { findFirst: jest.fn() },
   };
 
   const llm: LLMProvider = {
@@ -151,15 +157,44 @@ describe('AgentService', () => {
     prisma.conversation.findFirst.mockResolvedValue(conversation);
     prisma.conversation.update.mockResolvedValue({});
     prisma.message.create.mockResolvedValue({});
+    prisma.message.findFirst.mockResolvedValue(null);
     prisma.message.findMany.mockResolvedValue([]);
     prisma.agentExecution.create.mockResolvedValue({ id: 'exec-1' });
     prisma.agentExecution.update.mockResolvedValue({});
+    prisma.toolExecution.findFirst.mockResolvedValue(null);
     providers.get.mockReturnValue(llm);
     llmRouting.resolvePrimary.mockReturnValue({
       providerName: 'openai',
       model: 'gpt-4.1-mini',
       provider: llm,
       mode: 'openai' as const,
+    });
+  });
+
+  it('does not increment unread when the inbound message was already persisted', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      ...conversation,
+      status: 'HUMAN',
+    });
+    prisma.message.findFirst.mockResolvedValue({
+      id: 'msg-1',
+      sender: 'CLIENT',
+      externalId: 'ext-1',
+    });
+
+    await service.run({
+      businessId: 'biz-1',
+      conversationId: 'conv-1',
+      message: 'Hola',
+      metadata: { wamid: 'ext-1' },
+    });
+
+    expect(prisma.message.create).not.toHaveBeenCalled();
+    expect(prisma.conversation.update).toHaveBeenCalledWith({
+      where: { id: 'conv-1' },
+      data: expect.not.objectContaining({
+        unreadCount: expect.anything(),
+      }),
     });
   });
 

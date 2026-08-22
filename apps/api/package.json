@@ -55,6 +55,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.29",
     "@prisma/client": "^6.19.3",
+    "@zernio/node": "^0.2.606",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.0.9",
     "cloudinary": "^2.10.0",

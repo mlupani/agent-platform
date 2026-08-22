@@ -20,11 +20,11 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
 import { ServicesModule } from './services/services.module';
 import { UsersModule } from './users/users.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
-import { InstagramModule } from './instagram/instagram.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ContentModule } from './content/content.module';
+import { SocialModule } from './social/social.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -60,7 +60,6 @@ import { AppService } from './app.service';
     AutomationsModule,
     ChannelsModule,
     WhatsAppModule,
-    InstagramModule,
     CalendarModule,
     ObservabilityModule,
     UsersModule,
@@ -68,6 +67,7 @@ import { AppService } from './app.service';
     ChatModule,
     WebChatModule,
     ContentModule,
+    SocialModule,
   ],
   controllers: [AppController],
   providers: [

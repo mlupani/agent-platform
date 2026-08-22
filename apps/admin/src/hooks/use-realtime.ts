@@ -50,9 +50,8 @@ export function useRealtimeInvalidation() {
     });
     socketRef.current = socket;
 
-    const invalidateConversations = () => {
+    const invalidateConversationList = () => {
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      void queryClient.invalidateQueries({ queryKey: ['conversation'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     };
 
@@ -60,26 +59,29 @@ export function useRealtimeInvalidation() {
       const conversationId = envelope.payload?.conversationId;
       const message = envelope.payload?.message;
       if (!conversationId || !message?.id) {
-        invalidateConversations();
+        invalidateConversationList();
         return;
       }
 
-      // Actualización inmediata del chat abierto
+      const detail = queryClient.getQueryData<Conversation>([
+        'conversation',
+        conversationId,
+      ]);
+      const messages = detail?.messages ?? [];
+      const alreadyInThread =
+        messages.some((item) => item.id === message.id) ||
+        Boolean(
+          message.externalId &&
+            messages.some((item) => item.externalId === message.externalId),
+        );
+
       queryClient.setQueryData(
         ['conversation', conversationId],
         (current: Conversation | undefined) => {
-          if (!current) return current;
-          const messages = current.messages ?? [];
-          if (messages.some((item) => item.id === message.id)) return current;
-          if (
-            message.externalId &&
-            messages.some((item) => item.externalId === message.externalId)
-          ) {
-            return current;
-          }
+          if (!current || alreadyInThread) return current;
           return {
             ...current,
-            messages: [...messages, message],
+            messages: [...(current.messages ?? []), message],
             lastMessageAt: message.createdAt ?? current.lastMessageAt,
             lastMessagePreview: message.content ?? current.lastMessagePreview,
             lastMessageSender: message.sender ?? current.lastMessageSender,
@@ -103,21 +105,17 @@ export function useRealtimeInvalidation() {
                     message.content ?? item.lastMessagePreview,
                   lastMessageSender:
                     message.sender ?? item.lastMessageSender,
-                  unreadCount: isClientInbound
-                    ? (item.unreadCount ?? 0) + 1
-                    : item.unreadCount,
+                  unreadCount:
+                    isClientInbound && !alreadyInThread
+                      ? (item.unreadCount ?? 0) + 1
+                      : item.unreadCount,
                 }
               : item,
           );
         },
       );
 
-      // Revalidar en background por si faltan campos
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      void queryClient.invalidateQueries({
-        queryKey: ['conversation', conversationId],
-      });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      invalidateConversationList();
     };
 
     const patchConversationUpdated = (
@@ -125,7 +123,7 @@ export function useRealtimeInvalidation() {
     ) => {
       const conversationId = envelope.payload?.conversationId;
       if (!conversationId) {
-        invalidateConversations();
+        invalidateConversationList();
         return;
       }
       const patch = envelope.payload ?? {};
@@ -136,7 +134,6 @@ export function useRealtimeInvalidation() {
           return current.map((item) => {
             if (item.id !== conversationId) return item;
             const next = { ...item, ...patch };
-            // Si el patch no trae unreadCount numérico, conservar el local
             if (typeof patch.unreadCount !== 'number') {
               next.unreadCount = item.unreadCount;
             }
@@ -149,10 +146,7 @@ export function useRealtimeInvalidation() {
         (current: Conversation | undefined) =>
           current ? { ...current, ...patch } : current,
       );
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      void queryClient.invalidateQueries({
-        queryKey: ['conversation', conversationId],
-      });
+      invalidateConversationList();
     };
 
     const invalidateWhatsapp = () => {
@@ -176,14 +170,14 @@ export function useRealtimeInvalidation() {
     };
 
     socket.on('connect', () => {
-      invalidateConversations();
+      invalidateConversationList();
       invalidateWhatsapp();
     });
 
     socket.on('conversation.message.created', patchConversationMessage);
     socket.on('conversation.updated', patchConversationUpdated);
-    socket.on('conversation.bot_status.changed', invalidateConversations);
-    socket.on('message.status.updated', invalidateConversations);
+    socket.on('conversation.bot_status.changed', invalidateConversationList);
+    socket.on('message.status.updated', invalidateConversationList);
     socket.on('whatsapp.status.changed', invalidateWhatsapp);
     socket.on(
       'whatsapp.qr.updated',
@@ -211,12 +205,6 @@ export function useRealtimeInvalidation() {
     socket.on('content.updated', invalidateContent);
     socket.on('realtime.event', (envelope: { event?: string }) => {
       if (!envelope?.event) return;
-      if (
-        envelope.event.startsWith('conversation') ||
-        envelope.event.startsWith('message')
-      ) {
-        invalidateConversations();
-      }
       if (envelope.event.startsWith('whatsapp')) invalidateWhatsapp();
       if (envelope.event.startsWith('content')) invalidateContent();
     });

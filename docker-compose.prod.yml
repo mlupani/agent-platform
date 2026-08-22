@@ -101,20 +101,6 @@ services:
         max-size: '10m'
         max-file: '3'
 
-  instagram:
-    image: subzeroid/aiograpi-rest:6.0.0
-    container_name: agent-platform-instagram
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    logging:
-      driver: json-file
-      options:
-        max-size: '5m'
-        max-file: '3'
-
   api:
     build:
       context: .
@@ -126,8 +112,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      instagram:
-        condition: service_started
       waha:
         condition: service_started
     env_file:
@@ -143,9 +127,8 @@ services:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
-      INSTAGRAM_API_URL: http://instagram:8000
-      INSTAGRAM_SYNC_INTERVAL_MS: ${INSTAGRAM_SYNC_INTERVAL_MS:-8000}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
+      ZERNIO_REDIRECT_URI: ${ZERNIO_REDIRECT_URI:?Set ZERNIO_REDIRECT_URI}
     # Solo localhost: Traefik (host network) proxya hacia acá
     ports:
       - '127.0.0.1:3001:3001'

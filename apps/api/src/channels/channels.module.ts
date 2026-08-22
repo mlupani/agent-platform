@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { InstagramModule } from '../instagram/instagram.module';
+import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { ChannelRegistry } from './channel.registry';
 import { InstagramChannel } from './instagram.channel';
@@ -10,7 +10,7 @@ import { WhatsAppChannel } from './whatsapp.channel';
 @Module({
   imports: [
     forwardRef(() => WhatsAppModule),
-    forwardRef(() => InstagramModule),
+    forwardRef(() => SocialModule),
   ],
   providers: [
     WebChatChannel,

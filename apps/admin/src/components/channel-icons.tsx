@@ -66,6 +66,22 @@ export function InstagramIconMono({
   );
 }
 
+/** Logo de TikTok (glyph) */
+export function TikTokIcon({ className = 'h-5 w-5', title }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="currentColor"
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.88-2.89 2.89 2.89 0 0 1 2.88-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.16 15.3 6.34 6.34 0 0 0 9.5 21.64a6.34 6.34 0 0 0 6.34-6.34V8.73a8.18 8.18 0 0 0 4.76 1.52V6.8a4.84 4.84 0 0 1-1.01-.11z" />
+    </svg>
+  );
+}
+
 /** Icono de canal web / widget embebido */
 export function WebChannelIcon({ className = 'h-5 w-5', title }: IconProps) {
   return (
@@ -117,6 +133,18 @@ export function ChannelBadge({
         className={`inline-flex ${box} items-center justify-center rounded-full bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] text-white shrink-0`}
       >
         <InstagramIconMono className={icon} />
+      </span>
+    );
+  }
+
+  if (value === 'TIKTOK') {
+    return (
+      <span
+        title="TikTok"
+        aria-label="TikTok"
+        className={`inline-flex ${box} items-center justify-center rounded-full bg-black text-white shrink-0`}
+      >
+        <TikTokIcon className={icon} />
       </span>
     );
   }

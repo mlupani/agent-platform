@@ -428,7 +428,8 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
               (c) =>
                 c === 'INSTAGRAM_STORY' ||
                 c === 'WHATSAPP_STATUS' ||
-                c === 'INSTAGRAM_REEL',
+                c === 'INSTAGRAM_REEL' ||
+                c === 'TIKTOK',
             )
           ? 'Priorizar composición vertical 9:16 (story/status) con marca y headline seguros en zona central/superior.'
           : 'Priorizar composición cuadrada/feed con marca visible y headline corto.';

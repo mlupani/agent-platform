@@ -54,13 +54,15 @@ model Business {
   appointments    Appointment[]
   whatsappConfig  WhatsAppConfig?
   googleCalendarConfig GoogleCalendarConfig?
-  instagramConfig InstagramConfig?
   webChatConfig        WebChatConfig?
   brandingConfig       BrandingConfig?
   socialContentConfig  SocialContentConfig?
   generatedContents    GeneratedContent[]
   contentGenerationExecutions ContentGenerationExecution[]
   contentPublications  ContentPublication[]
+  /// Profile `_id` de Zernio (un profile por tenant).
+  zernioProfileId      String?
+  socialConnections    SocialConnection[]
 
   @@map("businesses")
 }
@@ -245,6 +247,8 @@ model WhatsAppConfig {
   /// WAHA me.id e.g. 54911...@c.us
   meId               String?
   enabled            Boolean  @default(false)
+  /// Si false, el canal queda conectado al inbox pero el agente no responde.
+  agentEnabled       Boolean  @default(true)
   /// disconnected | connecting | scan_qr | connected | error
   status             String   @default("disconnected")
   /// Estado crudo de WAHA: STOPPED | STARTING | SCAN_QR_CODE | WORKING | FAILED
@@ -271,26 +275,6 @@ model GoogleCalendarConfig {
   updatedAt       DateTime  @updatedAt
 
   @@map("google_calendar_configs")
-}
-
-model InstagramConfig {
-  id              String    @id @default(uuid())
-  businessId      String    @unique
-  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  /// sessionid de aiograpi-rest (encriptado)
-  sessionIdEnc    String?
-  username        String?
-  /// pk / user_id de la cuenta conectada
-  userId          String?
-  enabled         Boolean   @default(false)
-  /// disconnected | connecting | connected | challenge | error
-  status          String    @default("disconnected")
-  lastError       String?
-  lastSyncAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@map("instagram_configs")
 }
 
 /// Widget de chat embebido (landing). La API key se guarda hasheada.
@@ -608,7 +592,7 @@ model GeneratedContent {
   mediaType          String   @default("IMAGE")
   /// Duración del short en segundos (5 | 10 | 15). Null en imágenes.
   durationSeconds    Int?
-  /// Canales destino: WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL
+  /// Canales destino: WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL | TIKTOK
   channels           String[] @default([])
   /// DRAFT | READY | GENERATING | SCHEDULED | PUBLISHING | PUBLISHED | PARTIALLY_PUBLISHED | FAILED
   status             String   @default("DRAFT")
@@ -658,7 +642,7 @@ model ContentPublication {
   business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   contentId   String
   content     GeneratedContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  /// WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL
+  /// WHATSAPP_STATUS | INSTAGRAM_STORY | INSTAGRAM_FEED | INSTAGRAM_REEL | TIKTOK
   channel     String
   /// PENDING | PUBLISHING | PUBLISHED | FAILED
   status      String   @default("PENDING")
@@ -694,6 +678,37 @@ model ContentGenerationExecution {
   @@index([businessId, createdAt])
   @@index([contentId])
   @@map("content_generation_executions")
+}
+
+/// Cuentas sociales de publicación (Instagram / TikTok vía Zernio).
+/// No guarda tokens de Meta/TikTok: la API key de Zernio vive en env.
+model SocialConnection {
+  id                String   @id @default(uuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// zernio (futuros: meta, etc.)
+  provider          String   @default("zernio")
+  /// instagram | tiktok
+  platform          String
+  /// Account `_id` en Zernio
+  externalAccountId String
+  zernioProfileId   String
+  username          String?
+  displayName       String?
+  avatarUrl         String?
+  /// connected | disconnected | revoked | error
+  status            String   @default("connected")
+  /// Si false, Instagram recibe Direct en el inbox pero el agente no responde.
+  agentEnabled      Boolean  @default(true)
+  lastError         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([businessId, provider, platform])
+  @@unique([provider, externalAccountId])
+  @@index([businessId, platform])
+  @@index([zernioProfileId])
+  @@map("social_connections")
 }
 
 /// Usuarios del panel admin (login local, no confundir con User/contacto).

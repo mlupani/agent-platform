@@ -4,8 +4,8 @@ import { AiModule } from '../ai/ai.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { EmailModule } from '../email/email.module';
-import { InstagramModule } from '../instagram/instagram.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { ContentAdminController } from './content-admin.controller';
 import { ContentAgentService } from './content-agent.service';
@@ -29,7 +29,7 @@ import { VideoModule } from './video/video.module';
     AnalyticsModule,
     RealtimeModule,
     WhatsAppModule,
-    InstagramModule,
+    SocialModule,
     EmailModule,
     VideoModule,
     BullModule.registerQueue({ name: CONTENT_AUTO_QUEUE }),

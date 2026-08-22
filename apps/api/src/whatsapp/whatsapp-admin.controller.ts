@@ -26,6 +26,7 @@ const upsertSchema = z.object({
   verifyToken: z.string().optional().nullable(),
   accessToken: z.string().min(10).optional(),
   enabled: z.boolean().optional(),
+  agentEnabled: z.boolean().optional(),
 });
 
 @Controller('admin/whatsapp')

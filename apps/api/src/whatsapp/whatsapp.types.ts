@@ -12,6 +12,7 @@ export interface WhatsAppPublicConfig {
   verifyTokenConfigured: boolean;
   hasAccessToken: boolean;
   enabled: boolean;
+  agentEnabled: boolean;
   status: string;
   sessionStatus: string | null;
   lastError: string | null;

@@ -109,6 +109,7 @@ export class WhatsAppConfigService {
     verifyToken?: string | null;
     accessToken?: string;
     enabled?: boolean;
+    agentEnabled?: boolean;
   }): Promise<WhatsAppPublicConfig> {
     const businessId = await this.businesses.getCurrentId();
     const existing = await this.prisma.whatsAppConfig.findUnique({
@@ -124,6 +125,7 @@ export class WhatsAppConfigService {
       : existing?.accessTokenEnc;
 
     const enabled = input.enabled ?? existing?.enabled ?? false;
+    const agentEnabled = input.agentEnabled ?? existing?.agentEnabled ?? true;
     const wahaBaseUrl =
       input.wahaBaseUrl ??
       existing?.wahaBaseUrl ??
@@ -144,6 +146,7 @@ export class WhatsAppConfigService {
         verifyToken: input.verifyToken ?? null,
         accessTokenEnc,
         enabled,
+        agentEnabled,
         status: enabled ? 'disconnected' : 'disconnected',
         lastError: null,
       },
@@ -160,6 +163,7 @@ export class WhatsAppConfigService {
         verifyToken: input.verifyToken ?? existing?.verifyToken,
         ...(input.accessToken ? { accessTokenEnc } : {}),
         enabled,
+        agentEnabled,
         lastError: null,
       },
     });
@@ -225,6 +229,7 @@ export class WhatsAppConfigService {
     verifyToken: string | null;
     accessTokenEnc: string | null;
     enabled: boolean;
+    agentEnabled?: boolean;
     status: string;
     sessionStatus: string | null;
     lastError: string | null;
@@ -245,6 +250,7 @@ export class WhatsAppConfigService {
       verifyTokenConfigured: Boolean(config.verifyToken),
       hasAccessToken: Boolean(config.accessTokenEnc),
       enabled: config.enabled,
+      agentEnabled: config.agentEnabled !== false,
       status: config.status,
       sessionStatus: config.sessionStatus,
       lastError: config.lastError,

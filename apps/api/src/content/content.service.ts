@@ -10,8 +10,8 @@ import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
-import { InstagramService } from '../instagram/instagram.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
+import { SocialPublishingService } from '../social/social-publishing.service';
 import { WahaWhatsAppProvider } from '../whatsapp/providers/waha.whatsapp-provider';
 import { ContentAgentService } from './content-agent.service';
 import { ContentAutoGenerateScheduler } from './content-auto-generate.scheduler';
@@ -53,6 +53,7 @@ const CHANNELS = new Set([
   'INSTAGRAM_STORY',
   'INSTAGRAM_FEED',
   'INSTAGRAM_REEL',
+  'TIKTOK',
 ]);
 
 @Injectable()
@@ -63,7 +64,7 @@ export class ContentService {
     private readonly contentAgent: ContentAgentService,
     private readonly realtime: RealtimeEventsService,
     private readonly waha: WahaWhatsAppProvider,
-    private readonly instagram: InstagramService,
+    private readonly social: SocialPublishingService,
     private readonly autoGenerateScheduler: ContentAutoGenerateScheduler,
     private readonly notify: ContentNotifyService,
     private readonly videos: VideoRoutingService,
@@ -769,30 +770,30 @@ export class ContentService {
                 mimetype: 'image/jpeg',
               });
           externalId = sent.externalId;
-        } else if (channel === 'INSTAGRAM_STORY') {
-          const sent = isVideo
-            ? await this.instagram.uploadStoryVideoByUrl({
-                businessId,
-                videoUrl: asset.storageUrl,
-                caption,
-              })
-            : await this.instagram.uploadStoryByUrl({
-                businessId,
-                imageUrl: storyImageUrl,
-                caption,
-              });
-          externalId = sent.externalId;
-        } else if (channel === 'INSTAGRAM_REEL' || (channel === 'INSTAGRAM_FEED' && isVideo)) {
-          const sent = await this.instagram.uploadReelByUrl({
+        } else if (
+          channel === 'INSTAGRAM_STORY' ||
+          channel === 'INSTAGRAM_FEED' ||
+          channel === 'INSTAGRAM_REEL' ||
+          channel === 'TIKTOK'
+        ) {
+          const platform = channel === 'TIKTOK' ? 'tiktok' : 'instagram';
+          const contentType =
+            channel === 'INSTAGRAM_STORY'
+              ? 'story'
+              : channel === 'INSTAGRAM_REEL'
+                ? 'reel'
+                : channel === 'TIKTOK'
+                  ? 'video'
+                  : 'feed';
+          const sent = await this.social.publish({
             businessId,
-            videoUrl: asset.storageUrl,
-            caption,
-          });
-          externalId = sent.externalId;
-        } else if (channel === 'INSTAGRAM_FEED') {
-          const sent = await this.instagram.uploadFeedPhotoByUrl({
-            businessId,
-            imageUrl: asset.storageUrl,
+            platform,
+            contentType,
+            mediaUrl:
+              channel === 'INSTAGRAM_STORY' && !isVideo
+                ? storyImageUrl
+                : asset.storageUrl,
+            mediaKind: isVideo ? 'video' : 'image',
             caption,
           });
           externalId = sent.externalId;
@@ -1125,7 +1126,9 @@ export class ContentService {
     const videos = assets.filter((a) => (a.type ?? 'IMAGE') === 'VIDEO');
     const images = assets.filter((a) => (a.type ?? 'IMAGE') !== 'VIDEO');
     const preferVideo =
-      channel === 'INSTAGRAM_REEL' || videos.length > 0 && images.length === 0;
+      channel === 'INSTAGRAM_REEL' ||
+      channel === 'TIKTOK' ||
+      (videos.length > 0 && images.length === 0);
     const pool = preferVideo && videos.length ? videos : images.length ? images : assets;
 
     if (channel === 'INSTAGRAM_FEED') {
@@ -1135,7 +1138,7 @@ export class ContentService {
         pool[0]
       );
     }
-    if (channel === 'INSTAGRAM_REEL') {
+    if (channel === 'INSTAGRAM_REEL' || channel === 'TIKTOK') {
       return (
         pool.find((a) => a.format === 'SHORT_VERTICAL') ||
         pool.find((a) => a.format === 'STORY_VERTICAL') ||
@@ -1327,7 +1330,8 @@ export class ContentService {
       (c) =>
         c === 'WHATSAPP_STATUS' ||
         c === 'INSTAGRAM_STORY' ||
-        c === 'INSTAGRAM_REEL',
+        c === 'INSTAGRAM_REEL' ||
+        c === 'TIKTOK',
     );
     const needsFeed = channels.includes('INSTAGRAM_FEED');
     const formats: ContentAssetFormat[] = [];

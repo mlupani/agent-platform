@@ -38,8 +38,15 @@ export class ConversationsController {
   }
 
   @Get()
-  list(@Req() req: AuthedRequest, @Query('status') status?: string) {
-    return this.conversations.list(status, { role: this.role(req) });
+  list(
+    @Req() req: AuthedRequest,
+    @Query('status') status?: string,
+    @Query('sync') sync?: string,
+  ) {
+    return this.conversations.list(status, {
+      role: this.role(req),
+      pull: sync !== '0' && sync !== 'false',
+    });
   }
 
   @Get(':id')

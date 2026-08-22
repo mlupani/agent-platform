@@ -69,6 +69,14 @@ interface WhatsAppStatus {
   status: string;
 }
 
+interface SocialListResponse {
+  configured: boolean;
+  connections: Array<{
+    platform: 'instagram' | 'tiktok';
+    status: string;
+  }>;
+}
+
 const WEEKDAYS = [
   { value: 1, label: 'Lun' },
   { value: 2, label: 'Mar' },
@@ -112,16 +120,24 @@ const VIDEO_CHANNELS = [
   { value: 'INSTAGRAM_REEL', label: 'Instagram Reel' },
   { value: 'INSTAGRAM_STORY', label: 'Instagram Story' },
   { value: 'WHATSAPP_STATUS', label: 'WhatsApp Status' },
+  { value: 'TIKTOK', label: 'TikTok' },
 ] as const;
 
-const VIDEO_DURATIONS = [5, 10, 15] as const;
+const AUTO_CHANNELS = [
+  ...CHANNELS,
+  { value: 'INSTAGRAM_REEL', label: 'Instagram Reel' },
+  { value: 'TIKTOK', label: 'TikTok' },
+] as const;
 
 const CHANNEL_LABEL: Record<string, string> = {
   WHATSAPP_STATUS: 'WhatsApp Status',
   INSTAGRAM_STORY: 'Instagram Story',
   INSTAGRAM_FEED: 'Instagram Feed',
   INSTAGRAM_REEL: 'Instagram Reel',
+  TIKTOK: 'TikTok',
 };
+
+const VIDEO_DURATIONS = [5, 10, 15] as const;
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -302,6 +318,17 @@ export function ContentCreator() {
     queryFn: () => api<WhatsAppStatus | null>('/admin/whatsapp'),
   });
   const waConnected = whatsapp.data?.status === 'connected';
+
+  const social = useQuery({
+    queryKey: ['social-connections'],
+    queryFn: () => api<SocialListResponse>('/admin/social'),
+  });
+  const igPublishConnected = social.data?.connections.some(
+    (item) => item.platform === 'instagram' && item.status === 'connected',
+  );
+  const tiktokConnected = social.data?.connections.some(
+    (item) => item.platform === 'tiktok' && item.status === 'connected',
+  );
 
   const servicesQuery = useQuery({
     queryKey: ['services', 'enabled'],
@@ -824,6 +851,25 @@ export function ContentCreator() {
                 );
               })}
             </div>
+            {channels.some((c) => c.startsWith('INSTAGRAM')) &&
+            !igPublishConnected ? (
+              <p className="text-xs text-amber-800">
+                Para publicar en Instagram conectá{' '}
+                <Link href="/integrations" className="underline">
+                  Instagram publicación
+                </Link>
+                .
+              </p>
+            ) : null}
+            {channels.includes('TIKTOK') && !tiktokConnected ? (
+              <p className="text-xs text-amber-800">
+                Para publicar en TikTok conectá la cuenta en{' '}
+                <Link href="/integrations" className="underline">
+                  Integraciones
+                </Link>
+                .
+              </p>
+            ) : null}
           </div>
 
           {mediaKind === 'video' ? (
@@ -1094,8 +1140,8 @@ export function ContentCreator() {
                 <div>
                   <h4 className="font-medium text-sm">Publicar ahora</h4>
                   <p className="text-xs text-muted mt-1">
-                    Elegí los canales. WhatsApp e Instagram deben estar
-                    conectados en Integraciones.
+                    WhatsApp Status usa WAHA. Instagram y TikTok requieren
+                    conexión Zernio en Integraciones.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1330,7 +1376,7 @@ export function ContentCreator() {
         <div className="space-y-2">
           <span className="text-sm text-muted">Canales</span>
           <div className="flex flex-wrap gap-2">
-            {CHANNELS.map((ch) => {
+            {AUTO_CHANNELS.map((ch) => {
               const on = autoChannels.includes(ch.value);
               return (
                 <button

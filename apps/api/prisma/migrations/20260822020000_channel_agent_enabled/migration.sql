@@ -1,0 +1,2 @@
+ALTER TABLE "whatsapp_configs" ADD COLUMN IF NOT EXISTS "agentEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "social_connections" ADD COLUMN IF NOT EXISTS "agentEnabled" BOOLEAN NOT NULL DEFAULT true;

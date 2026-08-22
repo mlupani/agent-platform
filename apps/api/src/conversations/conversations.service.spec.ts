@@ -29,12 +29,19 @@ describe('ConversationsService inbox', () => {
     syncChats: jest.fn().mockResolvedValue(0),
     syncMessages: jest.fn().mockResolvedValue(0),
   };
+  const socialInbox = {
+    syncChats: jest.fn().mockResolvedValue(0),
+    syncMessages: jest.fn().mockResolvedValue(0),
+    isPushLive: jest.fn().mockResolvedValue(false),
+    inboxSyncMode: jest.fn().mockResolvedValue('poll'),
+  };
   const service = new ConversationsService(
     prisma as never,
     businesses as never,
     channels as never,
     realtime as never,
     wahaSync as never,
+    socialInbox as never,
   );
 
   beforeEach(() => {
@@ -124,5 +131,44 @@ describe('ConversationsService inbox', () => {
       }),
     );
     expect(channels.get).toHaveBeenCalledWith('WHATSAPP');
+  });
+
+  it('al abrir un chat de Instagram fuerza el pull de mensajes', async () => {
+    socialInbox.inboxSyncMode.mockResolvedValue('poll');
+    const conversation = {
+      id: 'conv-ig',
+      businessId: 'biz-1',
+      channel: 'INSTAGRAM',
+      hiddenAt: null,
+      status: 'AI',
+      messages: [],
+      user: { id: 'u1', name: 'Jane', phone: null, email: null },
+      business: { id: 'biz-1', name: 'Novalup' },
+    };
+    prisma.conversation.findFirst.mockResolvedValue(conversation);
+
+    const result = await service.get('conv-ig', { role: 'ADMIN' });
+
+    expect(socialInbox.syncMessages).toHaveBeenCalledWith('biz-1', 'conv-ig', {
+      force: true,
+    });
+    expect(result.inboxSync).toBe('poll');
+  });
+
+  it('en background no pulea Instagram si el webhook está vivo', async () => {
+    socialInbox.isPushLive.mockResolvedValue(true);
+    prisma.conversation.findMany.mockResolvedValue([]);
+
+    await service.list(undefined, { role: 'ADMIN', pull: false });
+
+    expect(socialInbox.syncChats).not.toHaveBeenCalled();
+  });
+
+  it('al recargar la bandeja fuerza el pull de Instagram', async () => {
+    prisma.conversation.findMany.mockResolvedValue([]);
+
+    await service.list(undefined, { role: 'ADMIN' });
+
+    expect(socialInbox.syncChats).toHaveBeenCalledWith('biz-1', { force: true });
   });
 });

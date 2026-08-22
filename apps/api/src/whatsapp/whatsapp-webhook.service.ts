@@ -188,7 +188,12 @@ export class WhatsAppWebhookService {
     );
 
     // Cliente nuevo / chat importado en HUMAN: activar bot salvo pausa manual
-    if (!fromMe && conversation.status === 'HUMAN') {
+    // o agente desactivado a nivel canal.
+    if (
+      !fromMe &&
+      conversation.status === 'HUMAN' &&
+      waConfig?.agentEnabled !== false
+    ) {
       const meta =
         conversation.metadata && typeof conversation.metadata === 'object'
           ? (conversation.metadata as Record<string, unknown>)
@@ -304,6 +309,51 @@ export class WhatsAppWebhookService {
         conversation.status = 'AI';
         conversation.hiddenAt = null;
       }
+    }
+
+    if (waConfig?.agentEnabled === false) {
+      if (fromMe || existing) return false;
+      const createdAt = this.timestampToDate(
+        typeof payload.timestamp === 'number' ? payload.timestamp : null,
+      );
+      const message = await this.prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          businessId,
+          role: 'user',
+          sender: 'CLIENT',
+          content: text,
+          externalId,
+          status: 'received',
+          createdAt: createdAt ?? undefined,
+          metadata: {
+            source: 'waha_inbound',
+            session: body.session ?? null,
+            agentDisabled: true,
+          },
+        },
+      });
+      const updated = await this.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          lastMessageAt: createdAt ?? new Date(),
+          lastMessagePreview: text.slice(0, 280),
+          lastMessageSender: 'CLIENT',
+          unreadCount: { increment: 1 },
+        },
+      });
+      this.realtime.conversationMessageCreated(businessId, {
+        conversationId: conversation.id,
+        message,
+      });
+      this.realtime.conversationUpdated(businessId, {
+        conversationId: conversation.id,
+        lastMessageAt: message.createdAt,
+        lastMessagePreview: text.slice(0, 280),
+        lastMessageSender: 'CLIENT',
+        unreadCount: updated.unreadCount,
+      });
+      return true;
     }
 
     const previousStatus = conversation.status;

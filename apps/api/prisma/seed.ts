@@ -197,7 +197,7 @@ async function seedIndustry(industry: IndustrySeed) {
       temperature: 0.4,
       maxSteps: 8,
       enabledTools: TOOLS.map((tool) => tool.name),
-      enabledChannels: ['WEB', 'WHATSAPP', 'PLAYGROUND'],
+      enabledChannels: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'PLAYGROUND'],
       memoryStrategy: {
         recentMessages: 12,
         includeSummary: true,

@@ -11,7 +11,8 @@ export type ContentChannel =
   | 'WHATSAPP_STATUS'
   | 'INSTAGRAM_STORY'
   | 'INSTAGRAM_FEED'
-  | 'INSTAGRAM_REEL';
+  | 'INSTAGRAM_REEL'
+  | 'TIKTOK';
 
 export type ContentMediaType = 'IMAGE' | 'VIDEO';
 

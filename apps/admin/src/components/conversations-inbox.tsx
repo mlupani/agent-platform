@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { ChannelBadge } from '@/components/channel-icons';
+import { ChannelBadge, InstagramIconMono, WhatsAppIcon } from '@/components/channel-icons';
 import type { Conversation, Message } from '@/lib/types';
 
 function initials(name: string) {
@@ -106,6 +106,84 @@ function matchesSearch(conversation: Conversation, query: string): boolean {
   return false;
 }
 
+function matchesChannel(
+  conversation: Conversation,
+  channels: { whatsapp: boolean; instagram: boolean },
+): boolean {
+  if (channels.whatsapp && channels.instagram) return true;
+  const ch = (conversation.channel ?? '').toUpperCase();
+  if (channels.whatsapp) return ch === 'WHATSAPP';
+  if (channels.instagram) return ch === 'INSTAGRAM';
+  return false;
+}
+
+function ChannelFilterOrb({
+  channel,
+  selected,
+  onToggle,
+}: {
+  channel: 'whatsapp' | 'instagram';
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const isWa = channel === 'whatsapp';
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={isWa ? 'Filtrar WhatsApp' : 'Filtrar Instagram'}
+      title={
+        selected
+          ? isWa
+            ? 'WhatsApp visible. Tocá para ocultar.'
+            : 'Instagram visible. Tocá para ocultar.'
+          : isWa
+            ? 'WhatsApp oculto. Tocá para mostrar.'
+            : 'Instagram oculto. Tocá para mostrar.'
+      }
+      onClick={onToggle}
+      className={`h-9 w-9 rounded-full grid place-items-center shrink-0 transition duration-200 ${
+        selected
+          ? isWa
+            ? 'bg-[#25D366] text-white shadow-[0_0_0_3px_rgba(37,211,102,0.28)]'
+            : 'bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] text-white shadow-[0_0_0_3px_rgba(221,42,123,0.28)]'
+          : 'bg-line/80 text-muted hover:bg-line'
+      }`}
+    >
+      {isWa ? (
+        <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
+      ) : (
+        <InstagramIconMono className="h-4 w-4" title="Instagram" />
+      )}
+    </button>
+  );
+}
+
+function mergeMessages(
+  incoming: Message[] | undefined,
+  cached: Message[] | undefined,
+): Message[] {
+  const list = [...(incoming ?? [])];
+  const seen = new Set<string>();
+  for (const msg of list) {
+    if (msg.id) seen.add(msg.id);
+    if (msg.externalId) seen.add(msg.externalId);
+  }
+  for (const msg of cached ?? []) {
+    if (!msg?.id) continue;
+    if (seen.has(msg.id)) continue;
+    if (msg.externalId && seen.has(msg.externalId)) continue;
+    list.push(msg);
+    seen.add(msg.id);
+    if (msg.externalId) seen.add(msg.externalId);
+  }
+  return list.sort((a, b) => {
+    const ta = new Date(a.createdAt ?? 0).getTime();
+    const tb = new Date(b.createdAt ?? 0).getTime();
+    return ta - tb;
+  });
+}
+
 export function ConversationsInbox() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -113,24 +191,61 @@ export function ConversationsInbox() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
+  const [channels, setChannels] = useState({
+    whatsapp: true,
+    instagram: true,
+  });
   const [filter, setFilter] = useState<'all' | 'attention' | 'ai' | 'closed'>(
     'all',
   );
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
 
+  const listPullRef = useRef(true);
+
+  useEffect(() => {
+    const enablePull = () => {
+      listPullRef.current = true;
+    };
+    window.addEventListener('focus', enablePull);
+    return () => window.removeEventListener('focus', enablePull);
+  }, []);
+
   const listQuery = useQuery({
     queryKey: ['conversations'],
-    queryFn: () => api<Conversation[]>('/admin/conversations'),
+    queryFn: () => {
+      const pull = listPullRef.current;
+      listPullRef.current = false;
+      return api<Conversation[]>(
+        pull ? '/admin/conversations' : '/admin/conversations?sync=0',
+      );
+    },
     refetchInterval: 20_000,
   });
 
   const detailQuery = useQuery({
     queryKey: ['conversation', selectedId],
-    queryFn: () =>
-      api<Conversation>(`/admin/conversations/${selectedId}`),
+    queryFn: async () => {
+      const data = await api<Conversation>(
+        `/admin/conversations/${selectedId}`,
+      );
+      const cached = queryClient.getQueryData<Conversation>([
+        'conversation',
+        selectedId,
+      ]);
+      if (!cached?.messages?.length) return data;
+      return {
+        ...data,
+        messages: mergeMessages(data.messages, cached.messages),
+      };
+    },
     enabled: Boolean(selectedId),
-    refetchInterval: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as Conversation | undefined;
+      if (data?.channel !== 'INSTAGRAM') return false;
+      if (data.inboxSync === 'webhook') return false;
+      return 8_000;
+    },
   });
 
   const conversations = useMemo(() => {
@@ -143,17 +258,53 @@ export function ConversationsInbox() {
         return item.status !== 'CLOSED';
       })
       .filter((item) => matchesSearch(item, search))
+      .filter((item) => matchesChannel(item, channels))
       .sort((a, b) => activityTs(b) - activityTs(a));
     return items;
-  }, [listQuery.data, filter, search]);
+  }, [listQuery.data, filter, search, channels]);
 
   const selected = detailQuery.data;
+  const listedSelected = useMemo(
+    () => (listQuery.data ?? []).find((item) => item.id === selectedId),
+    [listQuery.data, selectedId],
+  );
+  const catchupAtRef = useRef(0);
   const showChat = Boolean(selectedId);
   const visibleMessages = useMemo(
     () =>
       (selected?.messages ?? []).filter((message) => message.role !== 'tool'),
     [selected?.messages],
   );
+
+  useEffect(() => {
+    catchupAtRef.current = 0;
+  }, [selectedId]);
+
+  // Si la lista ya muestra un mensaje más nuevo que el hilo abierto, recargar el chat.
+  useEffect(() => {
+    if (!selectedId || !listedSelected || detailQuery.isFetching) return;
+    const listTs = new Date(listedSelected.lastMessageAt ?? 0).getTime();
+    const lastMsg = selected?.messages?.at(-1);
+    const chatTs = new Date(
+      lastMsg?.createdAt ?? selected?.lastMessageAt ?? 0,
+    ).getTime();
+    if (!Number.isFinite(listTs) || listTs <= chatTs + 1_500) return;
+    const now = Date.now();
+    if (now - catchupAtRef.current < 4_000) return;
+    catchupAtRef.current = now;
+    void queryClient.invalidateQueries({
+      queryKey: ['conversation', selectedId],
+    });
+  }, [
+    selectedId,
+    listedSelected,
+    listedSelected?.lastMessageAt,
+    listedSelected?.lastMessagePreview,
+    selected?.lastMessageAt,
+    selected?.messages,
+    detailQuery.isFetching,
+    queryClient,
+  ]);
 
   // Marcar leído al abrir / cuando llegan mensajes con el chat abierto
   useEffect(() => {
@@ -316,17 +467,49 @@ export function ConversationsInbox() {
           }`}
         >
           <div className="p-3 border-b border-line shrink-0">
-            <label className="sr-only" htmlFor="chat-search">
-              Buscar chats
-            </label>
-            <input
-              id="chat-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nombre o número…"
-              className="w-full rounded-xl border border-line bg-panel-2 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
+            <div className="flex items-center gap-2">
+              <label className="sr-only" htmlFor="chat-search">
+                Buscar chats
+              </label>
+              <input
+                id="chat-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por nombre o número…"
+                className="min-w-0 flex-1 rounded-xl border border-line bg-panel-2 px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <ChannelFilterOrb
+                  channel="instagram"
+                  selected={channels.instagram}
+                  onToggle={() =>
+                    setChannels((current) => {
+                      const next = {
+                        ...current,
+                        instagram: !current.instagram,
+                      };
+                      if (!next.whatsapp && !next.instagram) return current;
+                      return next;
+                    })
+                  }
+                />
+                <ChannelFilterOrb
+                  channel="whatsapp"
+                  selected={channels.whatsapp}
+                  onToggle={() =>
+                    setChannels((current) => {
+                      const next = {
+                        ...current,
+                        whatsapp: !current.whatsapp,
+                      };
+                      if (!next.whatsapp && !next.instagram) return current;
+                      return next;
+                    })
+                  }
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -342,7 +525,9 @@ export function ConversationsInbox() {
               <p className="p-4 text-sm text-muted">
                 {search.trim()
                   ? 'No hay chats que coincidan con la búsqueda.'
-                  : 'Todavía no hay conversaciones.'}
+                  : !channels.whatsapp || !channels.instagram
+                    ? 'No hay chats en los canales seleccionados.'
+                    : 'Todavía no hay conversaciones.'}
               </p>
             ) : null}
             <ul>

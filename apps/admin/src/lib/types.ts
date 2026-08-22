@@ -78,6 +78,7 @@ export interface Conversation {
   user?: ConversationUser | null;
   _count?: { messages: number };
   messages?: Message[];
+  inboxSync?: 'webhook' | 'poll';
 }
 
 export interface Message {

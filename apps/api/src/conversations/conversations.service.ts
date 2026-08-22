@@ -11,10 +11,12 @@ import type { AdminRole } from '../auth/auth.constants';
 import { BusinessesService } from '../businesses/businesses.service';
 import { ChannelRegistry } from '../channels/channel.registry';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
+import { SocialInboxService } from '../social/social-inbox.service';
 import { WahaConversationsSyncService } from '../whatsapp/waha-conversations.sync';
 
 interface RoleOptions {
   role?: AdminRole;
+  pull?: boolean;
 }
 
 @Injectable()
@@ -27,6 +29,7 @@ export class ConversationsService {
     private readonly channels: ChannelRegistry,
     private readonly realtime: RealtimeEventsService,
     private readonly wahaSync: WahaConversationsSyncService,
+    private readonly socialInbox: SocialInboxService,
   ) {}
 
   async list(status?: string, options?: RoleOptions) {
@@ -36,6 +39,21 @@ export class ConversationsService {
     } catch (error) {
       this.logger.warn(
         `WAHA list sync skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
+    }
+    try {
+      if (options?.pull === false) {
+        if (!(await this.socialInbox.isPushLive(businessId))) {
+          await this.socialInbox.syncChats(businessId);
+        }
+      } else {
+        await this.socialInbox.syncChats(businessId, { force: true });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Instagram list sync skipped: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -98,6 +116,18 @@ export class ConversationsService {
           }`,
         );
       }
+    } else if (conversation.channel === 'INSTAGRAM') {
+      try {
+        await this.socialInbox.syncMessages(businessId, conversation.id, {
+          force: true,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Instagram messages sync skipped: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        );
+      }
     }
 
     const refreshed = await this.prisma.conversation.findFirst({
@@ -124,6 +154,10 @@ export class ConversationsService {
       botActive: refreshed.status === 'AI',
       needsAttention:
         refreshed.status === 'WAITING_HUMAN' || refreshed.status === 'HUMAN',
+      inboxSync:
+        refreshed.channel === 'INSTAGRAM'
+          ? await this.socialInbox.inboxSyncMode(businessId)
+          : undefined,
     };
   }
 

@@ -98,10 +98,14 @@ export class AgentService {
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
-          lastMessageAt: new Date(),
           lastMessagePreview: message.slice(0, 280),
           lastMessageSender: 'CLIENT',
-          unreadCount: { increment: 1 },
+          ...(alreadyPersisted
+            ? {}
+            : {
+                lastMessageAt: new Date(),
+                unreadCount: { increment: 1 },
+              }),
           contactName: input.metadata?.contactName
             ? String(input.metadata.contactName)
             : undefined,
@@ -153,10 +157,14 @@ export class AgentService {
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
-        lastMessageAt: new Date(),
         lastMessagePreview: message.slice(0, 280),
         lastMessageSender: 'CLIENT',
-        unreadCount: { increment: 1 },
+        ...(alreadyPersisted
+          ? {}
+          : {
+              lastMessageAt: new Date(),
+              unreadCount: { increment: 1 },
+            }),
       },
     });
 

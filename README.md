@@ -99,7 +99,7 @@ pnpm docker:down
 3. Provisional: `docker compose up -d --build` en un VPS, o adaptá a tu orquestador (Fly, Railway, ECS, etc.) usando los mismos Dockerfiles.
 4. Corré migraciones (el contenedor `api` ya ejecuta `prisma migrate deploy` al arrancar).
 5. Seed inicial o creá el negocio desde el admin.
-6. Conectá WhatsApp / Google Calendar desde **Integraciones**.
+6. Conectá WhatsApp / Google Calendar / Instagram (publicación o Direct) / TikTok desde **Integraciones**.
 7. Cargá FAQs en **Conocimiento** y revisá horarios/servicios.
 
 Un deployment = un negocio. No es multi-tenant SaaS.
@@ -119,6 +119,9 @@ Ver `.env.example` completo. Resumen:
 | `WAHA_BASE_URL` / `WAHA_API_KEY` | cliente Nest → WAHA |
 | `WAHA_WEBHOOK_URL` | WAHA → Nest (`/api/webhooks/waha`) |
 | `GOOGLE_CLIENT_*` / `GOOGLE_REDIRECT_URI` | OAuth Calendar |
+| `ZERNIO_API_KEY` | Publicación Instagram + TikTok (Bearer) |
+| `ZERNIO_WEBHOOK_SECRET` | HMAC de webhooks Zernio (`X-Zernio-Signature`) |
+| `ZERNIO_REDIRECT_URI` | Callback OAuth (`/api/social/oauth/callback`) |
 
 Nunca commitees `.env` real.
 
@@ -130,6 +133,19 @@ Admin → **Integraciones → WhatsApp**: URL de WAHA, API key, iniciar sesión,
 El estado/QR y los mensajes del inbox se actualizan por WebSocket (Nest → Dashboard).
 
 Flujo: `WhatsApp → WAHA → Nest → Agent Core → WahaWhatsAppProvider → WAHA → WhatsApp`.
+
+### Instagram y TikTok (Zernio)
+
+Publicación de contenido (feed, stories, reels, TikTok) usa **Zernio**, no WAHA ni aiograpi.
+
+1. Creá una API key en el dashboard de Zernio y poné `ZERNIO_API_KEY`.
+2. Configurá el redirect OAuth: `ZERNIO_REDIRECT_URI` → `https://api.tudominio.com/api/social/oauth/callback` (local: `http://localhost:3001/api/social/oauth/callback`).
+3. En el dashboard de Zernio, webhook hacia `https://api.tudominio.com/api/webhooks/zernio` con el secret en `ZERNIO_WEBHOOK_SECRET` (HMAC SHA-256 del body crudo, header `X-Zernio-Signature`). Eventos útiles: `account.connected`, `account.disconnected`, `post.published`, `post.failed`, `message.received`, `message.sent`.
+4. Admin → **Integraciones → Instagram** o **TikTok**: el API crea un profile Zernio por negocio y abre el OAuth de Meta/TikTok.
+
+Límites: TikTok es video 3 s–10 min, sin DMs. Instagram stories/reels/feed según lo que Zernio permita. WhatsApp Status sigue por WAHA. Instagram Direct entra por el inbox de Zernio (misma conexión de publicación).
+
+Para agregar mañana un `MetaSocialProvider`: nueva clase + registro en la factory. `ContentService` no habla con Zernio directo.
 
 ### Conversaciones
 
