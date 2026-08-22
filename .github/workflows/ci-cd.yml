@@ -35,7 +35,7 @@ jobs:
         run: pnpm --filter api exec prisma generate
 
       - name: Unit tests
-        run: pnpm --filter api test -- --passWithNoTests
+        run: pnpm --filter api test
 
   deploy:
     name: Deploy VPS
