@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -30,12 +31,19 @@ import {
 } from './storage/storage.provider';
 import { VideoRoutingService } from './video/video-routing.service';
 import { parseVideoDuration } from './video/video-duration';
+import { enrichMarketingVideoPrompt } from './video/enrich-video-prompt';
+import { downloadBinary } from './video/video-http';
+import { VideoEditorService } from './video-editor/video-editor.service';
+import { normalizeVideoEditing } from './video-editor/normalize-editing';
+import { normalizeHashtags } from './video-editor/text-overlay';
 import type {
   ContentAssetFormat,
   ContentChannel,
   ContentMediaType,
   ContentObjective,
   ContentStatus,
+  ContentStrategy,
+  VideoEditingPlan,
 } from './content.types';
 
 const OBJECTIVES = new Set([
@@ -58,6 +66,8 @@ const CHANNELS = new Set([
 
 @Injectable()
 export class ContentService {
+  private readonly logger = new Logger(ContentService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly businesses: BusinessesService,
@@ -68,6 +78,7 @@ export class ContentService {
     private readonly autoGenerateScheduler: ContentAutoGenerateScheduler,
     private readonly notify: ContentNotifyService,
     private readonly videos: VideoRoutingService,
+    private readonly videoEditor: VideoEditorService,
     private readonly config: ConfigService,
     @InjectQueue(CONTENT_VIDEO_QUEUE)
     private readonly videoQueue: Queue,
@@ -185,6 +196,66 @@ export class ContentService {
     return content;
   }
 
+  async autoEdit(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const content = await this.prisma.generatedContent.findFirst({
+      where: { id, businessId },
+      include: {
+        assets: { orderBy: { createdAt: 'desc' } },
+      },
+    });
+    if (!content) throw new NotFoundException('Contenido no encontrado');
+    if (['GENERATING', 'PUBLISHING'].includes(content.status)) {
+      throw new BadRequestException('El contenido se está procesando');
+    }
+    if (content.autoEditStatus === 'PROCESSING') {
+      throw new BadRequestException('Ya hay una autoedición en curso');
+    }
+
+    const videos = content.assets.filter(
+      (asset) => (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO',
+    );
+    const original =
+      videos.find((asset) => asset.role === 'ORIGINAL') ??
+      videos.find((asset) => asset.role !== 'EDITED') ??
+      videos[0];
+    if (!original?.storageUrl) {
+      throw new BadRequestException(
+        'Este contenido no tiene un video original para autoeditar',
+      );
+    }
+
+    const branding = await this.prisma.brandingConfig.findUnique({
+      where: { businessId },
+      select: { logoUrl: true, primaryColor: true },
+    });
+    const logoUrl = branding?.logoUrl?.trim() || null;
+    const strategy = this.strategyFromStored(content);
+
+    if (!content.hook && strategy.hook) {
+      await this.prisma.generatedContent.update({
+        where: { id: content.id },
+        data: { hook: strategy.hook },
+      });
+    }
+
+    const downloaded = await downloadBinary(original.storageUrl);
+    await this.applyVideoAutoEdit({
+      contentId: content.id,
+      businessId,
+      originalBuffer: downloaded.buffer,
+      mimeType: downloaded.mimeType,
+      strategy,
+      logoUrl,
+      primaryColor: branding?.primaryColor,
+      expectedDurationSeconds: content.durationSeconds ?? undefined,
+      currentStatus: content.status,
+      throwOnError: true,
+    });
+
+    return this.get(content.id);
+  }
+
   async uploadReferenceImages(
     files: Array<{ buffer: Buffer; mimetype: string; originalname: string }>,
   ) {
@@ -218,6 +289,66 @@ export class ContentService {
     }
 
     return { urls };
+  }
+
+  async suggestBrief(input: {
+    objective: string;
+    channels?: string[];
+    userInstructions?: string;
+    serviceId?: string;
+    mediaType?: ContentMediaType;
+    durationSeconds?: number;
+  }) {
+    const businessId = await this.businesses.getCurrentId();
+    const mediaType = this.parseMediaType(input.mediaType);
+    const objective = this.parseObjective(input.objective);
+    const channels = input.channels?.length
+      ? this.parseChannels(input.channels)
+      : [];
+    const durationSeconds =
+      mediaType === 'VIDEO'
+        ? parseVideoDuration(input.durationSeconds, 5)
+        : 5;
+
+    try {
+      const result = await this.contentAgent.suggestBrief({
+        businessId,
+        objective,
+        channels,
+        mediaType,
+        durationSeconds,
+        serviceId: input.serviceId,
+        hint: input.userInstructions,
+      });
+
+      await this.prisma.contentGenerationExecution.create({
+        data: {
+          businessId,
+          stage: 'brief',
+          provider: result.provider,
+          model: result.model,
+          success: true,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          estimatedCost: result.estimatedCost,
+          durationMs: result.durationMs,
+          metadata: {
+            objective,
+            mediaType,
+            durationSeconds: mediaType === 'VIDEO' ? durationSeconds : null,
+          },
+        },
+      });
+
+      return { instructions: result.instructions };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No se pudo armar el guion';
+      this.logger.warn(`suggestBrief falló: ${message}`);
+      throw new BadRequestException(
+        'No se pudo armar el guion. Probá de nuevo en unos segundos.',
+      );
+    }
   }
 
   async generate(input: {
@@ -301,6 +432,8 @@ export class ContentService {
           mediaType,
           durationSeconds,
           error: null,
+          autoEditStatus: null,
+          autoEditError: null,
         },
       });
     }
@@ -452,18 +585,17 @@ export class ContentService {
       await this.generateVideoAsset({
         contentId,
         businessId,
-        prompt: this.enrichMarketingVideoPrompt({
+        prompt: enrichMarketingVideoPrompt({
           basePrompt:
             strategyResult.strategy.videoPrompt ||
             strategyResult.strategy.imagePrompt,
-          headline: strategyResult.strategy.headline,
-          objective,
-          businessName,
-          hasLogo: Boolean(logoUrl),
           durationSeconds: parseVideoDuration(input.durationSeconds, 5),
         }),
         referenceImageUrls: imageRefUrls,
         durationSeconds: parseVideoDuration(input.durationSeconds, 5),
+        strategy: strategyResult.strategy,
+        logoUrl,
+        primaryColor: branding?.primaryColor,
       });
     } else {
       const referenceImages = await this.loadReferenceImageBuffers(imageRefUrls);
@@ -499,8 +631,12 @@ export class ContentService {
         status: 'READY',
         topic: strategyResult.strategy.topic,
         headline: strategyResult.strategy.headline,
+        hook:
+          strategyResult.strategy.hook?.trim() ||
+          (mediaType === 'VIDEO' ? strategyResult.strategy.headline : null),
         caption: strategyResult.strategy.caption,
         cta: strategyResult.strategy.cta,
+        hashtags: normalizeHashtags(strategyResult.strategy.hashtags),
         imagePrompt: strategyResult.strategy.imagePrompt,
         videoPrompt: strategyResult.strategy.videoPrompt ?? null,
         visualStyle: strategyResult.strategy.visualStyle,
@@ -591,6 +727,9 @@ export class ContentService {
     prompt: string;
     referenceImageUrls: string[];
     durationSeconds: number;
+    strategy: ContentStrategy;
+    logoUrl: string | null;
+    primaryColor?: string | null;
   }) {
     const durationSeconds = input.durationSeconds;
     const aspectRatio = (this.config.get<string>('VIDEO_ASPECT_RATIO') ||
@@ -598,9 +737,9 @@ export class ContentService {
     const resolution = (this.config.get<string>('VIDEO_RESOLUTION') ||
       '720p') as '480p' | '720p' | '1080p';
     const generateAudio =
-      (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'false')
+      (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'true')
         .trim()
-        .toLowerCase() === 'true';
+        .toLowerCase() !== 'false';
 
     const video = await this.videos.generate({
       prompt: input.prompt,
@@ -623,6 +762,7 @@ export class ContentService {
       data: {
         contentId: input.contentId,
         type: 'VIDEO',
+        role: 'ORIGINAL',
         format: 'SHORT_VERTICAL',
         aspectRatio,
         width: video.width ?? uploaded.width,
@@ -654,6 +794,260 @@ export class ContentService {
         },
       },
     });
+
+    await this.applyVideoAutoEdit({
+      contentId: input.contentId,
+      businessId: input.businessId,
+      originalBuffer: video.buffer,
+      mimeType: video.mimeType,
+      strategy: input.strategy,
+      logoUrl: input.logoUrl,
+      primaryColor: input.primaryColor,
+      expectedDurationSeconds: video.durationSeconds ?? durationSeconds,
+      currentStatus: 'GENERATING',
+    });
+  }
+
+  private async applyVideoAutoEdit(input: {
+    contentId: string;
+    businessId: string;
+    originalBuffer: Buffer;
+    mimeType: string;
+    strategy: ContentStrategy;
+    logoUrl: string | null;
+    primaryColor?: string | null;
+    expectedDurationSeconds?: number;
+    currentStatus?: string;
+    throwOnError?: boolean;
+  }) {
+    const started = Date.now();
+    const instructions = normalizeVideoEditing({
+      strategy: input.strategy,
+      durationSeconds: input.expectedDurationSeconds ?? 12,
+      hasLogo: Boolean(input.logoUrl),
+    });
+    const status = input.currentStatus ?? 'GENERATING';
+
+    await this.prisma.generatedContent.update({
+      where: { id: input.contentId },
+      data: { autoEditStatus: 'PROCESSING', autoEditError: null },
+    });
+    this.realtime.emit(
+      'content.updated',
+      {
+        contentId: input.contentId,
+        status,
+        autoEditStatus: 'PROCESSING',
+      },
+      input.businessId,
+    );
+
+    try {
+      const edited = await this.videoEditor.edit({
+        videoBuffer: input.originalBuffer,
+        mimeType: input.mimeType,
+        instructions,
+        branding: { logoUrl: input.logoUrl, primaryColor: input.primaryColor },
+        expectedDurationSeconds: input.expectedDurationSeconds,
+      });
+
+      if (edited.skipped || !edited.buffer) {
+        await this.removeEditedAssets(input.contentId);
+        await this.prisma.generatedContent.update({
+          where: { id: input.contentId },
+          data: { autoEditStatus: 'SKIPPED', autoEditError: null },
+        });
+        await this.prisma.contentGenerationExecution.create({
+          data: {
+            businessId: input.businessId,
+            contentId: input.contentId,
+            stage: 'video-edit',
+            provider: 'ffmpeg',
+            model: 'auto-editor',
+            success: true,
+            durationMs: Date.now() - started,
+            metadata: { skipped: true, operations: edited.operations },
+          },
+        });
+        this.realtime.emit(
+          'content.updated',
+          {
+            contentId: input.contentId,
+            status,
+            autoEditStatus: 'SKIPPED',
+          },
+          input.businessId,
+        );
+        return;
+      }
+
+      const uploaded = await this.storage.upload({
+        buffer: edited.buffer,
+        mimeType: edited.mimeType,
+        folder: `${this.cloudinaryRoot()}/${input.businessId}/content`,
+        publicId: `${input.contentId}-short-edited-${Date.now()}`,
+        resourceType: 'video',
+      });
+
+      await this.removeEditedAssets(input.contentId);
+      await this.prisma.contentAsset.create({
+        data: {
+          contentId: input.contentId,
+          type: 'VIDEO',
+          role: 'EDITED',
+          format: 'SHORT_VERTICAL',
+          aspectRatio: '9:16',
+          width: edited.width || uploaded.width,
+          height: edited.height || uploaded.height,
+          storageUrl: uploaded.url,
+          storagePublicId: uploaded.publicId,
+          provider: 'ffmpeg',
+          model: 'auto-editor',
+          generationPrompt: input.strategy.videoPrompt ?? null,
+        },
+      });
+
+      await this.prisma.generatedContent.update({
+        where: { id: input.contentId },
+        data: { autoEditStatus: 'COMPLETED', autoEditError: null },
+      });
+      await this.prisma.contentGenerationExecution.create({
+        data: {
+          businessId: input.businessId,
+          contentId: input.contentId,
+          stage: 'video-edit',
+          provider: 'ffmpeg',
+          model: 'auto-editor',
+          success: true,
+          durationMs: Date.now() - started,
+          metadata: {
+            operations: edited.operations,
+            durationSeconds: edited.durationSeconds,
+            width: edited.width,
+            height: edited.height,
+          },
+        },
+      });
+      this.realtime.emit(
+        'content.updated',
+        {
+          contentId: input.contentId,
+          status,
+          autoEditStatus: 'COMPLETED',
+        },
+        input.businessId,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Error en autoedición';
+      this.logger.warn(
+        `Autoedición falló content=${input.contentId}: ${message}`,
+      );
+      await this.prisma.generatedContent.update({
+        where: { id: input.contentId },
+        data: { autoEditStatus: 'FAILED', autoEditError: message },
+      });
+      await this.prisma.contentGenerationExecution.create({
+        data: {
+          businessId: input.businessId,
+          contentId: input.contentId,
+          stage: 'video-edit',
+          provider: 'ffmpeg',
+          model: 'auto-editor',
+          success: false,
+          error: message,
+          durationMs: Date.now() - started,
+        },
+      });
+      this.realtime.emit(
+        'content.updated',
+        {
+          contentId: input.contentId,
+          status,
+          autoEditStatus: 'FAILED',
+          error: message,
+        },
+        input.businessId,
+      );
+      if (input.throwOnError) {
+        throw new BadRequestException(message);
+      }
+    }
+  }
+
+  private async removeEditedAssets(contentId: string) {
+    const edited = await this.prisma.contentAsset.findMany({
+      where: { contentId, role: 'EDITED' },
+    });
+    for (const asset of edited) {
+      if (asset.storagePublicId && this.storage.delete) {
+        try {
+          await this.storage.delete(
+            asset.storagePublicId,
+            asset.type === 'VIDEO' ? 'video' : 'image',
+          );
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+    if (edited.length) {
+      await this.prisma.contentAsset.deleteMany({
+        where: { contentId, role: 'EDITED' },
+      });
+    }
+  }
+
+  private strategyFromStored(content: {
+    objective: string;
+    topic: string | null;
+    headline: string | null;
+    hook: string | null;
+    caption: string | null;
+    cta: string | null;
+    hashtags: string[];
+    imagePrompt: string | null;
+    videoPrompt: string | null;
+    visualStyle: string | null;
+    strategy: unknown;
+  }): ContentStrategy {
+    const stored =
+      content.strategy &&
+      typeof content.strategy === 'object' &&
+      !Array.isArray(content.strategy)
+        ? (content.strategy as Record<string, unknown>)
+        : {};
+    const storedEditing =
+      stored.editing &&
+      typeof stored.editing === 'object' &&
+      !Array.isArray(stored.editing)
+        ? (stored.editing as VideoEditingPlan)
+        : undefined;
+    const storedHook =
+      typeof stored.hook === 'string' ? stored.hook.trim() : '';
+    const storedHashtags = Array.isArray(stored.hashtags)
+      ? stored.hashtags.filter((tag): tag is string => typeof tag === 'string')
+      : [];
+
+    return {
+      topic: content.topic || String(stored.topic || 'contenido'),
+      objective: this.parseObjective(content.objective),
+      headline: content.headline || String(stored.headline || ''),
+      caption: content.caption || String(stored.caption || ''),
+      cta: content.cta || String(stored.cta || ''),
+      hook: content.hook?.trim() || storedHook || content.headline || undefined,
+      hashtags: content.hashtags?.length
+        ? content.hashtags
+        : normalizeHashtags(storedHashtags),
+      imagePrompt:
+        content.imagePrompt ||
+        String(stored.imagePrompt || 'social marketing visual'),
+      videoPrompt:
+        content.videoPrompt ||
+        (typeof stored.videoPrompt === 'string' ? stored.videoPrompt : undefined),
+      visualStyle: content.visualStyle || String(stored.visualStyle || ''),
+      editing: storedEditing,
+    };
   }
 
   private async markGenerationFailed(
@@ -871,7 +1265,13 @@ export class ContentService {
 
   async updateDraft(
     id: string,
-    input: { caption?: string; headline?: string; cta?: string; status?: string },
+    input: {
+      caption?: string;
+      headline?: string;
+      cta?: string;
+      hashtags?: string[];
+      status?: string;
+    },
   ) {
     const businessId = await this.businesses.getCurrentId();
     const existing = await this.prisma.generatedContent.findFirst({
@@ -893,6 +1293,9 @@ export class ContentService {
         caption: input.caption ?? undefined,
         headline: input.headline ?? undefined,
         cta: input.cta ?? undefined,
+        ...(input.hashtags !== undefined
+          ? { hashtags: normalizeHashtags(input.hashtags) }
+          : {}),
         status,
       },
       include: {
@@ -1106,8 +1509,15 @@ export class ContentService {
     caption?: string | null;
     headline?: string | null;
     cta?: string | null;
+    hashtags?: string[];
   }): string {
-    return [content.caption?.trim(), content.cta?.trim()]
+    const tags = normalizeHashtags(content.hashtags).join(' ');
+    const caption = content.caption?.trim() || '';
+    const captionWithTags =
+      tags && !/#\w/.test(caption)
+        ? [caption, tags].filter(Boolean).join('\n\n')
+        : caption;
+    return [captionWithTags, content.cta?.trim()]
       .filter(Boolean)
       .join('\n\n')
       .slice(0, 2200);
@@ -1116,6 +1526,7 @@ export class ContentService {
   private pickAssetForChannel(
     assets: Array<{
       type?: string;
+      role?: string | null;
       format: string;
       storageUrl: string;
       storagePublicId?: string | null;
@@ -1129,6 +1540,8 @@ export class ContentService {
       channel === 'INSTAGRAM_REEL' ||
       channel === 'TIKTOK' ||
       (videos.length > 0 && images.length === 0);
+    const editedVideo = videos.find((a) => a.role === 'EDITED');
+    if (preferVideo && editedVideo) return editedVideo;
     const pool = preferVideo && videos.length ? videos : images.length ? images : assets;
 
     if (channel === 'INSTAGRAM_FEED') {
@@ -1200,40 +1613,6 @@ export class ContentService {
       colorHint,
       'Clear visual hierarchy: hero visual + brand + message. Safe margins for feed/story.',
       'No illegible text, no lorem ipsum, no fake letters, no long paragraphs on the image.',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  private enrichMarketingVideoPrompt(input: {
-    basePrompt: string;
-    headline?: string | null;
-    objective: ContentObjective;
-    businessName: string;
-    hasLogo: boolean;
-    durationSeconds: number;
-  }): string {
-    const brand = input.hasLogo
-      ? 'Integrate the brand logo cleanly (corner or short brand bar). Do not distort the logo.'
-      : `Show the business name "${input.businessName}" as clean, legible on-screen typography.`;
-    const headline = input.headline?.trim()
-      ? `Short on-screen headline (few words): "${input.headline.trim()}".`
-      : 'Keep a clean area for a very short headline.';
-    const offer =
-      input.objective === 'OFFER'
-        ? 'Include a brief "OFERTA" / promo badge, readable, not gibberish.'
-        : '';
-
-    return [
-      input.basePrompt.trim(),
-      '',
-      'VERTICAL SHORT (mandatory):',
-      `9:16 social short (${input.durationSeconds} seconds), marketing creative, not a raw home video.`,
-      'Smooth cinematic camera, professional lighting, high contrast.',
-      brand,
-      headline,
-      offer,
-      'No illegible text, no long paragraphs, no lorem ipsum.',
     ]
       .filter(Boolean)
       .join('\n');

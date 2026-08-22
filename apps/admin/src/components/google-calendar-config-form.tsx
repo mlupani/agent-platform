@@ -76,8 +76,9 @@ export function GoogleCalendarConfigForm() {
         <div>
           <h3 className="font-medium">Google Calendar</h3>
           <p className="text-sm text-muted mt-1">
-            Las citas se guardan localmente y se sincronizan si Calendar está
-            conectado.
+            Conectá Google Calendar para que el asistente vea horarios, reserve
+            turnos y no solape citas. Lo que se agenda acá se sincroniza con tu
+            calendario.
           </p>
         </div>
         <span

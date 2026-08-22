@@ -257,6 +257,9 @@ export class SocialPublishingService {
       where: { id: connection.id },
       data: { status: 'disconnected', lastError: null },
     });
+    if (platform === 'instagram') {
+      await this.inbox.purgeChats(businessId);
+    }
     return this.toPublicConnection(updated);
   }
 
@@ -326,6 +329,9 @@ export class SocialPublishingService {
           lastError: null,
         },
       });
+      if (existing.platform === 'instagram') {
+        await this.inbox.purgeChats(existing.businessId);
+      }
       return { applied: true };
     }
 

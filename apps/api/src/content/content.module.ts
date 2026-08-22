@@ -21,6 +21,7 @@ import { OpenAIImageGenerationProvider } from './image/openai-image.provider';
 import { CloudinaryStorageProvider } from './storage/cloudinary-storage.provider';
 import { STORAGE_PROVIDER } from './storage/storage.provider';
 import { VideoModule } from './video/video.module';
+import { VideoEditorModule } from './video-editor/video-editor.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { VideoModule } from './video/video.module';
     SocialModule,
     EmailModule,
     VideoModule,
+    VideoEditorModule,
     BullModule.registerQueue({ name: CONTENT_AUTO_QUEUE }),
     BullModule.registerQueue({ name: CONTENT_VIDEO_QUEUE }),
   ],

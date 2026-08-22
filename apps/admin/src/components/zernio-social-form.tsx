@@ -32,13 +32,14 @@ const COPY: Record<
   instagram: {
     title: 'Instagram',
     subtitle:
-      'Feed, Stories, Reels y Direct en la misma conexión OAuth de Meta (Zernio).',
-    hint: 'Los Direct llegan a Conversaciones por webhook. TikTok no comparte esta bandeja.',
+      'Conectá la cuenta para publicar Feed, Stories y Reels, atender Direct en Conversaciones y activar o pausar el asistente.',
+    hint: 'Los Direct llegan a Conversaciones. Podés dejar Instagram conectado y el asistente apagado si querés responder vos.',
   },
   tiktok: {
     title: 'TikTok',
-    subtitle: 'Publicá videos cortos (3 s – 10 min). Zernio no soporta DMs de TikTok.',
-    hint: 'Al conectar, TikTok pide consentimiento de vista previa y publicación.',
+    subtitle:
+      'Conectá la cuenta para publicar videos cortos. TikTok no trae mensajes a esta bandeja.',
+    hint: 'Al conectar, TikTok pide permiso de vista previa y publicación.',
   },
 };
 
@@ -74,6 +75,7 @@ export function ZernioSocialForm({ platform }: ZernioSocialFormProps) {
       api(`/admin/social/${platform}`, { method: 'DELETE' }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['social-connections'] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
@@ -168,7 +170,15 @@ export function ZernioSocialForm({ platform }: ZernioSocialFormProps) {
             <button
               type="button"
               className="btn-secondary min-h-10 text-rose"
-              onClick={() => disconnect.mutate()}
+              onClick={() => {
+                const ok =
+                  platform === 'instagram'
+                    ? confirm(
+                        'Al desconectar se borran las conversaciones de Instagram de esta bandeja. Cuando vuelvas a conectar, se importan de nuevo.',
+                      )
+                    : confirm('¿Desconectar TikTok?');
+                if (ok) disconnect.mutate();
+              }}
               disabled={disconnect.isPending}
             >
               Desconectar

@@ -17,6 +17,15 @@ import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { ContentService } from './content.service';
 
+const suggestBriefSchema = z.object({
+  objective: z.string().min(1),
+  channels: z.array(z.string()).optional(),
+  userInstructions: z.string().max(2000).optional(),
+  serviceId: z.string().uuid().optional(),
+  mediaType: z.enum(['IMAGE', 'VIDEO']).optional(),
+  durationSeconds: z.union([z.literal(5), z.literal(10), z.literal(15)]).optional(),
+});
+
 const generateSchema = z.object({
   objective: z.string().min(1),
   channels: z.array(z.string()).min(1),
@@ -32,6 +41,7 @@ const updateSchema = z.object({
   caption: z.string().max(2200).optional(),
   headline: z.string().max(200).optional(),
   cta: z.string().max(160).optional(),
+  hashtags: z.array(z.string().max(40)).max(8).optional(),
   status: z.enum(['DRAFT', 'READY']).optional(),
 });
 
@@ -136,6 +146,14 @@ export class ContentAdminController {
     return this.content.uploadReferenceImages(files ?? []);
   }
 
+  @Post('suggest-brief')
+  suggestBrief(
+    @Body(new ZodValidationPipe(suggestBriefSchema))
+    body: z.infer<typeof suggestBriefSchema>,
+  ) {
+    return this.content.suggestBrief(body);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.content.get(id);
@@ -147,6 +165,11 @@ export class ContentAdminController {
     body: z.infer<typeof generateSchema>,
   ) {
     return this.content.generate(body);
+  }
+
+  @Post(':id/auto-edit')
+  autoEdit(@Param('id') id: string) {
+    return this.content.autoEdit(id);
   }
 
   @Post(':id/publish')

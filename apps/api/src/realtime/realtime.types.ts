@@ -2,6 +2,7 @@ export const REALTIME_EVENTS = {
   CONVERSATION_MESSAGE_CREATED: 'conversation.message.created',
   CONVERSATION_UPDATED: 'conversation.updated',
   CONVERSATION_BOT_STATUS_CHANGED: 'conversation.bot_status.changed',
+  CONVERSATION_INBOX_CLEARED: 'conversation.inbox.cleared',
   WHATSAPP_STATUS_CHANGED: 'whatsapp.status.changed',
   WHATSAPP_QR_UPDATED: 'whatsapp.qr.updated',
   INSTAGRAM_STATUS_CHANGED: 'instagram.status.changed',

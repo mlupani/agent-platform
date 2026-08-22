@@ -66,6 +66,7 @@ describe('SocialInboxService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      deleteMany: jest.fn(),
     },
     user: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   };
@@ -74,6 +75,7 @@ describe('SocialInboxService', () => {
     releaseLock: jest.fn(),
     get: jest.fn().mockResolvedValue(null),
     set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
   };
   const provider = {
     sendInboxMessage: jest.fn().mockResolvedValue({ externalId: 'out_1' }),
@@ -91,6 +93,8 @@ describe('SocialInboxService', () => {
     conversationMessageCreated: jest.fn(),
     conversationUpdated: jest.fn(),
     conversationBotStatusChanged: jest.fn(),
+    conversationInboxCleared: jest.fn(),
+    instagramStatusChanged: jest.fn(),
   };
 
   const service = new SocialInboxService(
@@ -404,5 +408,18 @@ describe('SocialInboxService', () => {
       conversationId: 'conv_z',
       message: 'Respuesta del agente',
     });
+  });
+
+  it('borra las conversaciones de Instagram al purgar el canal', async () => {
+    prisma.conversation.deleteMany.mockResolvedValue({ count: 4 });
+    const count = await service.purgeChats('biz-a');
+    expect(count).toBe(4);
+    expect(prisma.conversation.deleteMany).toHaveBeenCalledWith({
+      where: { businessId: 'biz-a', channel: 'INSTAGRAM' },
+    });
+    expect(realtime.conversationInboxCleared).toHaveBeenCalledWith(
+      'biz-a',
+      expect.objectContaining({ channel: 'INSTAGRAM', deleted: 4 }),
+    );
   });
 });

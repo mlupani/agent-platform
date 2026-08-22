@@ -59,12 +59,16 @@ export class ConversationsService {
       );
     }
 
+    const channelFilter = await this.inboxChannelFilter(
+      businessId,
+      options?.role,
+    );
     const conversations = await this.prisma.conversation.findMany({
       where: {
         businessId,
         hiddenAt: null,
         ...(status ? { status } : {}),
-        ...this.roleChannelFilter(options?.role),
+        ...channelFilter,
       },
       orderBy: [{ lastMessageAt: { sort: 'desc', nulls: 'last' } }],
       take: 200,
@@ -89,11 +93,16 @@ export class ConversationsService {
     options?: { markRead?: boolean; role?: AdminRole },
   ) {
     const businessId = await this.businesses.getCurrentId();
+    const channelFilter = await this.inboxChannelFilter(
+      businessId,
+      options?.role,
+    );
     const conversation = await this.prisma.conversation.findFirst({
       where: {
         id,
         businessId,
-        ...this.roleChannelFilter(options?.role),
+        hiddenAt: null,
+        ...channelFilter,
       },
       include: {
         user: { select: { id: true, name: true, phone: true, email: true } },
@@ -102,9 +111,6 @@ export class ConversationsService {
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
-    if (conversation.hiddenAt) {
-      throw new NotFoundException('Conversation not found');
-    }
 
     if (conversation.channel === 'WHATSAPP') {
       try {
@@ -134,7 +140,8 @@ export class ConversationsService {
       where: {
         id,
         businessId,
-        ...this.roleChannelFilter(options?.role),
+        hiddenAt: null,
+        ...channelFilter,
       },
       include: {
         user: { select: { id: true, name: true, phone: true, email: true } },
@@ -395,21 +402,43 @@ export class ConversationsService {
         id,
         businessId,
         hiddenAt: null,
-        ...this.roleChannelFilter(role),
+        ...(await this.inboxChannelFilter(businessId, role)),
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
     return conversation;
   }
 
-  /** USER no ve playground; WEB (widget) sí aparece en la bandeja. ADMIN ve todo. */
-  private roleChannelFilter(role?: AdminRole) {
-    if (role === 'ADMIN') return {};
-    return {
-      channel: {
-        notIn: [...ADMIN_ONLY_CONVERSATION_CHANNELS],
-      },
-    };
+  /** Solo canales con la integración conectada. WEB queda (no se reimporta). */
+  private async inboxChannelFilter(businessId: string, role?: AdminRole) {
+    const [wa, ig] = await Promise.all([
+      this.prisma.whatsAppConfig.findUnique({
+        where: { businessId },
+        select: { status: true, sessionStatus: true },
+      }),
+      this.prisma.socialConnection.findUnique({
+        where: {
+          businessId_provider_platform: {
+            businessId,
+            provider: 'zernio',
+            platform: 'instagram',
+          },
+        },
+        select: { status: true },
+      }),
+    ]);
+
+    const channels: string[] = ['WEB'];
+    if (role === 'ADMIN') {
+      channels.push(...ADMIN_ONLY_CONVERSATION_CHANNELS);
+    }
+    if (wa?.status === 'connected' || wa?.sessionStatus === 'WORKING') {
+      channels.push('WHATSAPP');
+    }
+    if (ig?.status === 'connected') {
+      channels.push('INSTAGRAM');
+    }
+    return { channel: { in: channels } };
   }
 
   private displayName(conversation: {

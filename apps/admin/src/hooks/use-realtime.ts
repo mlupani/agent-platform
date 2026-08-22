@@ -177,8 +177,16 @@ export function useRealtimeInvalidation() {
     socket.on('conversation.message.created', patchConversationMessage);
     socket.on('conversation.updated', patchConversationUpdated);
     socket.on('conversation.bot_status.changed', invalidateConversationList);
+    socket.on('conversation.inbox.cleared', () => {
+      void queryClient.removeQueries({ queryKey: ['conversation'] });
+      invalidateConversationList();
+    });
     socket.on('message.status.updated', invalidateConversationList);
-    socket.on('whatsapp.status.changed', invalidateWhatsapp);
+    socket.on('whatsapp.status.changed', () => {
+      invalidateWhatsapp();
+      invalidateConversationList();
+    });
+    socket.on('instagram.status.changed', invalidateConversationList);
     socket.on(
       'whatsapp.qr.updated',
       (envelope: { payload?: { qrDataUrl?: string } }) => {

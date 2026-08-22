@@ -8,6 +8,8 @@ describe('ConversationsService inbox', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    whatsAppConfig: { findUnique: jest.fn() },
+    socialConnection: { findUnique: jest.fn() },
     message: {
       create: jest.fn(),
     },
@@ -47,6 +49,13 @@ describe('ConversationsService inbox', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     businesses.getCurrentId.mockResolvedValue('biz-1');
+    prisma.whatsAppConfig.findUnique.mockResolvedValue({
+      status: 'connected',
+      sessionStatus: 'WORKING',
+    });
+    prisma.socialConnection.findUnique.mockResolvedValue({
+      status: 'connected',
+    });
   });
 
   it('scopes get() to the current business', async () => {
@@ -56,7 +65,12 @@ describe('ConversationsService inbox', () => {
     );
     expect(prisma.conversation.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'conv-1', businessId: 'biz-1' },
+        where: expect.objectContaining({
+          id: 'conv-1',
+          businessId: 'biz-1',
+          hiddenAt: null,
+          channel: { in: ['WEB', 'PLAYGROUND', 'WHATSAPP', 'INSTAGRAM'] },
+        }),
       }),
     );
   });
@@ -67,7 +81,23 @@ describe('ConversationsService inbox', () => {
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { notIn: ['PLAYGROUND'] },
+          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM'] },
+        }),
+      }),
+    );
+  });
+
+  it('oculta WhatsApp si la integración está desconectada', async () => {
+    prisma.whatsAppConfig.findUnique.mockResolvedValue({
+      status: 'disconnected',
+      sessionStatus: 'STOPPED',
+    });
+    prisma.conversation.findMany.mockResolvedValue([]);
+    await service.list(undefined, { role: 'ADMIN' });
+    expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { in: ['WEB', 'PLAYGROUND', 'INSTAGRAM'] },
         }),
       }),
     );

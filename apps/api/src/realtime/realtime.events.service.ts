@@ -46,6 +46,17 @@ export class RealtimeEventsService {
     );
   }
 
+  conversationInboxCleared(
+    businessId: string,
+    payload: Record<string, unknown>,
+  ) {
+    this.emit(
+      REALTIME_EVENTS.CONVERSATION_INBOX_CLEARED,
+      payload,
+      businessId,
+    );
+  }
+
   whatsappStatusChanged(
     businessId: string,
     payload: Record<string, unknown> | object,

@@ -129,6 +129,9 @@ services:
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
       ZERNIO_REDIRECT_URI: ${ZERNIO_REDIRECT_URI:?Set ZERNIO_REDIRECT_URI}
+      VIDEO_EDITOR_FFMPEG_PATH: ffmpeg
+      VIDEO_EDITOR_FFPROBE_PATH: ffprobe
+      VIDEO_EDITOR_FONT_FILE: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
     # Solo localhost: Traefik (host network) proxya hacia acá
     ports:
       - '127.0.0.1:3001:3001'

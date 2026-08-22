@@ -14,6 +14,7 @@ import { BusinessesService } from '../businesses/businesses.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
+import { WahaConversationsSyncService } from './waha-conversations.sync';
 
 const upsertSchema = z.object({
   provider: z.enum(['waha', 'meta_cloud']).optional(),
@@ -37,6 +38,7 @@ export class WhatsAppAdminController {
     private readonly providers: WhatsAppProviderFactory,
     private readonly businesses: BusinessesService,
     private readonly realtime: RealtimeEventsService,
+    private readonly wahaSync: WahaConversationsSyncService,
   ) {}
 
   @Get()
@@ -91,6 +93,7 @@ export class WhatsAppAdminController {
     await this.providers.getWaha().disconnect(businessId, {
       logout: body?.logout === true,
     });
+    await this.wahaSync.purgeChats(businessId);
     const status = await this.providers.getWaha().getStatus(businessId);
     this.realtime.whatsappStatusChanged(businessId, status);
     return status;

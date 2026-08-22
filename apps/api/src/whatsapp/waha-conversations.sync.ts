@@ -6,6 +6,7 @@ import type {
   WahaChatMessage,
   WahaChatOverview,
 } from './providers/waha.whatsapp-provider';
+import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import {
   alternateWhatsAppExternalIds,
@@ -29,7 +30,25 @@ export class WahaConversationsSyncService {
     private readonly prisma: PrismaService,
     private readonly waha: WahaWhatsAppProvider,
     private readonly config: WhatsAppConfigService,
+    private readonly realtime: RealtimeEventsService,
   ) {}
+
+  async purgeChats(businessId: string): Promise<number> {
+    this.lastChatSync.delete(businessId);
+    const result = await this.prisma.conversation.deleteMany({
+      where: { businessId, channel: 'WHATSAPP' },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        `Purged ${result.count} WhatsApp conversation(s) for ${businessId}`,
+      );
+    }
+    this.realtime.conversationInboxCleared(businessId, {
+      channel: 'WHATSAPP',
+      deleted: result.count,
+    });
+    return result.count;
+  }
 
   async syncChats(businessId: string, options?: { force?: boolean }) {
     const now = Date.now();

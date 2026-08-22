@@ -17,13 +17,14 @@ WORKDIR /repo/apps/api
 RUN pnpm prisma generate && pnpm build
 
 FROM node:22-alpine
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl ffmpeg font-dejavu
 RUN corepack enable && corepack prepare pnpm@10.16.0 --activate
 WORKDIR /repo
 COPY --from=build /repo /repo
 WORKDIR /repo/apps/api
 ENV NODE_ENV=production
 ENV API_PORT=3001
+ENV VIDEO_EDITOR_FONT_FILE=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
 EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --retries=10 --start-period=40s \
   CMD node -e "fetch('http://127.0.0.1:3001/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

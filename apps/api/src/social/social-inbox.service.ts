@@ -63,6 +63,28 @@ export class SocialInboxService {
     return (await this.isPushLive(businessId)) ? 'webhook' : 'poll';
   }
 
+  async purgeChats(businessId: string): Promise<number> {
+    this.lastChatSync.delete(businessId);
+    await this.redis.del(pushLiveKey(businessId));
+    const result = await this.prisma.conversation.deleteMany({
+      where: { businessId, channel: 'INSTAGRAM' },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        `Purged ${result.count} Instagram conversation(s) for ${businessId}`,
+      );
+    }
+    this.realtime.conversationInboxCleared(businessId, {
+      channel: 'INSTAGRAM',
+      deleted: result.count,
+    });
+    this.realtime.instagramStatusChanged(businessId, {
+      status: 'disconnected',
+      channel: 'INSTAGRAM',
+    });
+    return result.count;
+  }
+
   async handleMessageEvent(payload: unknown): Promise<boolean> {
     const inbound = parseInboxEvent(payload);
     if (!inbound) return false;

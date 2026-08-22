@@ -51,7 +51,10 @@ describe('SocialPublishingService', () => {
       return fallback;
     },
   };
-  const inbox = { backfillFromZernio: jest.fn().mockResolvedValue(0) };
+  const inbox = {
+    backfillFromZernio: jest.fn().mockResolvedValue(0),
+    purgeChats: jest.fn().mockResolvedValue(0),
+  };
 
   const service = new SocialPublishingService(
     prisma as never,
@@ -158,7 +161,23 @@ describe('SocialPublishingService', () => {
     });
     const result = await service.disconnect('biz-a', 'instagram');
     expect(provider.disconnect).toHaveBeenCalledWith('acc_1');
+    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a');
     expect(result.status).toBe('disconnected');
+  });
+
+  it('desconectar TikTok no toca el inbox', async () => {
+    prisma.socialConnection.findUnique.mockResolvedValue({
+      id: 'conn-tt',
+      businessId: 'biz-a',
+      platform: 'tiktok',
+      externalAccountId: 'acc_tt',
+    });
+    prisma.socialConnection.update.mockResolvedValue({
+      platform: 'tiktok',
+      status: 'disconnected',
+    });
+    await service.disconnect('biz-a', 'tiktok');
+    expect(inbox.purgeChats).not.toHaveBeenCalled();
   });
 
   it('health de cuenta inexistente o de otro tenant da 404', async () => {
@@ -202,6 +221,26 @@ describe('SocialPublishingService', () => {
     });
     expect(result.applied).toBe(false);
     expect(prisma.socialConnection.update).not.toHaveBeenCalled();
+    expect(inbox.purgeChats).not.toHaveBeenCalled();
+  });
+
+  it('al desconectar Instagram por webhook borra el inbox', async () => {
+    prisma.socialConnection.findUnique.mockResolvedValue({
+      id: 'conn-1',
+      businessId: 'biz-a',
+      platform: 'instagram',
+    });
+    prisma.socialConnection.update.mockResolvedValue({
+      platform: 'instagram',
+      status: 'disconnected',
+    });
+    const result = await service.upsertFromWebhook({
+      accountId: 'acc_1',
+      platform: 'instagram',
+      status: 'disconnected',
+    });
+    expect(result.applied).toBe(true);
+    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a');
   });
 
   it('falla conectar si el negocio no existe', async () => {

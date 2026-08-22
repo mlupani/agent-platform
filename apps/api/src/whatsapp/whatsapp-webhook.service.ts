@@ -6,6 +6,7 @@ import { AgentService } from '../ai/agents/agent.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
+import { WahaConversationsSyncService } from './waha-conversations.sync';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
 import {
   alternateWhatsAppExternalIds,
@@ -30,6 +31,7 @@ export class WhatsAppWebhookService {
     private readonly waha: WahaWhatsAppProvider,
     private readonly agent: AgentService,
     private readonly realtime: RealtimeEventsService,
+    private readonly wahaSync: WahaConversationsSyncService,
   ) {}
 
   /** Legacy Meta verify — kept for compatibility if verifyToken exists */
@@ -109,6 +111,18 @@ export class WhatsAppWebhookService {
       meId,
       displayPhoneNumber,
     });
+
+    if (sessionStatus === 'STOPPED') {
+      await this.wahaSync.purgeChats(businessId);
+    } else if (sessionStatus === 'WORKING') {
+      void this.wahaSync.syncChats(businessId, { force: true }).catch((error) => {
+        this.logger.warn(
+          `WAHA reconnect sync skipped: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        );
+      });
+    }
 
     if (sessionStatus === 'SCAN_QR_CODE') {
       const qrDataUrl = await this.waha.fetchQrDataUrl(businessId);

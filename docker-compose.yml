@@ -94,6 +94,9 @@ services:
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/api/oauth/google/callback}
       ZERNIO_REDIRECT_URI: ${ZERNIO_REDIRECT_URI:-http://localhost:3001/api/social/oauth/callback}
+      VIDEO_EDITOR_FFMPEG_PATH: ffmpeg
+      VIDEO_EDITOR_FFPROBE_PATH: ffprobe
+      VIDEO_EDITOR_FONT_FILE: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
     ports:
       - '3001:3001'
     healthcheck:

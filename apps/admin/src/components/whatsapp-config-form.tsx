@@ -85,6 +85,7 @@ export function WhatsAppConfigForm() {
       setQr(null);
       autoStarted.current = false;
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-config'] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
@@ -162,8 +163,9 @@ export function WhatsAppConfigForm() {
           <div>
             <h3 className="font-medium">WhatsApp</h3>
             <p className="text-sm text-muted mt-1">
-              Escaneá el QR una sola vez y esperá sin refrescar muchas veces.
-              Mientras vinculás, evitá abrir WhatsApp Web en otra pestaña.
+              Conectá WhatsApp para atender mensajes, publicar Estados y
+              activar o pausar el asistente. Escaneá el QR una sola vez y no
+              abras WhatsApp Web en otra pestaña mientras vinculás.
             </p>
           </div>
         </div>
@@ -271,7 +273,15 @@ export function WhatsAppConfigForm() {
           type="button"
           className="rounded-lg border border-rose/30 text-rose bg-panel px-4 py-2.5 text-sm min-h-10 disabled:opacity-60"
           disabled={busy || status === 'disconnected'}
-          onClick={() => stop.mutate(false)}
+          onClick={() => {
+            if (
+              confirm(
+                'Al desconectar se borran las conversaciones de WhatsApp de esta bandeja. Cuando vuelvas a conectar, se importan de nuevo desde el teléfono.',
+              )
+            ) {
+              stop.mutate(false);
+            }
+          }}
         >
           Desconectar
         </button>
@@ -280,7 +290,11 @@ export function WhatsAppConfigForm() {
           className="rounded-lg border border-rose/30 text-rose bg-panel px-4 py-2.5 text-sm min-h-10 disabled:opacity-60"
           disabled={busy}
           onClick={() => {
-            if (confirm('¿Cerrar sesión de WhatsApp en este dispositivo?')) {
+            if (
+              confirm(
+                '¿Cerrar sesión de WhatsApp en este dispositivo? También se borran las conversaciones de la bandeja; al reconectar se vuelven a importar.',
+              )
+            ) {
               stop.mutate(true);
             }
           }}

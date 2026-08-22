@@ -579,8 +579,11 @@ model GeneratedContent {
   objective          String
   topic              String?
   headline           String?
+  /// Texto de overlay al inicio del video (no se publica como caption).
+  hook               String?
   caption            String?
   cta                String?
+  hashtags           String[] @default([])
   userInstructions   String?
   /// URLs de imágenes de referencia subidas por el usuario (contexto para strategy + image gen)
   referenceImageUrls String[] @default([])
@@ -596,6 +599,9 @@ model GeneratedContent {
   channels           String[] @default([])
   /// DRAFT | READY | GENERATING | SCHEDULED | PUBLISHING | PUBLISHED | PARTIALLY_PUBLISHED | FAILED
   status             String   @default("DRAFT")
+  /// PROCESSING | COMPLETED | SKIPPED | FAILED — postproducción FFmpeg (solo VIDEO)
+  autoEditStatus     String?
+  autoEditError      String?
   /// MANUAL | AUTOMATIC
   generationMode     String   @default("MANUAL")
   error              String?
@@ -619,6 +625,8 @@ model ContentAsset {
   content          GeneratedContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
   /// IMAGE | VIDEO
   type             String   @default("IMAGE")
+  /// ORIGINAL | EDITED
+  role             String   @default("ORIGINAL")
   /// STORY_VERTICAL | SHORT_VERTICAL | FEED_SQUARE | FEED_PORTRAIT | FEED_LANDSCAPE
   format           String
   aspectRatio      String?

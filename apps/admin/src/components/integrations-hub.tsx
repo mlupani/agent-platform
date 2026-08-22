@@ -140,7 +140,8 @@ export function IntegrationsHub() {
       <header>
         <h2 className="text-2xl font-semibold tracking-tight">Integraciones</h2>
         <p className="text-sm text-muted mt-1">
-          Conecta los servicios que el agente usa para operar.
+          Conectá cada canal para publicar, atender mensajes y manejar el
+          asistente.
         </p>
       </header>
 
@@ -161,7 +162,7 @@ export function IntegrationsHub() {
         <button
           type="button"
           onClick={() => setPanel('whatsapp')}
-          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="h-10 w-10 rounded-xl bg-[#25D366]/15 grid place-items-center text-[#25D366]">
@@ -186,7 +187,8 @@ export function IntegrationsHub() {
           </div>
           <h3 className="mt-4 font-medium">WhatsApp</h3>
           <p className="mt-1 text-sm text-muted">
-            Recibe mensajes de WhatsApp. El agente responde solo si está activo.
+            Conectá WhatsApp, atendé mensajes, publicá Estados y activá o
+            pausá el asistente.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →
@@ -196,7 +198,7 @@ export function IntegrationsHub() {
         <button
           type="button"
           onClick={() => setPanel('instagram')}
-          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] grid place-items-center text-white">
@@ -221,7 +223,8 @@ export function IntegrationsHub() {
           </div>
           <h3 className="mt-4 font-medium">Instagram</h3>
           <p className="mt-1 text-sm text-muted">
-            Publicá feed, Stories y Reels, y recibí Direct en Conversaciones.
+            Conectá Instagram, publicá Feed, Stories y Reels, contestá mensajes y
+            activá o pausá el asistente.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →
@@ -231,7 +234,7 @@ export function IntegrationsHub() {
         <button
           type="button"
           onClick={() => setPanel('tiktok')}
-          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="h-10 w-10 rounded-xl bg-black grid place-items-center text-white">
@@ -256,7 +259,8 @@ export function IntegrationsHub() {
           </div>
           <h3 className="mt-4 font-medium">TikTok</h3>
           <p className="mt-1 text-sm text-muted">
-            Publicá videos cortos. TikTok no tiene bandeja de DMs acá.
+            Conectá TikTok y publicá videos cortos. No trae mensajes a
+            Conversaciones.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →
@@ -266,7 +270,7 @@ export function IntegrationsHub() {
         <button
           type="button"
           onClick={() => setPanel('web')}
-          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent">
@@ -279,7 +283,8 @@ export function IntegrationsHub() {
           </div>
           <h3 className="mt-4 font-medium">Web</h3>
           <p className="mt-1 text-sm text-muted">
-            Chat embebido en tu landing. Conectarlo ya activa al agente.
+            Conectá el chat en tu web para que el asistente atienda a quien
+            entre a la landing.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →
@@ -289,7 +294,7 @@ export function IntegrationsHub() {
         <button
           type="button"
           onClick={() => setPanel('calendar')}
-          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group"
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent text-lg font-bold">
@@ -302,7 +307,8 @@ export function IntegrationsHub() {
           </div>
           <h3 className="mt-4 font-medium">Google Calendar</h3>
           <p className="mt-1 text-sm text-muted">
-            Sincroniza citas con tu calendario.
+            Conectá tu agenda para que el asistente pueda ver disponibilidad, reservar turnos y evitar
+            choques de citas.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →

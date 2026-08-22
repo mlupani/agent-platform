@@ -46,6 +46,11 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     messageStatusUpdated: jest.fn(),
   };
 
+  const wahaSync = {
+    purgeChats: jest.fn().mockResolvedValue(0),
+    syncChats: jest.fn().mockResolvedValue(0),
+  };
+
   const service = new WhatsAppWebhookService(
     prisma as never,
     redis as never,
@@ -54,6 +59,7 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     waha as never,
     agent as never,
     realtime as never,
+    wahaSync as never,
   );
 
   beforeEach(() => {
@@ -87,6 +93,25 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     );
     expect(realtime.whatsappStatusChanged).toHaveBeenCalled();
     expect(realtime.whatsappQrUpdated).toHaveBeenCalled();
+    expect(wahaSync.purgeChats).not.toHaveBeenCalled();
+  });
+
+  it('borra chats de WhatsApp cuando la sesión queda STOPPED', async () => {
+    config.findBySessionName.mockResolvedValue({
+      businessId: 'biz-1',
+      sessionName: 'default',
+      enabled: true,
+    });
+    waha.mapSessionStatus.mockReturnValue('disconnected');
+
+    const result = await service.handleWahaEvent({
+      event: 'session.status',
+      session: 'default',
+      payload: { status: 'STOPPED' },
+    });
+
+    expect(result).toEqual({ processed: 1 });
+    expect(wahaSync.purgeChats).toHaveBeenCalledWith('biz-1');
   });
 
   it('dedups inbound message by redis lock', async () => {

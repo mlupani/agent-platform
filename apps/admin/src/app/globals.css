@@ -146,3 +146,12 @@ body {
   cursor: not-allowed;
 }
 
+.video-no-fullscreen::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+
+.video-no-fullscreen::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+

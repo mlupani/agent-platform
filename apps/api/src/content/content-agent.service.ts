@@ -12,6 +12,12 @@ import type {
   ContentObjective,
   ContentStrategy,
 } from './content.types';
+import { normalizeHashtags } from './video-editor/text-overlay';
+import {
+  buildBriefSystemPrompt,
+  buildBriefUserPrompt,
+  sanitizeBrief,
+} from './suggest-brief';
 
 const strategySchema = z.object({
   topic: z.string().min(2).max(200),
@@ -27,11 +33,39 @@ const strategySchema = z.object({
   headline: z.string().min(2).max(160),
   caption: z.string().min(2).max(2200),
   cta: z.string().min(2).max(120),
+  hook: z.string().max(160).nullish(),
+  hashtags: z.preprocess((value) => {
+    if (typeof value === 'string') {
+      return value.split(/[\s,]+/).filter(Boolean);
+    }
+    return value;
+  }, z.array(z.string().max(40)).max(5).optional()),
   imagePrompt: z.string().min(10).max(2500),
   videoPrompt: z.string().min(10).max(2500).optional(),
   visualStyle: z.string().min(2).max(400),
   serviceId: z.string().uuid().nullable().optional(),
   audience: z.string().max(300).nullable().optional(),
+  editing: z
+    .object({
+      add_hook: z.boolean().optional(),
+      hook_start: z.number().optional(),
+      hook_end: z.number().optional(),
+      hook_position: z.enum(['top', 'center', 'bottom']).optional(),
+      hook_font_size: z.number().optional(),
+      add_cta: z.boolean().optional(),
+      cta_start: z.number().optional(),
+      cta_end: z.number().optional(),
+      cta_position: z.enum(['top', 'center', 'bottom']).optional(),
+      cta_font_size: z.number().optional(),
+      add_logo: z.boolean().optional(),
+      logo_position: z
+        .enum(['top-left', 'top-right', 'bottom-left', 'bottom-right'])
+        .optional(),
+      logo_width: z.number().optional(),
+      logo_opacity: z.number().optional(),
+    })
+    .optional()
+    .catch(undefined),
 });
 
 export interface ContentAgentInput {
@@ -47,6 +81,16 @@ export interface ContentAgentInput {
 
 export interface ContentAgentResult {
   strategy: ContentStrategy;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  durationMs: number;
+}
+
+export interface ContentBriefResult {
+  instructions: string;
   provider: string;
   model: string;
   inputTokens: number;
@@ -159,8 +203,8 @@ export class ContentAgentService {
         model,
         ...(usesMaxCompletionTokens ? {} : { temperature: 0.7 }),
         ...(usesMaxCompletionTokens
-          ? { max_completion_tokens: 1200 }
-          : { max_tokens: 1200 }),
+          ? { max_completion_tokens: 1600 }
+          : { max_tokens: 1600 }),
         messages: [
           { role: 'system', content: system },
           {
@@ -203,7 +247,7 @@ export class ContentAgentService {
         response = await used.provider.chat({
           model: used.model,
           temperature: 0.7,
-          maxTokens: 1200,
+          maxTokens: 1600,
           messages,
         });
       } catch (error) {
@@ -216,7 +260,7 @@ export class ContentAgentService {
         response = await used.provider.chat({
           model: used.model,
           temperature: 0.7,
-          maxTokens: 1200,
+          maxTokens: 1600,
           messages,
         });
       }
@@ -242,13 +286,203 @@ export class ContentAgentService {
     });
 
     return {
-      strategy,
+      strategy: {
+        ...strategy,
+        hook: strategy.hook ?? undefined,
+        hashtags: normalizeHashtags(strategy.hashtags),
+      },
       provider: providerName,
       model,
       inputTokens,
       outputTokens,
       estimatedCost: this.cost.estimate(model, inputTokens, outputTokens),
       durationMs: Date.now() - started,
+    };
+  }
+
+  async suggestBrief(input: {
+    businessId: string;
+    objective: ContentObjective;
+    channels: ContentChannel[];
+    mediaType: ContentMediaType;
+    durationSeconds?: number;
+    serviceId?: string;
+    hint?: string;
+  }): Promise<ContentBriefResult> {
+    const started = Date.now();
+    const durationSeconds = input.durationSeconds ?? 5;
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: input.businessId },
+      include: {
+        brandingConfig: true,
+        businessHours: { orderBy: { dayOfWeek: 'asc' } },
+        services: {
+          where: { enabled: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          take: 30,
+        },
+        agentConfigs: { where: { isDefault: true }, take: 1 },
+      },
+    });
+
+    const recent = await this.prisma.generatedContent.findMany({
+      where: {
+        businessId: input.businessId,
+        status: { not: 'FAILED' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: { topic: true, headline: true, cta: true, objective: true },
+    });
+
+    const selectedService = input.serviceId
+      ? (business.services.find((s) => s.id === input.serviceId) ?? null)
+      : null;
+
+    const days = [
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo',
+    ];
+    const hours = business.businessHours
+      .map((h) => {
+        const label = days[h.dayOfWeek] ?? `Día ${h.dayOfWeek}`;
+        if (h.isClosed) return `${label}: Cerrado`;
+        const ranges = Array.isArray(h.ranges)
+          ? (h.ranges as Array<{ start: string; end: string }>)
+          : [];
+        return `${label}: ${ranges.map((r) => `${r.start}-${r.end}`).join(', ') || 'Cerrado'}`;
+      })
+      .join('\n');
+    const services = business.services
+      .map(
+        (s) =>
+          `- ${s.name}${s.description ? `: ${s.description}` : ''}${
+            s.price ? ` ($${s.price})` : ''
+          }`,
+      )
+      .join('\n');
+    const brand = business.brandingConfig;
+    const brandBlock = brand
+      ? [
+          `Estilo visual: ${brand.visualStyle || '—'}`,
+          `Tono comercial: ${brand.commercialTone || '—'}`,
+          `Audiencia: ${brand.targetAudience || '—'}`,
+          `Colores: ${brand.primaryColor || '—'} / ${brand.secondaryColor || '—'}`,
+          `Preferir: ${brand.preferNotes || '—'}`,
+          `Evitar: ${brand.avoidNotes || '—'}`,
+          `Extra: ${brand.additionalInstructions || '—'}`,
+        ].join('\n')
+      : 'Sin branding extra.';
+
+    const system = buildBriefSystemPrompt({
+      mediaType: input.mediaType,
+      durationSeconds,
+      objective: input.objective,
+    });
+    const userText = buildBriefUserPrompt({
+      businessName: business.name,
+      businessType: business.type,
+      description: business.description,
+      todayLabel: new Intl.DateTimeFormat('es-AR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(new Date()),
+      objective: input.objective,
+      mediaType: input.mediaType,
+      durationSeconds,
+      channels: input.channels,
+      selectedService: selectedService
+        ? { name: selectedService.name, description: selectedService.description }
+        : null,
+      services,
+      hours,
+      brand: brandBlock,
+      recent:
+        recent
+          .map(
+            (r) =>
+              `- ${r.objective} | ${r.topic || '—'} | ${r.headline || '—'} | CTA: ${r.cta || '—'}`,
+          )
+          .join('\n') || '—',
+      hint: input.hint,
+    });
+
+    const { providerName, model, content, inputTokens, outputTokens } =
+      await this.completePlain(business.agentConfigs[0], system, userText, 700);
+
+    const instructions = sanitizeBrief(content);
+    if (!instructions) {
+      throw new Error('La IA no devolvió un guion usable');
+    }
+
+    return {
+      instructions,
+      provider: providerName,
+      model,
+      inputTokens,
+      outputTokens,
+      estimatedCost: this.cost.estimate(model, inputTokens, outputTokens),
+      durationMs: Date.now() - started,
+    };
+  }
+
+  private async completePlain(
+    agentConfig: { provider: string; model: string } | undefined,
+    system: string,
+    userText: string,
+    maxTokens: number,
+  ): Promise<{
+    providerName: string;
+    model: string;
+    content: string;
+    inputTokens: number;
+    outputTokens: number;
+  }> {
+    const target = this.llmRouting.resolvePrimary(
+      agentConfig
+        ? { provider: agentConfig.provider, model: agentConfig.model }
+        : { provider: 'openai', model: 'gpt-4.1-mini' },
+    );
+    const messages: LlmMessage[] = [
+      { role: 'system', content: system },
+      { role: 'user', content: userText },
+    ];
+    let used = target;
+    let response;
+    try {
+      response = await used.provider.chat({
+        model: used.model,
+        temperature: 0.85,
+        maxTokens,
+        messages,
+      });
+    } catch (error) {
+      const fallback = this.llmRouting.resolveFallback(used.providerName);
+      if (!fallback || !this.llmRouting.isRetryableLlmError(error)) throw error;
+      this.logger.warn(
+        `Content LLM fallback ${used.providerName} → ${fallback.providerName}`,
+      );
+      used = fallback;
+      response = await used.provider.chat({
+        model: used.model,
+        temperature: 0.85,
+        maxTokens,
+        messages,
+      });
+    }
+    return {
+      providerName: used.providerName,
+      model: used.model,
+      content: response.content ?? '',
+      inputTokens: response.usage.inputTokens ?? 0,
+      outputTokens: response.usage.outputTokens ?? 0,
     };
   }
 
@@ -284,25 +518,42 @@ export class ContentAgentService {
       mediaType === 'VIDEO'
         ? `
 Reglas de videoPrompt (CRÍTICO — el video es un SHORT vertical 9:16 de ${durationSeconds}s):
-- videoPrompt en inglés, cinematográfico, para text-to-video.
-- Plano vertical 9:16, movimiento de cámara suave, iluminación profesional.
+- videoPrompt en inglés, cinematográfico, para text-to-video (Kling / Seedance).
+- Plano vertical 9:16, una sola toma continua (no pidas varios clips ni cortes).
 - Pieza de marketing para redes (Reels / Status / Story), no un video casero.
-- Incluí marca: logo si hay LOGO_URL, o el nombre del negocio tipografiado de forma legible.
-- Headline corto on-screen (pocas palabras, alto contraste). Nada de párrafos.
-- Sin texto ilegible, Lorem Ipsum ni letras inventadas.
-- Si hay REFERENCE IMAGES, usalas como look del local/producto/estilo.
+- UNA acción principal clara y continua para todo el shot. No apiles a la vez: manipular varios objetos + manos complejas + desplazarse + cámara compleja.
+- Cámara simple: locked-off o un solo movimiento suave. slow, controlled movement. one clear primary action. one smooth continuous action.
+- Si la escena incluye manos, utensilios o un objeto manipulado, describí en el videoPrompt: qué objeto es, qué mano lo sostiene, cómo se sostiene y el tipo de movimiento (lento, estable, continuo). Usá tono positivo: natural hand movement, stable realistic grip, realistic physical interaction, consistent object shape and size. Ejemplo: "The chef slowly stirs the food using a wooden spoon held firmly in the right hand. The hand maintains a stable, natural grip. One smooth and controlled continuous movement. The spoon remains consistent in shape and size throughout the action."
+- Si es talking-head, producto o local SIN manos/utensilios, NO inventes props ni gestos de manos: que hable o se vea el producto, con movimiento mínimo.
+- VOZ OBLIGATORIA: el video NUNCA es mudo. Siempre hay una voz humana hablando en español rioplatense.
+  Preferí un protagonista a cámara (owner/staff/customer) talking to camera with audible speech and lip-sync.
+  Si no hay persona en frame, usá voice-over clara sobre el B-roll.
+- El videoPrompt DEBE incluir las frases habladas EXACTAS entre comillas (español) y pedir generate spoken audio / talking.
+- Si USER REQUEST / Instructions trae un bloque VOZ, usá esas frases literales.
+- NO pidas texto, captions, headlines, logos ni watermarks DENTRO del video.
+  El texto on-screen (hook/CTA) y el logo los aplica después nuestra app con FFmpeg.
+- Si hay REFERENCE IMAGES, usalas como look del local/producto/estilo (sin tipografía).
+
+Reglas de overlay (editing) — la app las quema DESPUÉS, no FAL/Kling:
+- El video DEBE salir listo para redes: preferí add_hook, add_cta y add_logo en true (si hay logo).
+- hook: frase corta en español (máx ~8 palabras), gancho de atención. No pongas tiempos fijos de un ejemplo.
+- cta: frase corta accionable para el cierre (puede coincidir con el campo cta).
+- caption + hashtags: SOLO metadata de publicación. NUNCA van dentro del video.
+- No inventes segundos fuera de 0–${durationSeconds}. Si no estás seguro, OMITÍ hook_start/hook_end/cta_start/cta_end y la app elige ventanas largas.
+- hook_position: top. cta_position: bottom.
+- logo_position: top-right (el CTA vive abajo; no pongas el logo abajo).
 
 Respondé SOLO con un objeto JSON con las keys:
-  topic, objective, headline, caption, cta, imagePrompt, videoPrompt, visualStyle, serviceId, audience`
+  topic, objective, headline, caption, cta, hook, hashtags, imagePrompt, videoPrompt, visualStyle, serviceId, audience, editing`
         : `
 Respondé SOLO con un objeto JSON con las keys:
-  topic, objective, headline, caption, cta, imagePrompt, visualStyle, serviceId, audience`;
+  topic, objective, headline, caption, cta, hashtags, imagePrompt, visualStyle, serviceId, audience`;
 
     return `Sos un Content Agent de marketing visual para un negocio local.
 Tu trabajo es crear UNA estrategia de publicación en JSON (sin markdown extra).
 
 Reglas de copy:
-- Caption en español rioplatense, natural, sin hashtags excesivos (máx 5).
+- Caption en español rioplatense, natural. Los hashtags van en el array "hashtags" (máx 5), no hace falta repetirlos en el caption.
 - Evitá repetir temas/headlines/CTA de RECENT CONTENT.
 - CTA claro y accionable.
 - Si hay branding, respetá colores, estilo, audiencia y "evitar".
@@ -423,7 +674,7 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
 
     const formatHint =
       params.mediaType === 'VIDEO'
-        ? `Priorizar SHORT vertical 9:16 (${params.durationSeconds}s) para Reels / Status / Story, con marca y headline seguros (zona central/superior).`
+        ? `Priorizar SHORT vertical 9:16 (${params.durationSeconds}s) CON VOZ HUMANA y UNA acción principal continua. Cámara simple. El videoPrompt debe incluir diálogo hablado en español (protagonista a cámara o locución). Si hay manos/utensilios, describí agarre y un solo movimiento. NO texto on-screen; hook/CTA/logo van en editing.`
         : params.channels.some(
               (c) =>
                 c === 'INSTAGRAM_STORY' ||
