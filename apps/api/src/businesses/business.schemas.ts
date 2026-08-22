@@ -18,6 +18,7 @@ export const configuredMessagesSchema = z.object({
   handoff: z.string().max(2000).optional(),
   appointmentConfirmation: z.string().max(2000).optional(),
   appointmentCancellation: z.string().max(2000).optional(),
+  appointmentReminder: z.string().max(2000).optional(),
   error: z.string().max(2000).optional(),
   fallback: z.string().max(2000).optional(),
 });

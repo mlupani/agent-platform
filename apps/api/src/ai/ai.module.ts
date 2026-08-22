@@ -56,7 +56,7 @@ const demoTools = [
   imports: [
     AutomationsModule,
     AnalyticsModule,
-    CalendarModule,
+    forwardRef(() => CalendarModule),
     EmailModule,
     forwardRef(() => WhatsAppModule),
   ],

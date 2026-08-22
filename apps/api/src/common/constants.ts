@@ -103,6 +103,8 @@ export const DEFAULT_CONFIGURED_MESSAGES = {
   appointmentConfirmation:
     'Tu cita quedó confirmada. Si necesitás cambiarla, avisame.',
   appointmentCancellation: 'Tu cita fue cancelada.',
+  appointmentReminder:
+    'Hola {{nombre}}, te recordamos tu cita{{servicio}} el {{fecha}} a las {{hora}}. Si necesitás cambiarla, respondé este mensaje.',
   error: 'Tuve un problema al procesar tu pedido. ¿Podés intentarlo de nuevo?',
   fallback:
     'No estoy seguro de esa consulta. ¿Querés que te derive con una persona?',

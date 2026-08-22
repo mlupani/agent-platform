@@ -57,6 +57,7 @@ model Business {
   webChatConfig        WebChatConfig?
   brandingConfig       BrandingConfig?
   socialContentConfig  SocialContentConfig?
+  appointmentReminderConfig AppointmentReminderConfig?
   generatedContents    GeneratedContent[]
   contentGenerationExecutions ContentGenerationExecution[]
   contentPublications  ContentPublication[]
@@ -323,11 +324,48 @@ model Appointment {
   metadata       Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  reminderLogs   AppointmentReminderLog[]
 
   @@index([businessId, startsAt])
   @@index([businessId, status])
   @@index([businessId, contactPhone])
   @@map("appointments")
+}
+
+/// Recordatorios automáticos de citas (WhatsApp / email / Instagram).
+model AppointmentReminderConfig {
+  id          String   @id @default(uuid())
+  businessId  String   @unique
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  enabled     Boolean  @default(false)
+  /// Horas antes de startsAt (1–24).
+  hoursBefore Int      @default(24)
+  /// Orden de preferencia: whatsapp | email | instagram
+  channels    String[] @default(["whatsapp", "email", "instagram"])
+  message     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("appointment_reminder_configs")
+}
+
+model AppointmentReminderLog {
+  id            String      @id @default(uuid())
+  businessId    String
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  hoursBefore   Int
+  /// whatsapp | email | instagram | none
+  channel       String
+  /// pending | sent | failed | skipped
+  status        String
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@unique([appointmentId])
+  @@index([businessId, status])
+  @@map("appointment_reminder_logs")
 }
 
 model KnowledgeBase {

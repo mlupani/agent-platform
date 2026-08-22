@@ -259,16 +259,21 @@ export class AppointmentsService {
       );
     }
 
+    const extras = await this.resolveContactExtras(input);
+    const contactName = input.contactName?.trim() || extras.name || undefined;
+    const contactPhone = input.contactPhone?.trim() || extras.phone || undefined;
+    const contactEmail = input.contactEmail?.trim() || extras.email || undefined;
+
     const summary = service
-      ? `${service.name} — ${input.contactName ?? 'Cliente'}`
-      : `Cita — ${input.contactName ?? 'Cliente'}`;
+      ? `${service.name} — ${contactName ?? 'Cliente'}`
+      : `Cita — ${contactName ?? 'Cliente'}`;
 
     const googleEventId = await this.google.createEvent({
       businessId: input.businessId,
       summary,
       description: [
-        input.contactPhone ? `Tel: ${input.contactPhone}` : null,
-        input.contactEmail ? `Email: ${input.contactEmail}` : null,
+        contactPhone ? `Tel: ${contactPhone}` : null,
+        contactEmail ? `Email: ${contactEmail}` : null,
         input.notes ?? null,
       ]
         .filter(Boolean)
@@ -276,7 +281,7 @@ export class AppointmentsService {
       startsAt: startsAt.toUTC().toJSDate(),
       endsAt: endsAt.toUTC().toJSDate(),
       timezone,
-      attendeeEmail: input.contactEmail,
+      attendeeEmail: contactEmail,
     });
 
     return this.prisma.appointment.create({
@@ -285,9 +290,9 @@ export class AppointmentsService {
         serviceId: service?.id,
         conversationId: input.conversationId,
         userId: input.userId,
-        contactName: input.contactName,
-        contactPhone: input.contactPhone,
-        contactEmail: input.contactEmail,
+        contactName,
+        contactPhone,
+        contactEmail,
         startsAt: startsAt.toUTC().toJSDate(),
         endsAt: endsAt.toUTC().toJSDate(),
         timezone,
@@ -370,6 +375,10 @@ export class AppointmentsService {
       });
     }
 
+    await this.prisma.appointmentReminderLog.deleteMany({
+      where: { appointmentId: id },
+    });
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
@@ -401,5 +410,44 @@ export class AppointmentsService {
       orderBy: { startsAt: 'asc' },
       take: 10,
     });
+  }
+
+  private async resolveContactExtras(input: CreateAppointmentInput): Promise<{
+    name?: string;
+    phone?: string;
+    email?: string;
+  }> {
+    const [conversation, user] = await Promise.all([
+      input.conversationId
+        ? this.prisma.conversation.findFirst({
+            where: { id: input.conversationId, businessId: input.businessId },
+            select: {
+              contactName: true,
+              contactPhone: true,
+              user: { select: { name: true, phone: true, email: true } },
+            },
+          })
+        : null,
+      input.userId
+        ? this.prisma.user.findFirst({
+            where: { id: input.userId, businessId: input.businessId },
+            select: { name: true, phone: true, email: true },
+          })
+        : null,
+    ]);
+
+    return {
+      name:
+        conversation?.contactName ||
+        conversation?.user?.name ||
+        user?.name ||
+        undefined,
+      phone:
+        conversation?.contactPhone ||
+        conversation?.user?.phone ||
+        user?.phone ||
+        undefined,
+      email: conversation?.user?.email || user?.email || undefined,
+    };
   }
 }

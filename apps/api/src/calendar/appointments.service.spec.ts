@@ -4,12 +4,15 @@ describe('AppointmentsService', () => {
   const prisma = {
     business: { findUniqueOrThrow: jest.fn() },
     service: { findFirst: jest.fn() },
+    conversation: { findFirst: jest.fn().mockResolvedValue(null) },
+    user: { findFirst: jest.fn().mockResolvedValue(null) },
     appointment: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
+    appointmentReminderLog: { deleteMany: jest.fn() },
   };
   const availability = { getAvailableSlots: jest.fn() };
   const google = {

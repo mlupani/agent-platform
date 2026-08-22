@@ -71,6 +71,11 @@ export class CreateAppointmentTool implements AgentTool {
       (context.metadata?.contactName
         ? String(context.metadata.contactName)
         : undefined);
+    const contactEmail =
+      data.contactEmail ||
+      (context.metadata?.contactEmail
+        ? String(context.metadata.contactEmail)
+        : undefined);
 
     try {
       const appointment = await this.appointments.create({
@@ -80,7 +85,7 @@ export class CreateAppointmentTool implements AgentTool {
         serviceId,
         contactName,
         contactPhone,
-        contactEmail: data.contactEmail,
+        contactEmail,
         startsAt: new Date(data.startsAt),
         timezone: business.timezone,
         notes: data.notes,

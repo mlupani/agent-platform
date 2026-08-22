@@ -22,6 +22,7 @@ export interface ConfiguredMessagesPrompt {
   handoff?: string;
   appointmentConfirmation?: string;
   appointmentCancellation?: string;
+  appointmentReminder?: string;
   error?: string;
   fallback?: string;
 }

@@ -1,9 +1,5 @@
-import { AppointmentsCalendar } from '@/components/appointments-calendar';
+import { CalendarWorkspace } from '@/components/calendar-workspace';
 
 export default function CalendarPage() {
-  return (
-    <div className="space-y-6">
-      <AppointmentsCalendar />
-    </div>
-  );
+  return <CalendarWorkspace />;
 }
