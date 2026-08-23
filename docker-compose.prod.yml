@@ -4,7 +4,9 @@
 # api/admin se publican solo en 127.0.0.1 para que Traefik los alcance.
 #
 # Uso:
-#   1. DNS A: ADMIN_HOST y API_HOST → IP pública del VPS
+#   1. DNS A: pilatesvillacrespo.admin.atenzia.tech
+#              pilatesvillacrespo.api.atenzia.tech
+#              → IP pública del VPS
 #   2. Completá .env.production
 #   3. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
@@ -121,14 +123,14 @@ services:
       API_PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agent_platform}?schema=public
       REDIS_URL: redis://redis:6379
-      API_URL: ${API_URL:?Set API_URL (https://api.tudominio.com)}
-      ADMIN_URL: ${ADMIN_URL:?Set ADMIN_URL (https://admin.tudominio.com)}
+      API_URL: ${API_URL:-https://pilatesvillacrespo.api.atenzia.tech}
+      ADMIN_URL: ${ADMIN_URL:-https://pilatesvillacrespo.admin.atenzia.tech}
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_WEBHOOK_URL: http://api:3001/api/webhooks/waha
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?Set GOOGLE_REDIRECT_URI}
-      ZERNIO_REDIRECT_URI: ${ZERNIO_REDIRECT_URI:?Set ZERNIO_REDIRECT_URI}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://pilatesvillacrespo.api.atenzia.tech/api/oauth/google/callback}
+      ZERNIO_REDIRECT_URI: ${ZERNIO_REDIRECT_URI:-https://pilatesvillacrespo.api.atenzia.tech/api/social/oauth/callback}
       VIDEO_EDITOR_FFMPEG_PATH: ffmpeg
       VIDEO_EDITOR_FFPROBE_PATH: ffprobe
       VIDEO_EDITOR_FONT_FILE: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
@@ -137,7 +139,7 @@ services:
       - '127.0.0.1:3001:3001'
     labels:
       - traefik.enable=true
-      - traefik.http.routers.agent-api.rule=Host(`${API_HOST:?Set API_HOST}`)
+      - traefik.http.routers.agent-api.rule=Host(`${API_HOST:-pilatesvillacrespo.api.atenzia.tech}`)
       - traefik.http.routers.agent-api.entrypoints=websecure
       - traefik.http.routers.agent-api.tls=true
       - traefik.http.routers.agent-api.tls.certresolver=letsencrypt
@@ -170,7 +172,7 @@ services:
       context: .
       dockerfile: apps/admin/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL (https://api.tudominio.com/api)}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://pilatesvillacrespo.api.atenzia.tech/api}
         NEXT_PUBLIC_ADMIN_EMAIL: ${NEXT_PUBLIC_ADMIN_EMAIL:-admin@negocio.local}
     container_name: agent-platform-admin
     restart: unless-stopped
@@ -185,7 +187,7 @@ services:
       - '127.0.0.1:3000:3000'
     labels:
       - traefik.enable=true
-      - traefik.http.routers.agent-admin.rule=Host(`${ADMIN_HOST:?Set ADMIN_HOST}`)
+      - traefik.http.routers.agent-admin.rule=Host(`${ADMIN_HOST:-pilatesvillacrespo.admin.atenzia.tech}`)
       - traefik.http.routers.agent-admin.entrypoints=websecure
       - traefik.http.routers.agent-admin.tls=true
       - traefik.http.routers.agent-admin.tls.certresolver=letsencrypt
