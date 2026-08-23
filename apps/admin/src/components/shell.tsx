@@ -34,6 +34,18 @@ const NAV = [
     ),
   },
   {
+    href: '/leads',
+    label: 'Leads',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M4 19c.6-3 2.6-5 5-5s4.4 2 5 5" />
+        <circle cx="17" cy="9" r="2.2" />
+        <path d="M16.2 19c.4-2.2 1.8-3.6 3.3-3.6.5 0 1 .1 1.5.4" />
+      </svg>
+    ),
+  },
+  {
     href: '/calendar',
     label: 'Calendario',
     icon: (

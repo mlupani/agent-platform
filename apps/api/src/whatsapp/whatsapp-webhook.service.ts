@@ -3,6 +3,11 @@ import { Prisma, type Conversation } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { AgentService } from '../ai/agents/agent.service';
+import { AudioTranscriptionService } from '../ai/transcription/audio-transcription.service';
+import {
+  formatVoiceMessage,
+  isWahaAudioPayload,
+} from '../ai/transcription/inbound-audio';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
@@ -32,6 +37,7 @@ export class WhatsAppWebhookService {
     private readonly agent: AgentService,
     private readonly realtime: RealtimeEventsService,
     private readonly wahaSync: WahaConversationsSyncService,
+    private readonly transcription: AudioTranscriptionService,
   ) {}
 
   /** Legacy Meta verify — kept for compatibility if verifyToken exists */
@@ -145,10 +151,10 @@ export class WhatsAppWebhookService {
     const chatId = this.extractChatId(payload);
     const fromMe = payload.fromMe === true;
 
-    const text = String(payload.body ?? '').trim();
+    const caption = String(payload.body ?? '').trim();
     const externalId = this.normalizeExternalId(payload.id);
     const fromRaw = String(payload.from ?? chatId ?? '');
-    if (!text || !externalId) return false;
+    if (!externalId) return false;
 
     if (this.isNonConversationMessage(payload, chatId, fromRaw)) {
       this.logger.debug(
@@ -157,11 +163,23 @@ export class WhatsAppWebhookService {
       return false;
     }
 
+    const isAudio = isWahaAudioPayload(payload);
+    if (!caption && !isAudio) return false;
+
     const fresh = await this.claimExternalId(businessId, externalId);
     if (!fresh) {
       this.logger.log(`Duplicate WAHA message ignored: ${externalId}`);
       return false;
     }
+
+    const text = isAudio
+      ? await this.resolveInboundText(businessId, payload, {
+          chatId,
+          messageId: externalId,
+          caption,
+        })
+      : caption;
+    if (!text) return false;
 
     const selfChat = await this.isSelfChat(businessId, chatId);
     const from = fromRaw.replace(/@s\.whatsapp\.net$/i, '@c.us');
@@ -648,6 +666,39 @@ export class WhatsAppWebhookService {
       return String(payload.to);
     }
     return String(payload.from ?? '');
+  }
+
+  private async resolveInboundText(
+    businessId: string,
+    payload: Record<string, unknown>,
+    options: { chatId: string; messageId: string; caption: string },
+  ): Promise<string | null> {
+    if (!isWahaAudioPayload(payload)) {
+      return options.caption || null;
+    }
+
+    const file = await this.waha.downloadMedia(businessId, payload, {
+      chatId: options.chatId,
+      messageId: options.messageId,
+    });
+    const transcript = file
+      ? await this.transcription.transcribe(
+          file,
+          await this.businessLanguage(businessId),
+        )
+      : null;
+    return formatVoiceMessage({
+      transcript,
+      caption: options.caption,
+    });
+  }
+
+  private async businessLanguage(businessId: string): Promise<string | null> {
+    const row = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { language: true },
+    });
+    return row?.language ?? 'es';
   }
 
   private phoneFromPayload(

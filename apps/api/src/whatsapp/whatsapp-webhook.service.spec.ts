@@ -3,6 +3,7 @@ import { WhatsAppWebhookService } from './whatsapp-webhook.service';
 describe('WhatsAppWebhookService (WAHA)', () => {
   const prisma = {
     whatsAppConfig: { findMany: jest.fn(), findFirst: jest.fn() },
+    business: { findUnique: jest.fn() },
     message: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -12,8 +13,11 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     user: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
     conversation: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     agentConfig: { findFirst: jest.fn() },
   };
@@ -35,6 +39,7 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     ),
     fetchQrDataUrl: jest.fn(),
     getSessionMe: jest.fn().mockResolvedValue({ id: '54911@c.us' }),
+    downloadMedia: jest.fn(),
   };
   const agent = { run: jest.fn() };
   const realtime = {
@@ -50,6 +55,9 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     purgeChats: jest.fn().mockResolvedValue(0),
     syncChats: jest.fn().mockResolvedValue(0),
   };
+  const transcription = {
+    transcribe: jest.fn(),
+  };
 
   const service = new WhatsAppWebhookService(
     prisma as never,
@@ -60,6 +68,7 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     agent as never,
     realtime as never,
     wahaSync as never,
+    transcription as never,
   );
 
   beforeEach(() => {
@@ -186,5 +195,79 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     expect(result).toEqual({ processed: 0 });
     expect(redis.acquireLock).not.toHaveBeenCalled();
     expect(agent.run).not.toHaveBeenCalled();
+  });
+
+  it('transcribe notas de voz vacías y corre el agente', async () => {
+    config.findBySessionName.mockResolvedValue({
+      businessId: 'biz-1',
+      sessionName: 'default',
+      enabled: true,
+    });
+    redis.acquireLock.mockResolvedValue(true);
+    prisma.business.findUnique.mockResolvedValue({ language: 'es' });
+    waha.downloadMedia.mockResolvedValue({
+      buffer: Buffer.from('ogg'),
+      mimeType: 'audio/ogg',
+      filename: 'voice.ogg',
+    });
+    transcription.transcribe.mockResolvedValue('Quiero un turno mañana');
+    prisma.message.findFirst.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue({ id: 'user-1', name: 'Ana' });
+    prisma.conversation.findMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        status: 'AI',
+        hiddenAt: null,
+        metadata: {},
+        externalId: '5491112345678@c.us',
+        contactPhone: '5491112345678',
+        contactName: 'Ana',
+      },
+    ]);
+    prisma.conversation.update.mockResolvedValue({
+      id: 'conv-1',
+      status: 'AI',
+      hiddenAt: null,
+      metadata: {},
+      externalId: '5491112345678@c.us',
+    });
+    prisma.conversation.findUnique.mockResolvedValue({
+      unreadCount: 1,
+      lastMessageAt: new Date(),
+    });
+    prisma.conversation.updateMany.mockResolvedValue({ count: 0 });
+    agent.run.mockResolvedValue({ status: 'AI', message: '¿A qué hora?' });
+    providers.getForBusiness.mockResolvedValue({
+      sendText: jest.fn().mockResolvedValue({ externalId: 'out-1' }),
+    });
+
+    const result = await service.handleWahaEvent({
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: 'false_5491112345678@c.us_VOICE1',
+        from: '5491112345678@c.us',
+        fromMe: false,
+        body: '',
+        type: 'ptt',
+        hasMedia: true,
+        media: {
+          url: 'http://localhost:3000/api/files/voice.ogg',
+          mimetype: 'audio/ogg; codecs=opus',
+        },
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toEqual({ processed: 1 });
+    expect(waha.downloadMedia).toHaveBeenCalled();
+    expect(transcription.transcribe).toHaveBeenCalled();
+    expect(agent.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessId: 'biz-1',
+        channel: 'WHATSAPP',
+        message: '[Audio] Quiero un turno mañana',
+      }),
+    );
   });
 });

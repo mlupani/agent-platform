@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { PrismaService } from '../../../common/prisma/prisma.service';
+import { LeadsService } from '../../../leads/leads.service';
 import type {
   AgentTool,
   ToolContext,
@@ -19,30 +19,36 @@ const schema = z.object({
 export class CreateLeadTool implements AgentTool {
   readonly name = 'createLead';
   readonly description =
-    'Crea un lead o consulta de contacto a partir de los datos del usuario.';
+    'Guarda un contacto cuando el usuario deja datos sin reservar. Si ya hay reserva, createAppointment guarda el lead.';
   readonly schema = schema;
   readonly risk = 'WRITE' as const;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly leads: LeadsService) {}
 
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
     const data = schema.parse(input);
 
-    const lead = await this.prisma.lead.create({
-      data: {
-        businessId: context.businessId,
-        userId: context.userId,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        message: data.message,
-        source: data.source ?? context.channel,
-        metadata: {
-          conversationId: context.conversationId,
-          idempotencyKey: context.idempotencyKey,
-        },
+    const lead = await this.leads.capture({
+      businessId: context.businessId,
+      userId: context.userId,
+      conversationId: context.conversationId || undefined,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      message: data.message,
+      source: data.source ?? context.channel,
+      metadata: {
+        conversationId: context.conversationId,
+        idempotencyKey: context.idempotencyKey,
       },
     });
+
+    if (!lead) {
+      return {
+        success: false,
+        error: 'Hace falta al menos nombre, email o teléfono.',
+      };
+    }
 
     return {
       success: true,

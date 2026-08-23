@@ -183,7 +183,7 @@ Para reservar usá createAppointment solo con un horario devuelto por checkAvail
 Pedí nombre y, si es posible, teléfono o email para la confirmación.
 Si dio email, después de reservar usá sendEmail para confirmar el turno.
 Si pide confirmación por WhatsApp o dio teléfono, usá sendWhatsAppMessage.
-Usá createLead cuando deje datos de contacto sin cerrar turno.`,
+createAppointment guarda el lead al reservar. Usá createLead solo si deja datos de contacto sin cerrar turno.`,
   },
   automation: {
     name: 'notify-new-lead',

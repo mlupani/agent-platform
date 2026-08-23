@@ -3,12 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type {
-  AgentConfig,
-  Business,
-  ChatResponse,
-  RegisteredTool,
-} from '@/lib/types';
+import type { AgentConfig, Business, ChatResponse } from '@/lib/types';
+import { PlaygroundToolsPanel } from '@/components/playground-tools-panel';
 
 interface ExecutionListItem {
   id: string;
@@ -30,21 +26,10 @@ interface BusinessWithAgents extends Business {
   agentConfigs?: AgentConfig[];
 }
 
-function riskBadgeClass(risk: string) {
-  if (risk === 'READ') return 'badge-success';
-  if (risk === 'SENSITIVE') return 'badge-warn';
-  return 'badge-muted';
-}
-
 export function PlaygroundClient() {
   const businessQuery = useQuery({
     queryKey: ['business'],
     queryFn: () => api<BusinessWithAgents>('/admin/business'),
-  });
-
-  const toolsQuery = useQuery({
-    queryKey: ['admin-tools'],
-    queryFn: () => api<RegisteredTool[]>('/admin/tools'),
   });
 
   const business = businessQuery.data;
@@ -70,17 +55,6 @@ export function PlaygroundClient() {
   const [expandedTool, setExpandedTool] = useState<number | null>(null);
 
   const selectedTools = useMemo(() => agent?.enabledTools ?? [], [agent]);
-  const enabledSet = useMemo(() => new Set(selectedTools), [selectedTools]);
-
-  const catalogTools = useMemo(() => {
-    const list = toolsQuery.data ?? [];
-    return [...list].sort((a, b) => {
-      const aOn = enabledSet.has(a.name) ? 0 : 1;
-      const bOn = enabledSet.has(b.name) ? 0 : 1;
-      if (aOn !== bOn) return aOn - bOn;
-      return a.name.localeCompare(b.name);
-    });
-  }, [toolsQuery.data, enabledSet]);
 
   const executionsQuery = useQuery({
     queryKey: ['executions', conversationId],
@@ -189,8 +163,8 @@ export function PlaygroundClient() {
 
         <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <p className="mono text-xs text-muted break-all min-w-0">
-            {agent?.provider}/{agent?.model} · temp {agent?.temperature} · tools{' '}
-            {selectedTools.join(', ') || '—'}
+            {agent?.provider}/{agent?.model} · temp {agent?.temperature} ·{' '}
+            {selectedTools.length} tools
             {conversationId ? ` · conv ${conversationId.slice(0, 8)}` : ''}
           </p>
           <button
@@ -340,74 +314,7 @@ export function PlaygroundClient() {
           ) : null}
         </article>
 
-        <article className="panel rounded-xl p-5">
-          <p className="mono text-[11px] text-muted">TOOLS DISPONIBLES</p>
-          <p className="mt-1 text-xs text-muted">
-            Horarios y servicios suelen venir en el prompt (sin tool). Para ver
-            el timeline, probá disponibilidad o reservar.
-          </p>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse min-w-[20rem]">
-              <thead>
-                <tr className="border-b border-line text-muted">
-                  <th className="py-2 pr-2 font-medium">Tool</th>
-                  <th className="py-2 pr-2 font-medium">Riesgo</th>
-                  <th className="py-2 font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {catalogTools.map((tool) => {
-                  const enabled = enabledSet.has(tool.name);
-                  return (
-                    <tr
-                      key={tool.name}
-                      className="border-b border-line/70 align-top"
-                    >
-                      <td className="py-2 pr-2">
-                        <p className="mono text-[11px] font-medium">
-                          {tool.name}
-                        </p>
-                        <p className="text-muted mt-0.5 leading-snug">
-                          {tool.description}
-                        </p>
-                      </td>
-                      <td className="py-2 pr-2 whitespace-nowrap">
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${riskBadgeClass(tool.risk)}`}
-                        >
-                          {tool.risk}
-                        </span>
-                      </td>
-                      <td className="py-2 whitespace-nowrap">
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                            enabled ? 'badge-success' : 'badge-muted'
-                          }`}
-                        >
-                          {enabled ? 'ON' : 'OFF'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!catalogTools.length && !toolsQuery.isLoading ? (
-                  <tr>
-                    <td colSpan={3} className="py-3 text-muted">
-                      No se pudieron cargar las tools.
-                    </td>
-                  </tr>
-                ) : null}
-                {toolsQuery.isLoading ? (
-                  <tr>
-                    <td colSpan={3} className="py-3 text-muted">
-                      Cargando tools…
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </article>
+        <PlaygroundToolsPanel agentId={agent?.id} />
 
         <article className="panel rounded-xl p-5">
           <p className="mono text-[11px] text-muted">TOOL TIMELINE</p>

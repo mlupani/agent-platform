@@ -181,6 +181,8 @@ export class PromptBuilderService {
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
       `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
+      `Si el usuario deja datos de contacto y NO reserva, usá createLead.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
       `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`,

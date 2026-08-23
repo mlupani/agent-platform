@@ -45,6 +45,8 @@ describe('PromptBuilderService', () => {
     expect(prompt).toContain('Sé breve y amable');
     expect(prompt).toContain('Priorizá turnos');
     expect(prompt).toContain('getServices');
+    expect(prompt).toContain('[Audio]');
+    expect(prompt).toContain('[Audio no transcrito]');
     expect(prompt).toContain('Abrimos de lunes a viernes');
     expect(prompt).toContain('2026-08-10');
     expect(prompt).toContain('2026-08-11');
@@ -73,6 +75,7 @@ describe('PromptBuilderService', () => {
 
     expect(prompt).toContain('https://g.page/r/demo/review');
     expect(prompt).toContain('reseñas de Google');
+    expect(prompt).toContain('createAppointment ya guarda el lead');
   });
 
   it('buildCurrentDateTime returns tomorrow relative to timezone', () => {

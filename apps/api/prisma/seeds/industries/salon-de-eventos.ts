@@ -163,7 +163,7 @@ Para agendar usá createAppointment solo con un horario devuelto por checkAvaila
 Pedí nombre y, si es posible, teléfono o email para la confirmación.
 Si dio email, después de reservar usá sendEmail para confirmar.
 Si pide confirmación por WhatsApp o dio teléfono, usá sendWhatsAppMessage.
-Usá createLead cuando deje datos de contacto (fecha tentativa, cantidad de invitados, tipo de evento) sin cerrar una visita.`,
+createAppointment guarda el lead al reservar. Usá createLead solo si deja datos de contacto (fecha tentativa, cantidad de invitados, tipo de evento) sin cerrar una visita.`,
   },
   automation: {
     name: 'notify-new-lead',

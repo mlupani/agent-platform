@@ -10,6 +10,7 @@ import {
   SocialRateLimitError,
   safeSocialMessage,
 } from '../social.errors';
+import { parseAttachments } from '../../ai/transcription/inbound-audio';
 import type {
   SocialAccount,
   SocialAccountHealth,
@@ -362,6 +363,7 @@ export class ZernioSocialProvider implements SocialProvider {
         stringOf(asRecord(row.sender)?.name) ??
         null,
       createdAt: dateOf(row.createdAt ?? row.timestamp),
+      attachments: parseAttachments(attachments),
     };
   }
 

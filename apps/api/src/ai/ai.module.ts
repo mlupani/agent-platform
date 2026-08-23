@@ -3,8 +3,10 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 import { AutomationsModule } from '../automations/automations.module';
 import { CalendarModule } from '../calendar/calendar.module';
 import { EmailModule } from '../email/email.module';
+import { LeadsModule } from '../leads/leads.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AgentService } from './agents/agent.service';
+import { AudioTranscriptionService } from './transcription/audio-transcription.service';
 import { EmbeddingsService } from './embeddings/embeddings.service';
 import { GuardrailsService } from './guardrails/guardrails.service';
 import { MemoryService } from './memory/memory.service';
@@ -58,6 +60,7 @@ const demoTools = [
     AnalyticsModule,
     forwardRef(() => CalendarModule),
     EmailModule,
+    LeadsModule,
     forwardRef(() => WhatsAppModule),
   ],
   controllers: [ToolsController],
@@ -80,11 +83,13 @@ const demoTools = [
     MemoryService,
     GuardrailsService,
     AgentService,
+    AudioTranscriptionService,
     ToolsBootstrap,
     ...demoTools,
   ],
   exports: [
     AgentService,
+    AudioTranscriptionService,
     ToolRegistry,
     RagService,
     MemoryService,

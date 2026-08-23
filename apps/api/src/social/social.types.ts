@@ -80,6 +80,7 @@ export interface SocialInboxMessage {
   senderId?: string;
   senderName?: string | null;
   createdAt?: Date | null;
+  attachments?: Array<{ type?: string; url?: string; mimeType?: string }>;
 }
 
 export interface SocialConnectionPublic {

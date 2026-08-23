@@ -52,6 +52,33 @@ describe('parseInboxEvent', () => {
     });
     expect(inbound?.text).toBe('[Adjunto]');
   });
+
+  it('expone adjuntos de audio para transcribir', () => {
+    const inbound = parseInboxEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_audio',
+        conversationId: 'conv_1',
+        attachments: [
+          {
+            type: 'audio',
+            url: 'https://cdn.example/voice.m4a',
+            mimeType: 'audio/mp4',
+          },
+        ],
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+    expect(inbound?.text).toBe('[Adjunto]');
+    expect(inbound?.attachments).toEqual([
+      {
+        type: 'audio',
+        url: 'https://cdn.example/voice.m4a',
+        mimeType: 'audio/mp4',
+      },
+    ]);
+  });
 });
 
 describe('SocialInboxService', () => {
@@ -66,6 +93,7 @@ describe('SocialInboxService', () => {
       deleteMany: jest.fn(),
     },
     user: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    business: { findUnique: jest.fn() },
   };
   const redis = {
     acquireLock: jest.fn().mockResolvedValue(true),
@@ -94,12 +122,17 @@ describe('SocialInboxService', () => {
     instagramStatusChanged: jest.fn(),
   };
 
+  const transcription = {
+    transcribeFromUrl: jest.fn(),
+  };
+
   const service = new SocialInboxService(
     prisma as never,
     redis as never,
     factory as never,
     agent as never,
     realtime as never,
+    transcription as never,
   );
 
   beforeEach(() => {
@@ -132,6 +165,8 @@ describe('SocialInboxService', () => {
       id: 'local-conv',
       unreadCount: 1,
     });
+    prisma.business.findUnique.mockResolvedValue({ language: 'es' });
+    transcription.transcribeFromUrl.mockResolvedValue(null);
   });
 
   it('ignora accountIds que no están en la DB', async () => {
@@ -413,6 +448,45 @@ describe('SocialInboxService', () => {
     expect(realtime.conversationInboxCleared).toHaveBeenCalledWith(
       'biz-a',
       expect.objectContaining({ channel: 'INSTAGRAM', deleted: 4 }),
+    );
+  });
+
+  it('transcribe un audio de Instagram antes de correr el agente', async () => {
+    prisma.message.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'msg-local',
+      sender: 'CLIENT',
+      externalId: 'msg_audio',
+    });
+    transcription.transcribeFromUrl.mockResolvedValue('Quiero un turno');
+
+    const applied = await service.handleMessageEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_audio',
+        conversationId: 'conv_1',
+        attachments: [
+          {
+            type: 'audio',
+            url: 'https://cdn.example/voice.m4a',
+            mimeType: 'audio/mp4',
+          },
+        ],
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+
+    expect(applied).toBe(true);
+    expect(transcription.transcribeFromUrl).toHaveBeenCalledWith(
+      'https://cdn.example/voice.m4a',
+      expect.objectContaining({ mimeType: 'audio/mp4', language: 'es' }),
+    );
+    expect(agent.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessId: 'biz-a',
+        channel: 'INSTAGRAM',
+        message: '[Audio] Quiero un turno',
+      }),
     );
   });
 });

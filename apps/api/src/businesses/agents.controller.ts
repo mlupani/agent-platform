@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { sanitizeEnabledTools } from './sanitize-enabled-tools';
 
 const createSchema = z.object({
   businessId: z.string().uuid(),
@@ -25,7 +26,7 @@ const createSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   maxSteps: z.number().int().min(1).max(20).optional(),
   knowledgeBaseId: z.string().uuid().optional(),
-  enabledTools: z.array(z.string()).default([]),
+  enabledTools: z.array(z.string().min(1).max(80)).max(40).default([]),
   enabledChannels: z
     .array(z.string())
     .default(['WEB', 'WHATSAPP', 'INSTAGRAM']),
@@ -57,7 +58,12 @@ export class AgentsController {
     @Body(new ZodValidationPipe(createSchema))
     body: z.infer<typeof createSchema>,
   ) {
-    return this.prisma.agentConfig.create({ data: body });
+    return this.prisma.agentConfig.create({
+      data: {
+        ...body,
+        enabledTools: sanitizeEnabledTools(body.enabledTools),
+      },
+    });
   }
 
   @Patch(':id')
@@ -72,6 +78,14 @@ export class AgentsController {
       where: { id },
     });
     if (!existing) throw new NotFoundException('Agent not found');
-    return this.prisma.agentConfig.update({ where: { id }, data: body });
+    return this.prisma.agentConfig.update({
+      where: { id },
+      data: {
+        ...body,
+        ...(body.enabledTools
+          ? { enabledTools: sanitizeEnabledTools(body.enabledTools) }
+          : {}),
+      },
+    });
   }
 }

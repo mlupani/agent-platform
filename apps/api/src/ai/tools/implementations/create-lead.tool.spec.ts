@@ -1,13 +1,13 @@
 import { CreateLeadTool } from './create-lead.tool';
 
 describe('CreateLeadTool', () => {
-  const prisma = {
-    lead: { create: jest.fn() },
+  const leads = {
+    capture: jest.fn(),
   };
-  const tool = new CreateLeadTool(prisma as never);
+  const tool = new CreateLeadTool(leads as never);
 
   it('creates a lead for the current business', async () => {
-    prisma.lead.create.mockResolvedValue({ id: 'lead-1' });
+    leads.capture.mockResolvedValue({ id: 'lead-1' });
 
     const result = await tool.execute(
       { name: 'Ana', email: 'ana@test.com', message: 'Quiero info' },
@@ -20,13 +20,32 @@ describe('CreateLeadTool', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(prisma.lead.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(result.data).toEqual({ leadId: 'lead-1' });
+    expect(leads.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
         businessId: 'biz-1',
+        conversationId: 'conv-1',
         name: 'Ana',
         email: 'ana@test.com',
+        source: 'WEB',
       }),
-    });
+    );
+  });
+
+  it('fails when there is no contact data', async () => {
+    leads.capture.mockResolvedValue(null);
+
+    const result = await tool.execute(
+      { message: 'Quiero info' },
+      {
+        businessId: 'biz-1',
+        conversationId: 'conv-1',
+        channel: 'WEB',
+        enabledTools: ['createLead'],
+      },
+    );
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects invalid email', async () => {

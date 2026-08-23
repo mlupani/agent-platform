@@ -50,7 +50,7 @@ export const updateAssistantSchema = z.object({
   model: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   maxSteps: z.number().int().min(1).max(20).optional(),
-  enabledTools: z.array(z.string()).optional(),
+  enabledTools: z.array(z.string().min(1).max(80)).max(40).optional(),
 });
 
 export const replaceHoursSchema = z.object({

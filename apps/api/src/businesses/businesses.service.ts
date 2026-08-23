@@ -12,6 +12,7 @@ import {
   WEEKDAY_LABELS,
   defaultWeeklyHours,
 } from '../common/constants';
+import { sanitizeEnabledTools } from './sanitize-enabled-tools';
 
 @Injectable()
 export class BusinessesService {
@@ -290,7 +291,12 @@ export class BusinessesService {
     }
     return this.prisma.agentConfig.update({
       where: { id: agent.id },
-      data,
+      data: {
+        ...data,
+        ...(data.enabledTools
+          ? { enabledTools: sanitizeEnabledTools(data.enabledTools) }
+          : {}),
+      },
     });
   }
 

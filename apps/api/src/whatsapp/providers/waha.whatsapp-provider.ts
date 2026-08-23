@@ -3,6 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { withExponentialBackoff } from '../../common/utils/retry';
 import { withTimeout } from '../../common/utils/timeout';
 import { WhatsAppConfigService } from '../whatsapp-config.service';
+import {
+  extractWahaMedia,
+  filenameForMime,
+  rewriteWahaFileUrl,
+  type InboundMediaFile,
+} from '../../ai/transcription/inbound-audio';
 import type {
   WhatsAppProvider,
   WhatsAppProviderStatus,
@@ -710,6 +716,94 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
     return undefined;
   }
 
+  async downloadMedia(
+    businessId: string,
+    payload: Record<string, unknown>,
+    options?: { chatId?: string; messageId?: string },
+  ): Promise<InboundMediaFile | null> {
+    const waConfig = await this.config.getForRuntime(businessId);
+    if (!waConfig) return null;
+    const baseUrl = this.resolveBaseUrl(waConfig.wahaBaseUrl);
+    const apiKey = await this.config.getWahaApiKey(businessId);
+    const media = extractWahaMedia(payload);
+    let url = media.url ? rewriteWahaFileUrl(media.url, baseUrl) : null;
+
+    if (!url && options?.chatId && options?.messageId) {
+      url = await this.resolveMediaUrlFromMessage(
+        baseUrl,
+        apiKey,
+        waConfig.sessionName || 'default',
+        options.chatId,
+        options.messageId,
+      );
+    }
+    if (!url) return null;
+
+    const file = await this.fetchBinary(url, apiKey, media.mimetype);
+    if (file?.buffer.length) return file;
+    return null;
+  }
+
+  private async resolveMediaUrlFromMessage(
+    baseUrl: string,
+    apiKey: string | null,
+    session: string,
+    chatId: string,
+    messageId: string,
+  ): Promise<string | null> {
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}?downloadMedia=true`,
+        { headers: this.authHeaders(apiKey) },
+      );
+      if (!res.ok) return null;
+      const json = (await res.json()) as Record<string, unknown>;
+      const media = extractWahaMedia(json);
+      return media.url ? rewriteWahaFileUrl(media.url, baseUrl) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async fetchBinary(
+    url: string,
+    apiKey: string | null,
+    fallbackMime?: string,
+  ): Promise<InboundMediaFile | null> {
+    try {
+      const res = await withTimeout(
+        () => fetch(url, { headers: this.authHeaders(apiKey) }),
+        15_000,
+        'waha media download',
+      );
+      if (!res.ok) {
+        this.logger.warn(`WAHA media download failed: HTTP ${res.status}`);
+        return null;
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (!buffer.length) return null;
+      const mimeType = (
+        fallbackMime ||
+        res.headers.get('content-type') ||
+        'audio/ogg'
+      )
+        .split(';')[0]
+        .trim();
+      return {
+        buffer,
+        mimeType,
+        filename: filenameForMime(mimeType),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `WAHA media download failed: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
+      return null;
+    }
+  }
+
   phoneFromMeId(meId?: string | null): string | null {
     if (!meId) return null;
     return meId.replace(/@c\.us$/i, '').replace(/@s\.whatsapp\.net$/i, '');
@@ -737,6 +831,12 @@ export class WahaWhatsAppProvider implements WhatsAppProvider {
       Accept: 'application/json',
       'Content-Type': 'application/json',
     };
+    if (apiKey) headers['X-Api-Key'] = apiKey;
+    return headers;
+  }
+
+  private authHeaders(apiKey: string | null): Record<string, string> {
+    const headers: Record<string, string> = { Accept: '*/*' };
     if (apiKey) headers['X-Api-Key'] = apiKey;
     return headers;
   }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import type {
   AgentTool,
@@ -7,6 +7,7 @@ import type {
 } from '../agent-tool.interface';
 import { AppointmentsService } from '../../../calendar/appointments.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
+import { LeadsService } from '../../../leads/leads.service';
 import { resolveServiceId } from '../resolve-service';
 
 const schema = z.object({
@@ -28,15 +29,17 @@ const schema = z.object({
 
 @Injectable()
 export class CreateAppointmentTool implements AgentTool {
+  private readonly logger = new Logger(CreateAppointmentTool.name);
   readonly name = 'createAppointment';
   readonly description =
-    'Reserva una cita en un horario disponible (usar checkAvailability antes). serviceId puede ser UUID o nombre del servicio.';
+    'Reserva una cita en un horario disponible (usar checkAvailability antes). serviceId puede ser UUID o nombre del servicio. También guarda el lead si hay datos de contacto.';
   readonly schema = schema;
   readonly risk = 'WRITE' as const;
 
   constructor(
     private readonly appointments: AppointmentsService,
     private readonly prisma: PrismaService,
+    private readonly leads: LeadsService,
   ) {}
 
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
@@ -96,6 +99,18 @@ export class CreateAppointmentTool implements AgentTool {
         string
       >;
 
+      await this.captureLead(
+        {
+          id: appointment.id,
+          contactName: appointment.contactName || contactName || null,
+          contactEmail: appointment.contactEmail || contactEmail || null,
+          contactPhone: appointment.contactPhone || contactPhone || null,
+          service: appointment.service,
+        },
+        data.notes,
+        context,
+      );
+
       return {
         success: true,
         data: {
@@ -130,6 +145,45 @@ export class CreateAppointmentTool implements AgentTool {
         error:
           error instanceof Error ? error.message : 'No se pudo crear la cita',
       };
+    }
+  }
+
+  private async captureLead(
+    appointment: {
+      id: string;
+      contactName: string | null;
+      contactEmail: string | null;
+      contactPhone: string | null;
+      service?: { name: string } | null;
+    },
+    notes: string | undefined,
+    context: ToolContext,
+  ): Promise<void> {
+    try {
+      await this.leads.capture({
+        businessId: context.businessId,
+        conversationId: context.conversationId,
+        userId: context.userId,
+        name: appointment.contactName,
+        email: appointment.contactEmail,
+        phone: appointment.contactPhone,
+        message:
+          notes?.trim() ||
+          (appointment.service?.name
+            ? `Reserva: ${appointment.service.name}`
+            : 'Reserva de turno'),
+        source: context.channel,
+        metadata: {
+          appointmentId: appointment.id,
+          conversationId: context.conversationId,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo guardar el lead de la reserva ${appointment.id}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
     }
   }
 }

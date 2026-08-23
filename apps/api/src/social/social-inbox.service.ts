@@ -1,5 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AgentService } from '../ai/agents/agent.service';
+import { AudioTranscriptionService } from '../ai/transcription/audio-transcription.service';
+import {
+  AUDIO_PREFIX,
+  formatVoiceMessage,
+  isAudioAttachment,
+  isPlaceholderCaption,
+  parseAttachments,
+  type SocialAudioAttachment,
+} from '../ai/transcription/inbound-audio';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
@@ -26,6 +35,7 @@ export interface SocialInboxInbound {
   participantName?: string | null;
   participantUsername?: string | null;
   participantPicture?: string | null;
+  attachments?: SocialAudioAttachment[];
 }
 
 @Injectable()
@@ -44,6 +54,7 @@ export class SocialInboxService {
     private readonly factory: SocialProviderFactory,
     private readonly agent: AgentService,
     private readonly realtime: RealtimeEventsService,
+    private readonly transcription: AudioTranscriptionService,
   ) {}
 
   async markPushLive(businessId: string): Promise<void> {
@@ -257,7 +268,24 @@ export class SocialInboxService {
     }
 
     let upserted = 0;
+    let latest: {
+      text: string;
+      fromMe: boolean;
+      createdAt?: Date | null;
+    } | null = null;
     for (const item of messages) {
+      const inbound = this.inboundFromSyncedItem(
+        connection.externalAccountId,
+        conversation,
+        item,
+      );
+      await this.hydrateVoiceText(businessId, inbound);
+      latest = {
+        text: inbound.text,
+        fromMe: inbound.fromMe,
+        createdAt: item.createdAt,
+      };
+
       let existing = await this.prisma.message.findFirst({
         where: { businessId, externalId: item.id },
       });
@@ -269,7 +297,7 @@ export class SocialInboxService {
             businessId,
             role: item.fromMe ? 'assistant' : 'user',
             sender,
-            content: item.text,
+            content: inbound.text,
             externalId: item.id,
             status: item.fromMe ? 'sent' : 'received',
             createdAt: item.createdAt ?? undefined,
@@ -287,6 +315,14 @@ export class SocialInboxService {
           });
         }
         upserted += 1;
+      } else if (
+        inbound.text !== existing.content &&
+        !isPlaceholderCaption(inbound.text)
+      ) {
+        existing = await this.prisma.message.update({
+          where: { id: existing.id },
+          data: { content: inbound.text },
+        });
       }
 
       const createdAtMs =
@@ -301,11 +337,7 @@ export class SocialInboxService {
         try {
           await this.replyIfNeeded(
             businessId,
-            this.inboundFromSyncedItem(
-              connection.externalAccountId,
-              conversation,
-              item,
-            ),
+            inbound,
             { zernioAccountId: connection.externalAccountId },
             existing,
           );
@@ -319,7 +351,6 @@ export class SocialInboxService {
       }
     }
 
-    const latest = [...messages].reverse().find((item) => item.text);
     if (latest) {
       await this.prisma.conversation.update({
         where: { id: conversation.id },
@@ -430,6 +461,16 @@ export class SocialInboxService {
     });
     if (existing) {
       if (opts.runAgent && !inbound.fromMe) {
+        await this.hydrateVoiceText(businessId, inbound);
+        if (
+          inbound.text !== existing.content &&
+          !isPlaceholderCaption(inbound.text)
+        ) {
+          await this.prisma.message.update({
+            where: { id: existing.id },
+            data: { content: inbound.text },
+          });
+        }
         return this.replyIfNeeded(businessId, inbound, opts, existing);
       }
       return false;
@@ -442,6 +483,7 @@ export class SocialInboxService {
     if (!claimed) return false;
 
     try {
+      await this.hydrateVoiceText(businessId, inbound);
       const user = await this.upsertUser(businessId, inbound);
       let conversation = await this.upsertConversation(businessId, inbound, {
         userId: user.id,
@@ -581,7 +623,12 @@ export class SocialInboxService {
       contactAvatarUrl: string | null;
       metadata: unknown;
     },
-    item: { id: string; text: string; fromMe: boolean },
+    item: {
+      id: string;
+      text: string;
+      fromMe: boolean;
+      attachments?: SocialAudioAttachment[];
+    },
   ): SocialInboxInbound {
     const meta =
       conversation.metadata && typeof conversation.metadata === 'object'
@@ -601,6 +648,7 @@ export class SocialInboxService {
       participantName: conversation.contactName,
       participantUsername: conversation.contactUsername,
       participantPicture: conversation.contactAvatarUrl,
+      attachments: item.attachments,
     };
   }
 
@@ -956,6 +1004,36 @@ export class SocialInboxService {
       },
     });
   }
+
+  private async hydrateVoiceText(
+    businessId: string,
+    inbound: SocialInboxInbound,
+  ): Promise<void> {
+    if (inbound.text.includes(`${AUDIO_PREFIX} `)) return;
+    const audio = (inbound.attachments ?? []).find(isAudioAttachment);
+    if (!audio) return;
+
+    let transcript: string | null = null;
+    if (audio.url) {
+      const language = await this.businessLanguage(businessId);
+      transcript = await this.transcription.transcribeFromUrl(audio.url, {
+        mimeType: audio.mimeType,
+        language,
+      });
+    }
+    inbound.text = formatVoiceMessage({
+      transcript,
+      caption: inbound.text,
+    });
+  }
+
+  private async businessLanguage(businessId: string): Promise<string | null> {
+    const row = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { language: true },
+    });
+    return row?.language ?? 'es';
+  }
 }
 
 export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
@@ -997,8 +1075,8 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
 
   const sender = asRecord(message?.sender);
   const participant = asRecord(conversation?.participant) ?? sender;
-  const attachments = message?.attachments;
-  const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+  const parsedAttachments = parseAttachments(message?.attachments);
+  const hasAttachments = parsedAttachments.length > 0;
   const text =
     stringOf(message?.text) ??
     stringOf(message?.message) ??
@@ -1034,6 +1112,7 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
       stringOf(conversation?.participantPicture) ??
       stringOf(sender?.picture) ??
       null,
+    attachments: parsedAttachments,
   };
 }
 

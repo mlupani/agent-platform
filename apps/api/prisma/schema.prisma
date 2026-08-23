@@ -193,6 +193,7 @@ model Conversation {
   memories        Memory[]
   agentExecutions AgentExecution[]
   appointments    Appointment[]
+  leads           Lead[]
 
   @@index([businessId, status])
   @@index([businessId, userId])
@@ -540,20 +541,23 @@ model ToolExecution {
 }
 
 model Lead {
-  id         String   @id @default(uuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name       String?
-  email      String?
-  phone      String?
-  message    String?
-  source     String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id             String        @id @default(uuid())
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  name           String?
+  email          String?
+  phone          String?
+  message        String?
+  source         String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
 
   @@index([businessId])
+  @@index([businessId, createdAt])
   @@map("leads")
 }
 
