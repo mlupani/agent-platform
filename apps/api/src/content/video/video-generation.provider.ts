@@ -1,7 +1,7 @@
 export type VideoAspectRatio = '9:16' | '16:9' | '1:1';
 export type VideoResolution = '480p' | '720p' | '1080p';
 
-export type VideoProviderName = 'kie' | 'fal';
+export type VideoProviderName = 'kie' | 'fal' | 'veo';
 
 export interface VideoGenerationInput {
   prompt: string;

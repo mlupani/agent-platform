@@ -19,6 +19,25 @@ export function WhatsAppIcon({ className = 'h-5 w-5', title }: IconProps) {
   );
 }
 
+/** Sobre / carta para mailto */
+export function MailIcon({ className = 'h-5 w-5', title }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title ? <title>{title}</title> : null}
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M4 7.5 12 13l8-5.5" />
+    </svg>
+  );
+}
+
 /** Logo oficial de Instagram (glyph con degradé de marca) */
 export function InstagramIcon({ className = 'h-5 w-5', title }: IconProps) {
   const gradientId = 'instagram-brand-gradient';
@@ -169,6 +188,18 @@ export function ChannelBadge({
         className={`inline-flex ${box} items-center justify-center rounded-full bg-panel-2 text-muted text-[9px] font-semibold shrink-0`}
       >
         PG
+      </span>
+    );
+  }
+
+  if (value === 'MANUAL') {
+    return (
+      <span
+        title="Carga manual"
+        aria-label="Carga manual"
+        className={`inline-flex ${box} items-center justify-center rounded-full bg-panel-2 text-muted text-[9px] font-semibold shrink-0`}
+      >
+        M
       </span>
     );
   }

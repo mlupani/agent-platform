@@ -58,7 +58,7 @@ export class VideoRoutingService {
       const fallback = this.resolveFallback(target.providerName);
       if (!fallback) {
         throw new Error(
-          `Ningún provider de video está configurado. Completá KIE_API_KEY o FAL_KEY.`,
+          `Ningún provider de video está configurado. Completá KIE_API_KEY, FAL_KEY o GOOGLE_GENERATIVE_AI_API_KEY.`,
         );
       }
       this.logger.warn(
@@ -92,6 +92,7 @@ export class VideoRoutingService {
     const raw = (this.env.get<string>(key) || fallback).trim().toLowerCase();
     if (raw === 'kie' || raw === 'kie.ai') return 'kie';
     if (raw === 'fal' || raw === 'fal.ai') return 'fal';
+    if (raw === 'veo' || raw === 'google' || raw === 'gemini') return 'veo';
     return fallback;
   }
 }

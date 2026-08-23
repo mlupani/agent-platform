@@ -35,17 +35,23 @@ export class AnalyticsService {
     };
   }
 
-  async dashboard() {
+  async dashboard(month?: string) {
     const business = await this.businesses.getCurrent();
     const businessId = business.id;
     const zone = business.timezone || 'America/Argentina/Buenos_Aires';
     const now = DateTime.now().setZone(zone);
+    const selectedMonth = parseMonthParam(month, zone, now);
     const startOfDay = now.startOf('day').toUTC().toJSDate();
     const endOfDay = now.endOf('day').toUTC().toJSDate();
-    const startOfWeek = now.startOf('week').toUTC().toJSDate(); // Monday
+    const startOfWeek = now.startOf('week').toUTC().toJSDate();
     const endOfWeek = now.endOf('week').toUTC().toJSDate();
 
-    const startOfMonth = now.startOf('month').toUTC().toJSDate();
+    const startOfMonth = selectedMonth.startOf('month').toUTC().toJSDate();
+    const endOfMonth = selectedMonth.endOf('month').toUTC().toJSDate();
+    const prevMonth = selectedMonth.minus({ months: 1 });
+    const startOfPrevMonth = prevMonth.startOf('month').toUTC().toJSDate();
+    const endOfPrevMonth = prevMonth.endOf('month').toUTC().toJSDate();
+    const customerLead = this.customerLeadFilter();
     const visibleConversation = {
       businessId,
       hiddenAt: null,
@@ -57,7 +63,6 @@ export class AnalyticsService {
       conversationsWeek,
       openByStatus,
       unreadAgg,
-      channelMix,
       appointmentsToday,
       appointmentsWeek,
       leadsWeek,
@@ -67,6 +72,12 @@ export class AnalyticsService {
       upcomingAppointments,
       contentGeneratedMonth,
       contentAssetsByType,
+      monthConversations,
+      monthLeads,
+      monthClients,
+      prevLeads,
+      prevClients,
+      prevConversations,
     ] = await Promise.all([
       this.prisma.conversation.count({
         where: {
@@ -89,11 +100,6 @@ export class AnalyticsService {
         where: visibleConversation,
         _sum: { unreadCount: true },
       }),
-      this.prisma.conversation.groupBy({
-        by: ['channel'],
-        where: visibleConversation,
-        _count: true,
-      }),
       this.prisma.appointment.count({
         where: {
           businessId,
@@ -112,6 +118,7 @@ export class AnalyticsService {
         where: {
           businessId,
           createdAt: { gte: startOfWeek, lte: endOfWeek },
+          ...customerLead,
         },
       }),
       this.prisma.agentExecution.aggregate({
@@ -164,20 +171,65 @@ export class AnalyticsService {
       this.prisma.generatedContent.count({
         where: {
           businessId,
-          createdAt: { gte: startOfMonth },
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
           status: { not: 'FAILED' },
         },
       }),
       this.prisma.contentAsset.groupBy({
         by: ['type'],
         where: {
-          createdAt: { gte: startOfMonth },
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
           content: {
             businessId,
             status: { not: 'FAILED' },
           },
         },
         _count: true,
+      }),
+      this.prisma.conversation.findMany({
+        where: {
+          ...visibleConversation,
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+        select: { createdAt: true, channel: true },
+      }),
+      this.prisma.lead.findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+          ...customerLead,
+        },
+        select: {
+          createdAt: true,
+          source: true,
+          conversation: { select: { channel: true } },
+        },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.lead.count({
+        where: {
+          businessId,
+          createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+          ...customerLead,
+        },
+      }),
+      this.prisma.user.count({
+        where: {
+          businessId,
+          createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+        },
+      }),
+      this.prisma.conversation.count({
+        where: {
+          ...visibleConversation,
+          createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+        },
       }),
     ]);
 
@@ -196,6 +248,30 @@ export class AnalyticsService {
       contentAssetsByType.map((row) => [row.type, row._count]),
     ) as Record<string, number>;
 
+    const leadsMonth = monthLeads.length;
+    const newClientsMonth = monthClients.length;
+    const conversationsMonth = monthConversations.length;
+    const daily = buildDailySeries(
+      selectedMonth,
+      zone,
+      monthLeads,
+      monthClients,
+      monthConversations,
+    );
+    const channels = buildChannelStats(monthConversations, monthLeads);
+    const topChannel = channels.reduce<(typeof channels)[number] | null>(
+      (best, row) => {
+        if (row.leads <= 0) return best;
+        if (!best) return row;
+        if (row.leads !== best.leads) return row.leads > best.leads ? row : best;
+        if (row.conversations !== best.conversations) {
+          return row.conversations > best.conversations ? row : best;
+        }
+        return best;
+      },
+      null,
+    );
+
     return {
       business: {
         id: business.id,
@@ -206,16 +282,28 @@ export class AnalyticsService {
         today: now.toISODate(),
         weekStart: now.startOf('week').toISODate(),
         weekEnd: now.endOf('week').toISODate(),
+        month: selectedMonth.toFormat('yyyy-MM'),
+        monthStart: selectedMonth.startOf('month').toISODate(),
+        monthEnd: selectedMonth.endOf('month').toISODate(),
+        monthLabel: formatMonthLabel(selectedMonth),
+        availableMonths: availableMonthOptions(now),
       },
       metrics: {
         conversationsToday,
         conversationsWeek,
+        conversationsMonth,
+        conversationsMonthDelta: monthDelta(conversationsMonth, prevConversations),
         openConversations,
         handoffsOpen,
         unreadMessages: unreadAgg._sum.unreadCount ?? 0,
         appointmentsToday,
         appointmentsWeek,
         leadsWeek,
+        leadsMonth,
+        leadsMonthDelta: monthDelta(leadsMonth, prevLeads),
+        newClientsMonth,
+        newClientsMonthDelta: monthDelta(newClientsMonth, prevClients),
+        topChannel: topChannel?.channel ?? null,
         executionsWeek: executionsWeek._count,
         inputTokensWeek: executionsWeek._sum.inputTokens ?? 0,
         outputTokensWeek: executionsWeek._sum.outputTokens ?? 0,
@@ -231,10 +319,14 @@ export class AnalyticsService {
         status: row.status,
         count: row._count,
       })),
-      channelMix: channelMix.map((row) => ({
+      channelMix: channels.map((row) => ({
         channel: row.channel,
-        count: row._count,
+        count: row.conversations,
+        leads: row.leads,
+        share: row.share,
       })),
+      channels,
+      daily,
       recentConversations,
       upcomingAppointments,
     };
@@ -274,4 +366,151 @@ export class AnalyticsService {
       },
     };
   }
+
+  private customerLeadFilter() {
+    return {
+      OR: [
+        { conversationId: null },
+        {
+          conversation: {
+            channel: { notIn: [...ADMIN_ONLY_CONVERSATION_CHANNELS] },
+          },
+        },
+      ],
+    };
+  }
+}
+
+const CONTACT_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'WEB'] as const;
+
+function parseMonthParam(
+  month: string | undefined,
+  zone: string,
+  now: DateTime,
+): DateTime {
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const parsed = DateTime.fromISO(`${month}-01`, { zone });
+    if (parsed.isValid) return parsed.startOf('month');
+  }
+  return now.startOf('month');
+}
+
+function availableMonthOptions(now: DateTime): Array<{ value: string; label: string }> {
+  return Array.from({ length: 18 }, (_, index) => {
+    const month = now.minus({ months: index }).startOf('month');
+    return {
+      value: month.toFormat('yyyy-MM'),
+      label: formatMonthLabel(month),
+    };
+  });
+}
+
+function formatMonthLabel(month: DateTime): string {
+  const label = month.setLocale('es').toFormat('LLLL yyyy');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function monthDelta(current: number, previous: number): number | null {
+  if (previous <= 0) return current > 0 ? null : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+function dayKey(value: Date, zone: string): string {
+  return DateTime.fromJSDate(value).setZone(zone).toISODate() ?? '';
+}
+
+function normalizeChannel(value?: string | null): (typeof CONTACT_CHANNELS)[number] | null {
+  const raw = (value ?? '').trim().toUpperCase();
+  if (!raw || raw === 'PLAYGROUND' || raw.includes('PLAYGROUND')) return null;
+  if (raw === 'WHATSAPP' || raw.includes('WHATSAPP') || raw.includes('WAHA')) {
+    return 'WHATSAPP';
+  }
+  if (raw === 'INSTAGRAM' || raw.includes('INSTAGRAM') || raw.includes('ZERNIO')) {
+    return 'INSTAGRAM';
+  }
+  if (raw === 'WEB' || raw === 'WEBSITE' || raw.includes('WEB')) return 'WEB';
+  return null;
+}
+
+function buildDailySeries(
+  month: DateTime,
+  zone: string,
+  leads: Array<{ createdAt: Date }>,
+  clients: Array<{ createdAt: Date }>,
+  conversations: Array<{ createdAt: Date }>,
+): Array<{ date: string; leads: number; clients: number; conversations: number }> {
+  const daysInMonth = month.daysInMonth ?? 30;
+  const buckets = new Map<string, { leads: number; clients: number; conversations: number }>();
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = month.set({ day }).toISODate();
+    if (date) buckets.set(date, { leads: 0, clients: 0, conversations: 0 });
+  }
+  for (const row of leads) {
+    const key = dayKey(row.createdAt, zone);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.leads += 1;
+  }
+  for (const row of clients) {
+    const key = dayKey(row.createdAt, zone);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.clients += 1;
+  }
+  for (const row of conversations) {
+    const key = dayKey(row.createdAt, zone);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.conversations += 1;
+  }
+  return [...buckets.entries()].map(([date, counts]) => ({ date, ...counts }));
+}
+
+function buildChannelStats(
+  conversations: Array<{ channel: string }>,
+  leads: Array<{ source: string | null; conversation: { channel: string } | null }>,
+): Array<{
+  channel: string;
+  conversations: number;
+  leads: number;
+  share: number;
+  conversion: number;
+}> {
+  const stats = Object.fromEntries(
+    CONTACT_CHANNELS.map((channel) => [
+      channel,
+      { channel, conversations: 0, leads: 0, share: 0, conversion: 0 },
+    ]),
+  ) as Record<
+    string,
+    {
+      channel: string;
+      conversations: number;
+      leads: number;
+      share: number;
+      conversion: number;
+    }
+  >;
+
+  for (const row of conversations) {
+    const channel = normalizeChannel(row.channel);
+    if (!channel) continue;
+    stats[channel].conversations += 1;
+  }
+  for (const row of leads) {
+    const channel = normalizeChannel(row.conversation?.channel ?? row.source);
+    if (!channel) continue;
+    stats[channel].leads += 1;
+  }
+
+  const totalLeads = CONTACT_CHANNELS.reduce(
+    (sum, channel) => sum + stats[channel].leads,
+    0,
+  );
+  return CONTACT_CHANNELS.map((channel) => {
+    const row = stats[channel];
+    row.share = totalLeads > 0 ? Math.round((row.leads / totalLeads) * 100) : 0;
+    row.conversion =
+      row.conversations > 0
+        ? Math.round((row.leads / row.conversations) * 100)
+        : 0;
+    return row;
+  });
 }

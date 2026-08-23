@@ -107,16 +107,32 @@ export interface AnalyticsOverview {
 
 export interface DashboardPayload {
   business: { id: string; name: string; timezone: string };
-  period: { today: string; weekStart: string | null; weekEnd: string | null };
+  period: {
+    today: string;
+    weekStart: string | null;
+    weekEnd: string | null;
+    month: string;
+    monthStart: string | null;
+    monthEnd: string | null;
+    monthLabel: string;
+    availableMonths: Array<{ value: string; label: string }>;
+  };
   metrics: {
     conversationsToday: number;
     conversationsWeek: number;
+    conversationsMonth: number;
+    conversationsMonthDelta: number | null;
     openConversations: number;
     handoffsOpen: number;
     unreadMessages: number;
     appointmentsToday: number;
     appointmentsWeek: number;
     leadsWeek: number;
+    leadsMonth: number;
+    leadsMonthDelta: number | null;
+    newClientsMonth: number;
+    newClientsMonthDelta: number | null;
+    topChannel: string | null;
     executionsWeek: number;
     inputTokensWeek: number;
     outputTokensWeek: number;
@@ -127,7 +143,25 @@ export interface DashboardPayload {
     contentVideosMonth: number;
   };
   statusMix: Array<{ status: string; count: number }>;
-  channelMix: Array<{ channel: string; count: number }>;
+  channelMix: Array<{
+    channel: string;
+    count: number;
+    leads?: number;
+    share?: number;
+  }>;
+  channels: Array<{
+    channel: string;
+    conversations: number;
+    leads: number;
+    share: number;
+    conversion: number;
+  }>;
+  daily: Array<{
+    date: string;
+    leads: number;
+    clients: number;
+    conversations: number;
+  }>;
   recentConversations: Array<{
     id: string;
     status: string;
@@ -188,4 +222,73 @@ export interface RegisteredTool {
   name: string;
   description: string;
   risk: string;
+}
+
+export interface ClientStatus {
+  id: string;
+  slug: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface ClientRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  status: Pick<ClientStatus, 'id' | 'slug' | 'name'>;
+  appointments: number;
+  conversations: number;
+}
+
+export interface PaymentRow {
+  id: string;
+  amount: number;
+  paidAt: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+  };
+}
+
+export interface SpendBucket {
+  cost: number;
+  calls: number;
+  tokens: number;
+}
+
+export interface SpendReport {
+  currency: 'USD';
+  period: {
+    today: string;
+    month: string;
+    monthLabel: string;
+    availableMonths: Array<{ value: string; label: string }>;
+  };
+  totals: {
+    day: number;
+    month: number;
+  };
+  services: Array<{
+    id: string;
+    name: string;
+    envKey: string;
+    configured: boolean;
+    day: SpendBucket;
+    month: SpendBucket;
+    breakdown: Array<{
+      label: string;
+      day: SpendBucket;
+      month: SpendBucket;
+    }>;
+  }>;
+  note: string;
 }

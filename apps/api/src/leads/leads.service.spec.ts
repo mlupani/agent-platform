@@ -131,6 +131,38 @@ describe('LeadsService', () => {
       }),
     });
   });
+
+  it('creates a manual lead for the current business', async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
+    prisma.lead.create.mockResolvedValue({ id: 'lead-manual' });
+
+    await expect(
+      service.createManual({
+        name: 'Luis',
+        phone: '54911',
+        channel: 'WHATSAPP',
+        message: 'Llamó por un turno',
+      }),
+    ).resolves.toEqual({ id: 'lead-manual' });
+
+    expect(prisma.lead.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        businessId: 'biz-1',
+        name: 'Luis',
+        phone: '54911',
+        source: 'WHATSAPP',
+        message: 'Llamó por un turno',
+        metadata: { origin: 'manual', channel: 'WHATSAPP' },
+      }),
+    });
+  });
+
+  it('rejects a manual lead without contact data', async () => {
+    await expect(service.createManual({ message: 'Sin datos' })).rejects.toThrow(
+      'Hace falta al menos nombre, teléfono o email.',
+    );
+    expect(prisma.lead.create).not.toHaveBeenCalled();
+  });
 });
 
 

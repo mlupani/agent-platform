@@ -13,6 +13,7 @@ import { ChannelRegistry } from '../channels/channel.registry';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { SocialInboxService } from '../social/social-inbox.service';
 import { WahaConversationsSyncService } from '../whatsapp/waha-conversations.sync';
+import { withTimeout } from '../common/utils/timeout';
 
 interface RoleOptions {
   role?: AdminRole;
@@ -90,10 +91,7 @@ export class ConversationsService {
 
   async get(id: string, options?: { markRead?: boolean; role?: AdminRole }) {
     const businessId = await this.businesses.getCurrentId();
-    const channelFilter = await this.inboxChannelFilter(
-      businessId,
-      options?.role,
-    );
+    const channelFilter = this.threadChannelFilter(options?.role);
     const conversation = await this.prisma.conversation.findFirst({
       where: {
         id,
@@ -111,7 +109,11 @@ export class ConversationsService {
 
     if (conversation.channel === 'WHATSAPP') {
       try {
-        await this.wahaSync.syncMessages(businessId, conversation.id);
+        await withTimeout(
+          () => this.wahaSync.syncMessages(businessId, conversation.id),
+          4_000,
+          'WAHA messages sync',
+        );
       } catch (error) {
         this.logger.warn(
           `WAHA messages sync skipped: ${
@@ -405,11 +407,23 @@ export class ConversationsService {
         id,
         businessId,
         hiddenAt: null,
-        ...(await this.inboxChannelFilter(businessId, role)),
+        ...this.threadChannelFilter(role),
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
     return conversation;
+  }
+
+  /**
+   * Abrir un chat por id (CRM, deep link) aunque la integración esté caída.
+   * La bandeja sigue filtrando por conexión.
+   */
+  private threadChannelFilter(role?: AdminRole) {
+    const channels: string[] = ['WEB', 'WHATSAPP', 'INSTAGRAM'];
+    if (role === 'ADMIN') {
+      channels.push(...ADMIN_ONLY_CONVERSATION_CHANNELS);
+    }
+    return { channel: { in: channels } };
   }
 
   /** Solo canales con la integración conectada. WEB queda (no se reimporta). */

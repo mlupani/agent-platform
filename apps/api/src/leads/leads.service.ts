@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
@@ -25,6 +25,14 @@ export interface LeadCaptureInput {
   message?: string | null;
   source?: string | null;
   metadata?: Record<string, unknown>;
+}
+
+export interface LeadManualInput {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  message?: string | null;
+  channel?: 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM';
 }
 
 @Injectable()
@@ -89,6 +97,29 @@ export class LeadsService {
       },
     });
     return { id: created.id };
+  }
+
+  async createManual(input: LeadManualInput): Promise<{ id: string }> {
+    const businessId = await this.businesses.getCurrentId();
+    const channel = input.channel ?? 'MANUAL';
+    const created = await this.capture({
+      businessId,
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      message: input.message,
+      source: channel,
+      metadata: {
+        origin: 'manual',
+        channel,
+      },
+    });
+    if (!created) {
+      throw new BadRequestException(
+        'Hace falta al menos nombre, teléfono o email.',
+      );
+    }
+    return created;
   }
 
   async list(): Promise<LeadListItem[]> {

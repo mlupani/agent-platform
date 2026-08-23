@@ -69,10 +69,32 @@ describe('ConversationsService inbox', () => {
           id: 'conv-1',
           businessId: 'biz-1',
           hiddenAt: null,
-          channel: { in: ['WEB', 'PLAYGROUND', 'WHATSAPP', 'INSTAGRAM'] },
+          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'PLAYGROUND'] },
         }),
       }),
     );
+  });
+
+  it('abre un chat de WhatsApp aunque la integración esté caída', async () => {
+    prisma.whatsAppConfig.findUnique.mockResolvedValue({
+      status: 'error',
+      sessionStatus: 'FAILED',
+    });
+    const conversation = {
+      id: 'conv-1',
+      businessId: 'biz-1',
+      channel: 'WHATSAPP',
+      status: 'HUMAN',
+      hiddenAt: null,
+      user: null,
+      messages: [],
+      business: { id: 'biz-1', name: 'Lumina' },
+    };
+    prisma.conversation.findFirst.mockResolvedValue(conversation);
+
+    const result = await service.get('conv-1', { role: 'ADMIN' });
+    expect(result.id).toBe('conv-1');
+    expect(prisma.whatsAppConfig.findUnique).not.toHaveBeenCalled();
   });
 
   it('hides playground channels from USER role list', async () => {

@@ -12,7 +12,8 @@ describe('AnalyticsService.dashboard', () => {
       count: jest.fn(),
       findMany: jest.fn(),
     },
-    lead: { count: jest.fn() },
+    lead: { count: jest.fn(), findMany: jest.fn() },
+    user: { count: jest.fn(), findMany: jest.fn() },
     agentExecution: { aggregate: jest.fn() },
     message: { aggregate: jest.fn() },
     business: { count: jest.fn() },
@@ -33,21 +34,25 @@ describe('AnalyticsService.dashboard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.conversation.count.mockResolvedValue(2);
-    prisma.conversation.groupBy
-      .mockResolvedValueOnce([
-        { status: 'AI', _count: 3 },
-        { status: 'WAITING_HUMAN', _count: 1 },
-        { status: 'HUMAN', _count: 1 },
-      ])
-      .mockResolvedValueOnce([
-        { channel: 'WHATSAPP', _count: 4 },
-        { channel: 'INSTAGRAM', _count: 1 },
-      ]);
+    prisma.conversation.groupBy.mockResolvedValue([
+      { status: 'AI', _count: 3 },
+      { status: 'WAITING_HUMAN', _count: 1 },
+      { status: 'HUMAN', _count: 1 },
+    ]);
     prisma.conversation.aggregate.mockResolvedValue({
       _sum: { unreadCount: 7 },
     });
     prisma.appointment.count.mockResolvedValue(3);
     prisma.lead.count.mockResolvedValue(5);
+    prisma.lead.findMany.mockResolvedValue([
+      {
+        createdAt: new Date(),
+        source: 'WHATSAPP',
+        conversation: { channel: 'WHATSAPP' },
+      },
+    ]);
+    prisma.user.findMany.mockResolvedValue([{ createdAt: new Date() }]);
+    prisma.user.count.mockResolvedValue(1);
     prisma.agentExecution.aggregate.mockResolvedValue({
       _count: 10,
       _sum: { inputTokens: 100, outputTokens: 50, estimatedCost: 0.12 },
@@ -56,7 +61,15 @@ describe('AnalyticsService.dashboard', () => {
     prisma.message.aggregate.mockResolvedValue({
       _avg: { latencyMs: 1200 },
     });
-    prisma.conversation.findMany.mockResolvedValue([]);
+    prisma.conversation.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { createdAt: new Date(), channel: 'WHATSAPP' },
+        { createdAt: new Date(), channel: 'WHATSAPP' },
+        { createdAt: new Date(), channel: 'WHATSAPP' },
+        { createdAt: new Date(), channel: 'WHATSAPP' },
+        { createdAt: new Date(), channel: 'INSTAGRAM' },
+      ]);
     prisma.appointment.findMany.mockResolvedValue([]);
     prisma.generatedContent.count.mockResolvedValue(4);
     prisma.contentAsset.groupBy.mockResolvedValue([
@@ -92,11 +105,46 @@ describe('AnalyticsService.dashboard', () => {
         }),
       }),
     );
+    expect(prisma.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            { conversationId: null },
+            expect.objectContaining({
+              conversation: expect.objectContaining({
+                channel: { notIn: ['PLAYGROUND'] },
+              }),
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(result.metrics.leadsMonthDelta).toBe(-80);
     expect(result.channelMix).toEqual(
       expect.arrayContaining([
-        { channel: 'WHATSAPP', count: 4 },
-        { channel: 'INSTAGRAM', count: 1 },
+        expect.objectContaining({ channel: 'WHATSAPP', count: 4, leads: 1 }),
+        expect.objectContaining({ channel: 'INSTAGRAM', count: 1, leads: 0 }),
+        expect.objectContaining({ channel: 'WEB', count: 0, leads: 0 }),
       ]),
     );
+    expect(result.daily.length).toBeGreaterThanOrEqual(28);
+    expect(result.period.month).toMatch(/^\d{4}-\d{2}$/);
+    expect(result.period.availableMonths).toHaveLength(18);
+  });
+
+  it('returns null top channel when the month has no leads', async () => {
+    prisma.lead.findMany.mockResolvedValue([]);
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.conversation.findMany
+      .mockReset()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.dashboard('2026-07');
+
+    expect(result.period.month).toBe('2026-07');
+    expect(result.metrics.leadsMonth).toBe(0);
+    expect(result.metrics.newClientsMonth).toBe(0);
+    expect(result.metrics.topChannel).toBeNull();
   });
 });

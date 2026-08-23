@@ -22,6 +22,8 @@ import { UsersModule } from './users/users.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { LeadsModule } from './leads/leads.module';
+import { ClientsModule } from './clients/clients.module';
+import { PaymentsModule } from './payments/payments.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ContentModule } from './content/content.module';
@@ -63,6 +65,8 @@ import { AppService } from './app.service';
     WhatsAppModule,
     CalendarModule,
     LeadsModule,
+    ClientsModule,
+    PaymentsModule,
     ObservabilityModule,
     UsersModule,
     AnalyticsModule,

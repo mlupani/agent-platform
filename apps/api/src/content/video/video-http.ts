@@ -58,6 +58,7 @@ export async function requestJson<T = Record<string, unknown>>(
 export async function downloadBinary(
   url: string,
   timeoutMs = 120_000,
+  headers?: Record<string, string>,
 ): Promise<{
   buffer: Buffer;
   mimeType: string;
@@ -65,7 +66,10 @@ export async function downloadBinary(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers,
+    });
     if (!response.ok) {
       throw Object.assign(
         new Error(`No se pudo descargar el video (${response.status})`),

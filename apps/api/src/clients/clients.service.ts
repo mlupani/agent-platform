@@ -1,0 +1,256 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { BusinessesService } from '../businesses/businesses.service';
+import { alternateWhatsAppExternalIds } from '../whatsapp/whatsapp-chat-id.util';
+
+export interface ClientInput {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  statusSlug?: string;
+}
+
+@Injectable()
+export class ClientsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly businesses: BusinessesService,
+  ) {}
+
+  listStatuses() {
+    return this.prisma.clientStatus.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async list(statusSlug?: string, name?: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const status = statusSlug
+      ? await this.resolveStatus(statusSlug)
+      : undefined;
+    const nameQuery = name?.trim().slice(0, 120) || '';
+
+    const rows = await this.prisma.user.findMany({
+      where: {
+        businessId,
+        ...(status ? { statusId: status.id } : {}),
+        ...(nameQuery
+          ? { name: { contains: nameQuery, mode: 'insensitive' } }
+          : {}),
+      },
+      include: {
+        status: true,
+        _count: {
+          select: { appointments: true, conversations: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+    });
+
+    return rows.map((row) => this.toClient(row));
+  }
+
+  async create(input: ClientInput) {
+    const businessId = await this.businesses.getCurrentId();
+    const name = input.name?.trim() || null;
+    const email = input.email?.trim() || null;
+    const phone = input.phone?.trim() || null;
+    const notes = input.notes?.trim() || null;
+    if (!name && !email && !phone) {
+      throw new BadRequestException(
+        'Hace falta al menos nombre, teléfono o email.',
+      );
+    }
+    const status = await this.resolveStatus(input.statusSlug ?? 'visita');
+    const created = await this.prisma.user.create({
+      data: {
+        businessId,
+        name,
+        email,
+        phone,
+        notes,
+        statusId: status.id,
+        metadata: { origin: 'manual' },
+      },
+      include: {
+        status: true,
+        _count: { select: { appointments: true, conversations: true } },
+      },
+    });
+    return this.toClient(created);
+  }
+
+  async update(id: string, input: ClientInput) {
+    const businessId = await this.businesses.getCurrentId();
+    const existing = await this.prisma.user.findFirst({
+      where: { id, businessId },
+    });
+    if (!existing) throw new NotFoundException('Cliente no encontrado');
+
+    const name = input.name !== undefined ? input.name?.trim() || null : existing.name;
+    const email =
+      input.email !== undefined ? input.email?.trim() || null : existing.email;
+    const phone =
+      input.phone !== undefined ? input.phone?.trim() || null : existing.phone;
+    if (!name && !email && !phone) {
+      throw new BadRequestException(
+        'Hace falta al menos nombre, teléfono o email.',
+      );
+    }
+
+    const status = input.statusSlug
+      ? await this.resolveStatus(input.statusSlug)
+      : null;
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        phone,
+        notes:
+          input.notes !== undefined ? input.notes?.trim() || null : undefined,
+        ...(status ? { statusId: status.id } : {}),
+      },
+      include: {
+        status: true,
+        _count: { select: { appointments: true, conversations: true } },
+      },
+    });
+    return this.toClient(updated);
+  }
+
+  async remove(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const existing = await this.prisma.user.findFirst({
+      where: { id, businessId },
+    });
+    if (!existing) throw new NotFoundException('Cliente no encontrado');
+    await this.prisma.user.delete({ where: { id } });
+    return { id };
+  }
+
+  async openWhatsApp(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const user = await this.prisma.user.findFirst({
+      where: { id, businessId },
+    });
+    if (!user) throw new NotFoundException('Cliente no encontrado');
+    const phone = this.whatsAppPhone(user.phone);
+    if (!phone) {
+      throw new BadRequestException(
+        'Este cliente no tiene un teléfono de WhatsApp.',
+      );
+    }
+
+    if (!(await this.isWhatsAppConnected(businessId))) {
+      return { webUrl: `https://wa.me/${phone}` };
+    }
+
+    const existing = await this.prisma.conversation.findFirst({
+      where: {
+        businessId,
+        channel: 'WHATSAPP',
+        OR: [
+          { userId: user.id },
+          { contactPhone: phone },
+          { contactPhone: user.phone },
+          { externalId: { in: alternateWhatsAppExternalIds(phone) } },
+        ],
+      },
+      orderBy: [
+        { hiddenAt: { sort: 'asc', nulls: 'first' } },
+        { updatedAt: 'desc' },
+      ],
+    });
+
+    if (existing) {
+      if (existing.hiddenAt || existing.status === 'CLOSED' || !existing.userId) {
+        await this.prisma.conversation.update({
+          where: { id: existing.id },
+          data: {
+            ...(existing.hiddenAt || existing.status === 'CLOSED'
+              ? { hiddenAt: null, status: 'HUMAN' }
+              : {}),
+            userId: existing.userId || user.id,
+            contactPhone: existing.contactPhone || phone,
+            contactName: existing.contactName || user.name,
+          },
+        });
+      }
+      return { conversationId: existing.id };
+    }
+
+    const agent = await this.prisma.agentConfig.findFirst({
+      where: { businessId, isDefault: true },
+    });
+    const created = await this.prisma.conversation.create({
+      data: {
+        businessId,
+        userId: user.id,
+        agentConfigId: agent?.id,
+        channel: 'WHATSAPP',
+        status: 'HUMAN',
+        externalId: `${phone}@c.us`,
+        contactPhone: phone,
+        contactName: user.name,
+        lastMessageAt: new Date(),
+      },
+    });
+    return { conversationId: created.id };
+  }
+
+  private async isWhatsAppConnected(businessId: string) {
+    const wa = await this.prisma.whatsAppConfig.findUnique({
+      where: { businessId },
+      select: { status: true, sessionStatus: true },
+    });
+    return wa?.status === 'connected' || wa?.sessionStatus === 'WORKING';
+  }
+
+  private whatsAppPhone(phone?: string | null) {
+    const digits = phone?.replace(/\D/g, '') ?? '';
+    return digits.length >= 8 ? digits : null;
+  }
+
+  private async resolveStatus(slug: string) {
+    const status = await this.prisma.clientStatus.findUnique({
+      where: { slug },
+    });
+    if (!status) {
+      throw new BadRequestException(`Estado inválido: ${slug}`);
+    }
+    return status;
+  }
+
+  private toClient(row: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    status: { id: string; slug: string; name: string };
+    _count: { appointments: number; conversations: number };
+  }) {
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      notes: row.notes,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      status: row.status,
+      appointments: row._count.appointments,
+      conversations: row._count.conversations,
+    };
+  }
+}

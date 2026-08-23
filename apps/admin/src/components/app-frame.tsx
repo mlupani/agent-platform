@@ -41,7 +41,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLogin || !me.data) return;
-    if (pathname.startsWith('/playground') && me.data.user.role !== 'ADMIN') {
+    if (
+      (pathname.startsWith('/playground') || pathname.startsWith('/gastos')) &&
+      me.data.user.role !== 'ADMIN'
+    ) {
       router.replace('/');
     }
   }, [isLogin, me.data, pathname, router]);
