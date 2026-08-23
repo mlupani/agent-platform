@@ -381,7 +381,7 @@ export class AnalyticsService {
   }
 }
 
-const CONTACT_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'WEB'] as const;
+const CONTACT_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'WEB'] as const;
 
 function parseMonthParam(
   month: string | undefined,
@@ -425,7 +425,10 @@ function normalizeChannel(value?: string | null): (typeof CONTACT_CHANNELS)[numb
   if (raw === 'WHATSAPP' || raw.includes('WHATSAPP') || raw.includes('WAHA')) {
     return 'WHATSAPP';
   }
-  if (raw === 'INSTAGRAM' || raw.includes('INSTAGRAM') || raw.includes('ZERNIO')) {
+  if (raw === 'FACEBOOK' || raw.includes('FACEBOOK') || raw.includes('MESSENGER')) {
+    return 'FACEBOOK';
+  }
+  if (raw === 'INSTAGRAM' || raw.includes('INSTAGRAM')) {
     return 'INSTAGRAM';
   }
   if (raw === 'WEB' || raw === 'WEBSITE' || raw.includes('WEB')) return 'WEB';

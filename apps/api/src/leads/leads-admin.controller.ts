@@ -19,7 +19,7 @@ const createManualSchema = z.object({
     z.string().trim().max(2000).optional(),
   ),
   channel: z
-    .enum(['MANUAL', 'WEB', 'WHATSAPP', 'INSTAGRAM'])
+    .enum(['MANUAL', 'WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK'])
     .optional()
     .default('MANUAL'),
 });

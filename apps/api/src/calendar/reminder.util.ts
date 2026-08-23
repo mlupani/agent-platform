@@ -1,4 +1,4 @@
-export const REMINDER_CHANNELS = ['whatsapp', 'email', 'instagram'] as const;
+export const REMINDER_CHANNELS = ['whatsapp', 'email', 'instagram', 'facebook'] as const;
 
 export type ReminderChannel = (typeof REMINDER_CHANNELS)[number];
 
@@ -24,7 +24,12 @@ export function normalizeReminderChannels(value: unknown): ReminderChannel[] {
   const seen = new Set<ReminderChannel>();
   const ordered: ReminderChannel[] = [];
   for (const item of raw) {
-    if (item !== 'whatsapp' && item !== 'email' && item !== 'instagram') {
+    if (
+      item !== 'whatsapp' &&
+      item !== 'email' &&
+      item !== 'instagram' &&
+      item !== 'facebook'
+    ) {
       continue;
     }
     if (seen.has(item)) continue;
@@ -81,9 +86,11 @@ export interface ReminderChannelAvailability {
   whatsappReady: boolean;
   emailReady: boolean;
   instagramReady: boolean;
+  facebookReady: boolean;
   phone: string | null;
   email: string | null;
   instagramThread: boolean;
+  facebookThread: boolean;
 }
 
 export function pickReminderChannel(
@@ -103,6 +110,13 @@ export function pickReminderChannel(
       availability.instagramThread
     ) {
       return 'instagram';
+    }
+    if (
+      channel === 'facebook' &&
+      availability.facebookReady &&
+      availability.facebookThread
+    ) {
+      return 'facebook';
     }
   }
   return null;

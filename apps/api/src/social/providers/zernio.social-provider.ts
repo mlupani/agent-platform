@@ -119,10 +119,7 @@ export class ZernioSocialProvider implements SocialProvider {
       }),
     );
     return (data.accounts ?? [])
-      .filter(
-        (account) =>
-          account.platform === 'instagram' || account.platform === 'tiktok',
-      )
+      .filter((account) => isSupportedZernioPlatform(account.platform))
       .map((account) => this.mapAccount(account));
   }
 
@@ -134,7 +131,7 @@ export class ZernioSocialProvider implements SocialProvider {
       (account) => account._id === accountId,
     );
     if (!found) return null;
-    if (found.platform !== 'instagram' && found.platform !== 'tiktok') {
+    if (!isSupportedZernioPlatform(found.platform)) {
       return null;
     }
     return this.mapAccount(found);
@@ -195,13 +192,22 @@ export class ZernioSocialProvider implements SocialProvider {
     const platformEntry: {
       platform: string;
       accountId: string;
-      platformSpecificData?: { contentType?: 'story' };
+      platformSpecificData?: { contentType?: 'story' | 'reel'; title?: string };
     } = {
       platform: input.platform,
       accountId: input.accountId,
     };
-    if (input.platform === 'instagram' && input.contentType === 'story') {
+    if (
+      (input.platform === 'instagram' || input.platform === 'facebook') &&
+      input.contentType === 'story'
+    ) {
       platformEntry.platformSpecificData = { contentType: 'story' };
+    }
+    if (input.platform === 'facebook' && input.contentType === 'reel') {
+      platformEntry.platformSpecificData = {
+        contentType: 'reel',
+        ...(input.caption ? { title: input.caption.slice(0, 80) } : {}),
+      };
     }
 
     const data = await this.call<{
@@ -266,7 +272,10 @@ export class ZernioSocialProvider implements SocialProvider {
   async listInboxThreads(input: {
     accountId: string;
     profileId?: string;
+    platform?: SocialPlatform;
   }): Promise<SocialInboxThread[]> {
+    const platform =
+      input.platform === 'facebook' ? 'facebook' : 'instagram';
     const threads: SocialInboxThread[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 3; page += 1) {
@@ -274,7 +283,7 @@ export class ZernioSocialProvider implements SocialProvider {
         this.sdk().messages.listInboxConversations({
           query: {
             accountId: input.accountId,
-            platform: 'instagram',
+            platform,
             sortOrder: 'desc',
             limit: 50,
             ...(input.profileId ? { profileId: input.profileId } : {}),
@@ -324,16 +333,23 @@ export class ZernioSocialProvider implements SocialProvider {
 
   private mapInboxThread(row: Record<string, unknown>): SocialInboxThread {
     const instagramProfile = asRecord(row.instagramProfile);
+    const facebookProfile = asRecord(row.facebookProfile);
     return {
       id: stringOf(row.id) ?? stringOf(row._id) ?? '',
       accountId: stringOf(row.accountId),
       participantId: stringOf(row.participantId),
-      participantName: stringOf(row.participantName) ?? null,
+      participantName:
+        stringOf(row.participantName) ??
+        stringOf(facebookProfile?.name) ??
+        null,
       participantUsername:
         stringOf(row.participantUsername) ??
         stringOf(instagramProfile?.username) ??
         null,
-      participantPicture: stringOf(row.participantPicture) ?? null,
+      participantPicture:
+        stringOf(row.participantPicture) ??
+        stringOf(facebookProfile?.picture) ??
+        null,
       lastMessage: stringOf(row.lastMessage) ?? null,
       updatedAt: dateOf(row.updatedTime ?? row.updatedAt),
       unreadCount: typeof row.unreadCount === 'number' ? row.unreadCount : null,
@@ -472,6 +488,14 @@ function logFailedInboxAccounts(
         return `${stringOf(row?.accountId) ?? '?'}:${stringOf(row?.error) ?? 'error'}`;
       })
       .join(', ')}`,
+  );
+}
+
+function isSupportedZernioPlatform(platform: string): boolean {
+  return (
+    platform === 'instagram' ||
+    platform === 'tiktok' ||
+    platform === 'facebook'
   );
 }
 

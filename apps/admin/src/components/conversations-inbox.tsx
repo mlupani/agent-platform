@@ -4,7 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { ChannelBadge, InstagramIconMono, WhatsAppIcon } from '@/components/channel-icons';
+import {
+  ChannelBadge,
+  FacebookIcon,
+  InstagramIconMono,
+  WhatsAppIcon,
+} from '@/components/channel-icons';
 import type { Conversation, Message } from '@/lib/types';
 
 function initials(name: string) {
@@ -106,15 +111,21 @@ function matchesSearch(conversation: Conversation, query: string): boolean {
   return false;
 }
 
+type InboxChannelFilter = {
+  whatsapp: boolean;
+  instagram: boolean;
+  facebook: boolean;
+};
+
 function matchesChannel(
   conversation: Conversation,
-  channels: { whatsapp: boolean; instagram: boolean },
+  channels: InboxChannelFilter,
 ): boolean {
-  if (channels.whatsapp && channels.instagram) return true;
   const ch = (conversation.channel ?? '').toUpperCase();
-  if (channels.whatsapp) return ch === 'WHATSAPP';
-  if (channels.instagram) return ch === 'INSTAGRAM';
-  return false;
+  if (ch === 'WHATSAPP') return channels.whatsapp;
+  if (ch === 'INSTAGRAM') return channels.instagram;
+  if (ch === 'FACEBOOK') return channels.facebook;
+  return channels.whatsapp || channels.instagram || channels.facebook;
 }
 
 function ChannelFilterOrb({
@@ -122,39 +133,46 @@ function ChannelFilterOrb({
   selected,
   onToggle,
 }: {
-  channel: 'whatsapp' | 'instagram';
+  channel: 'whatsapp' | 'instagram' | 'facebook';
   selected: boolean;
   onToggle: () => void;
 }) {
-  const isWa = channel === 'whatsapp';
+  const meta = {
+    whatsapp: {
+      label: 'WhatsApp',
+      selectedClass:
+        'bg-[#25D366] text-white shadow-[0_0_0_3px_rgba(37,211,102,0.28)]',
+      icon: <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />,
+    },
+    instagram: {
+      label: 'Instagram',
+      selectedClass:
+        'bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] text-white shadow-[0_0_0_3px_rgba(221,42,123,0.28)]',
+      icon: <InstagramIconMono className="h-4 w-4" title="Instagram" />,
+    },
+    facebook: {
+      label: 'Messenger',
+      selectedClass:
+        'bg-[#1877F2] text-white shadow-[0_0_0_3px_rgba(24,119,242,0.28)]',
+      icon: <FacebookIcon className="h-4 w-4" title="Messenger" />,
+    },
+  }[channel];
   return (
     <button
       type="button"
       aria-pressed={selected}
-      aria-label={isWa ? 'Filtrar WhatsApp' : 'Filtrar Instagram'}
+      aria-label={`Filtrar ${meta.label}`}
       title={
         selected
-          ? isWa
-            ? 'WhatsApp visible. Tocá para ocultar.'
-            : 'Instagram visible. Tocá para ocultar.'
-          : isWa
-            ? 'WhatsApp oculto. Tocá para mostrar.'
-            : 'Instagram oculto. Tocá para mostrar.'
+          ? `${meta.label} visible. Tocá para ocultar.`
+          : `${meta.label} oculto. Tocá para mostrar.`
       }
       onClick={onToggle}
       className={`h-9 w-9 rounded-full grid place-items-center shrink-0 transition duration-200 ${
-        selected
-          ? isWa
-            ? 'bg-[#25D366] text-white shadow-[0_0_0_3px_rgba(37,211,102,0.28)]'
-            : 'bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] text-white shadow-[0_0_0_3px_rgba(221,42,123,0.28)]'
-          : 'bg-line/80 text-muted hover:bg-line'
+        selected ? meta.selectedClass : 'bg-line/80 text-muted hover:bg-line'
       }`}
     >
-      {isWa ? (
-        <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
-      ) : (
-        <InstagramIconMono className="h-4 w-4" title="Instagram" />
-      )}
+      {meta.icon}
     </button>
   );
 }
@@ -191,9 +209,10 @@ export function ConversationsInbox() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
-  const [channels, setChannels] = useState({
+  const [channels, setChannels] = useState<InboxChannelFilter>({
     whatsapp: true,
     instagram: true,
+    facebook: true,
   });
   const [filter, setFilter] = useState<'all' | 'attention' | 'ai' | 'closed'>(
     'all',
@@ -242,7 +261,9 @@ export function ConversationsInbox() {
     enabled: Boolean(selectedId),
     refetchInterval: (query) => {
       const data = query.state.data as Conversation | undefined;
-      if (data?.channel !== 'INSTAGRAM') return false;
+      if (data?.channel !== 'INSTAGRAM' && data?.channel !== 'FACEBOOK') {
+        return false;
+      }
       if (data.inboxSync === 'webhook') return false;
       return 8_000;
     },
@@ -481,6 +502,22 @@ export function ConversationsInbox() {
               />
               <div className="flex items-center gap-1.5 shrink-0">
                 <ChannelFilterOrb
+                  channel="facebook"
+                  selected={channels.facebook}
+                  onToggle={() =>
+                    setChannels((current) => {
+                      const next = {
+                        ...current,
+                        facebook: !current.facebook,
+                      };
+                      if (!next.whatsapp && !next.instagram && !next.facebook) {
+                        return current;
+                      }
+                      return next;
+                    })
+                  }
+                />
+                <ChannelFilterOrb
                   channel="instagram"
                   selected={channels.instagram}
                   onToggle={() =>
@@ -489,7 +526,9 @@ export function ConversationsInbox() {
                         ...current,
                         instagram: !current.instagram,
                       };
-                      if (!next.whatsapp && !next.instagram) return current;
+                      if (!next.whatsapp && !next.instagram && !next.facebook) {
+                        return current;
+                      }
                       return next;
                     })
                   }
@@ -503,7 +542,9 @@ export function ConversationsInbox() {
                         ...current,
                         whatsapp: !current.whatsapp,
                       };
-                      if (!next.whatsapp && !next.instagram) return current;
+                      if (!next.whatsapp && !next.instagram && !next.facebook) {
+                        return current;
+                      }
                       return next;
                     })
                   }
@@ -525,7 +566,9 @@ export function ConversationsInbox() {
               <p className="p-4 text-sm text-muted">
                 {search.trim()
                   ? 'No hay chats que coincidan con la búsqueda.'
-                  : !channels.whatsapp || !channels.instagram
+                  : !channels.whatsapp ||
+                      !channels.instagram ||
+                      !channels.facebook
                     ? 'No hay chats en los canales seleccionados.'
                     : 'Todavía no hay conversaciones.'}
               </p>

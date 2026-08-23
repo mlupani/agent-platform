@@ -124,6 +124,7 @@ describe('AnalyticsService.dashboard', () => {
       expect.arrayContaining([
         expect.objectContaining({ channel: 'WHATSAPP', count: 4, leads: 1 }),
         expect.objectContaining({ channel: 'INSTAGRAM', count: 1, leads: 0 }),
+        expect.objectContaining({ channel: 'FACEBOOK', count: 0, leads: 0 }),
         expect.objectContaining({ channel: 'WEB', count: 0, leads: 0 }),
       ]),
     );

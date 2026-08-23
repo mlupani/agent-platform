@@ -14,6 +14,7 @@ const CHANNEL_LABEL: Record<string, string> = {
   WEB: 'Chat web',
   WHATSAPP: 'WhatsApp',
   INSTAGRAM: 'Instagram',
+  FACEBOOK: 'Messenger',
 };
 
 function relativeTime(value?: string | null) {

@@ -77,7 +77,7 @@ interface WhatsAppStatus {
 interface SocialListResponse {
   configured: boolean;
   connections: Array<{
-    platform: 'instagram' | 'tiktok';
+    platform: 'instagram' | 'tiktok' | 'facebook';
     status: string;
   }>;
 }
@@ -119,11 +119,15 @@ const CHANNELS = [
   { value: 'WHATSAPP_STATUS', label: 'WhatsApp Status' },
   { value: 'INSTAGRAM_STORY', label: 'Instagram Story' },
   { value: 'INSTAGRAM_FEED', label: 'Instagram Feed' },
+  { value: 'FACEBOOK_STORY', label: 'Facebook Story' },
+  { value: 'FACEBOOK_FEED', label: 'Facebook Feed' },
 ] as const;
 
 const VIDEO_CHANNELS = [
   { value: 'INSTAGRAM_REEL', label: 'Instagram Reel' },
   { value: 'INSTAGRAM_STORY', label: 'Instagram Story' },
+  { value: 'FACEBOOK_REEL', label: 'Facebook Reel' },
+  { value: 'FACEBOOK_STORY', label: 'Facebook Story' },
   { value: 'WHATSAPP_STATUS', label: 'WhatsApp Status' },
   { value: 'TIKTOK', label: 'TikTok' },
 ] as const;
@@ -131,6 +135,7 @@ const VIDEO_CHANNELS = [
 const AUTO_CHANNELS = [
   ...CHANNELS,
   { value: 'INSTAGRAM_REEL', label: 'Instagram Reel' },
+  { value: 'FACEBOOK_REEL', label: 'Facebook Reel' },
   { value: 'TIKTOK', label: 'TikTok' },
 ] as const;
 
@@ -139,6 +144,9 @@ const CHANNEL_LABEL: Record<string, string> = {
   INSTAGRAM_STORY: 'Instagram Story',
   INSTAGRAM_FEED: 'Instagram Feed',
   INSTAGRAM_REEL: 'Instagram Reel',
+  FACEBOOK_STORY: 'Facebook Story',
+  FACEBOOK_FEED: 'Facebook Feed',
+  FACEBOOK_REEL: 'Facebook Reel',
   TIKTOK: 'TikTok',
 };
 
@@ -440,6 +448,9 @@ export function ContentCreator() {
   );
   const tiktokConnected = social.data?.connections.some(
     (item) => item.platform === 'tiktok' && item.status === 'connected',
+  );
+  const facebookConnected = social.data?.connections.some(
+    (item) => item.platform === 'facebook' && item.status === 'connected',
   );
 
   const servicesQuery = useQuery({
@@ -1066,7 +1077,17 @@ export function ContentCreator() {
               <p className="text-xs text-amber-800">
                 Para publicar en Instagram conectá{' '}
                 <Link href="/integrations" className="underline">
-                  Instagram publicación
+                  Instagram
+                </Link>
+                .
+              </p>
+            ) : null}
+            {channels.some((c) => c.startsWith('FACEBOOK')) &&
+            !facebookConnected ? (
+              <p className="text-xs text-amber-800">
+                Para publicar en Facebook conectá la Página en{' '}
+                <Link href="/integrations" className="underline">
+                  Integraciones
                 </Link>
                 .
               </p>
@@ -1610,6 +1631,16 @@ export function ContentCreator() {
                     );
                   })}
                 </div>
+                {publishChannels.some((c) => c.startsWith('FACEBOOK')) &&
+                !facebookConnected ? (
+                  <p className="text-xs text-amber-800">
+                    Para publicar en Facebook conectá la Página en{' '}
+                    <Link href="/integrations" className="underline">
+                      Integraciones
+                    </Link>
+                    .
+                  </p>
+                ) : null}
                 {!detail.assets?.length ? (
                   <p className="text-sm text-amber-700">
                     Este borrador todavía no tiene media. Esperá a que termine

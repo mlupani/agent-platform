@@ -8,6 +8,7 @@ import { WebChatConfigForm } from '@/components/web-chat-config-form';
 import { WhatsAppConfigForm } from '@/components/whatsapp-config-form';
 import { ZernioSocialForm } from '@/components/zernio-social-form';
 import {
+  FacebookIcon,
   InstagramIconMono,
   TikTokIcon,
   WebChannelIcon,
@@ -19,6 +20,7 @@ type Panel =
   | 'list'
   | 'whatsapp'
   | 'instagram'
+  | 'facebook'
   | 'tiktok'
   | 'web'
   | 'calendar';
@@ -45,10 +47,17 @@ interface WebChatPublicConfig {
 interface SocialListResponse {
   configured: boolean;
   connections: Array<{
-    platform: 'instagram' | 'tiktok';
+    platform: 'instagram' | 'tiktok' | 'facebook';
     status: string;
     agentEnabled?: boolean;
   }>;
+}
+
+function socialPanelFromQuery(value: string | null): Panel | null {
+  if (value === 'facebook' || value === 'instagram' || value === 'tiktok') {
+    return value;
+  }
+  return null;
 }
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
@@ -64,10 +73,15 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export function IntegrationsHub() {
-  const [panel, setPanel] = useState<Panel>('list');
   const searchParams = useSearchParams();
   const connectedBanner = searchParams.get('connected');
   const socialError = searchParams.get('socialError');
+  const [panel, setPanel] = useState<Panel>(
+    () =>
+      socialPanelFromQuery(searchParams.get('socialPlatform')) ??
+      socialPanelFromQuery(connectedBanner) ??
+      'list',
+  );
 
   const wa = useQuery({
     queryKey: ['whatsapp-config'],
@@ -91,10 +105,14 @@ export function IntegrationsHub() {
   const igConnection = social.data?.connections.find(
     (item) => item.platform === 'instagram',
   );
+  const facebookConnection = social.data?.connections.find(
+    (item) => item.platform === 'facebook',
+  );
   const tiktokConnection = social.data?.connections.find(
     (item) => item.platform === 'tiktok',
   );
   const igConnected = igConnection?.status === 'connected';
+  const facebookConnected = facebookConnection?.status === 'connected';
   const tiktokConnected = tiktokConnection?.status === 'connected';
   const webConnected =
     web.data?.status === 'connected' || web.data?.enabled === true;
@@ -105,6 +123,7 @@ export function IntegrationsHub() {
   const title = useMemo(() => {
     if (panel === 'whatsapp') return 'WhatsApp';
     if (panel === 'instagram') return 'Instagram';
+    if (panel === 'facebook') return 'Facebook';
     if (panel === 'tiktok') return 'TikTok';
     if (panel === 'web') return 'Web';
     if (panel === 'calendar') return 'Google Calendar';
@@ -124,9 +143,17 @@ export function IntegrationsHub() {
           </button>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">{title}</h2>
         </header>
+        {socialError ? (
+          <p className="text-sm rounded-xl bg-rose-500/10 text-rose px-4 py-3 break-words">
+            {socialError}
+          </p>
+        ) : null}
         {panel === 'whatsapp' ? <WhatsAppConfigForm /> : null}
         {panel === 'instagram' ? (
           <ZernioSocialForm platform="instagram" />
+        ) : null}
+        {panel === 'facebook' ? (
+          <ZernioSocialForm platform="facebook" />
         ) : null}
         {panel === 'tiktok' ? <ZernioSocialForm platform="tiktok" /> : null}
         {panel === 'web' ? <WebChatConfigForm /> : null}
@@ -149,7 +176,9 @@ export function IntegrationsHub() {
         <p className="text-sm rounded-xl bg-emerald-500/12 text-emerald-900 px-4 py-3">
           {connectedBanner === 'tiktok'
             ? 'TikTok quedó conectado para publicar.'
-            : 'Instagram quedó conectado para publicar y recibir Direct.'}
+            : connectedBanner === 'facebook'
+              ? 'Facebook quedó conectado para publicar y recibir Messenger.'
+              : 'Instagram quedó conectado para publicar y recibir Direct.'}
         </p>
       ) : null}
       {socialError ? (
@@ -225,6 +254,42 @@ export function IntegrationsHub() {
           <p className="mt-1 text-sm text-muted">
             Conectá Instagram, publicá Feed, Stories y Reels, contestá mensajes y
             activá o pausá el asistente.
+          </p>
+          <div className="mt-4 flex justify-end text-muted group-hover:text-text">
+            →
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPanel('facebook')}
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-10 w-10 rounded-xl bg-[#1877F2] grid place-items-center text-white">
+              <FacebookIcon className="h-5 w-5" title="Facebook" />
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <StatusPill
+                ok={Boolean(facebookConnected)}
+                label={facebookConnected ? 'Conectado' : 'Desconectado'}
+              />
+              {facebookConnected ? (
+                <StatusPill
+                  ok={facebookConnection?.agentEnabled !== false}
+                  label={
+                    facebookConnection?.agentEnabled !== false
+                      ? 'Agente activo'
+                      : 'Agente inactivo'
+                  }
+                />
+              ) : null}
+            </div>
+          </div>
+          <h3 className="mt-4 font-medium">Facebook</h3>
+          <p className="mt-1 text-sm text-muted">
+            Conectá una Página (no el perfil personal) para publicar y atender
+            Messenger.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →

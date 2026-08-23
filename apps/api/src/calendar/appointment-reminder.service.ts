@@ -31,6 +31,7 @@ export interface AppointmentReminderPublicConfig {
     whatsapp: { connected: boolean };
     email: { configured: boolean };
     instagram: { connected: boolean };
+    facebook: { connected: boolean };
   };
 }
 
@@ -38,6 +39,7 @@ const DEFAULT_CHANNELS: ReminderChannel[] = [
   'whatsapp',
   'email',
   'instagram',
+  'facebook',
 ];
 
 @Injectable()
@@ -269,6 +271,10 @@ export class AppointmentReminderService {
       appointment.conversation?.channel === 'INSTAGRAM' &&
         appointment.conversation.externalId,
     );
+    const facebookThread = Boolean(
+      appointment.conversation?.channel === 'FACEBOOK' &&
+        appointment.conversation.externalId,
+    );
 
     const availability = {
       whatsappReady: phone
@@ -280,9 +286,13 @@ export class AppointmentReminderService {
       instagramReady: instagramThread
         ? await this.isInstagramReady(appointment.businessId)
         : false,
+      facebookReady: facebookThread
+        ? await this.isFacebookReady(appointment.businessId)
+        : false,
       phone,
       email,
       instagramThread,
+      facebookThread,
     };
     const channel = pickReminderChannel(input.channels, availability);
 
@@ -293,7 +303,7 @@ export class AppointmentReminderService {
           status: 'skipped',
           channel: 'none',
           error:
-            'No hay canal disponible: falta WhatsApp/email/Instagram conectado o datos del cliente.',
+            'No hay canal disponible: falta WhatsApp/email/Instagram/Messenger conectado o datos del cliente.',
         },
       });
       this.logger.warn(
@@ -334,7 +344,10 @@ export class AppointmentReminderService {
           },
           appointment.businessId,
         );
-      } else if (channel === 'instagram' && appointment.conversationId) {
+      } else if (
+        (channel === 'instagram' || channel === 'facebook') &&
+        appointment.conversationId
+      ) {
         await this.socialInbox.sendForConversation({
           businessId: appointment.businessId,
           conversationId: appointment.conversationId,
@@ -420,15 +433,17 @@ export class AppointmentReminderService {
   }
 
   private async channelsStatus(businessId: string) {
-    const [whatsapp, email, instagram] = await Promise.all([
+    const [whatsapp, email, instagram, facebook] = await Promise.all([
       this.isWhatsAppReady(businessId),
       this.email.resolveTransport(businessId).then((t) => Boolean(t)),
       this.isInstagramReady(businessId),
+      this.isFacebookReady(businessId),
     ]);
     return {
       whatsapp: { connected: whatsapp },
       email: { configured: email },
       instagram: { connected: instagram },
+      facebook: { connected: facebook },
     };
   }
 
@@ -452,6 +467,19 @@ export class AppointmentReminderService {
           businessId,
           provider: 'zernio',
           platform: 'instagram',
+        },
+      },
+    });
+    return connection?.status === 'connected';
+  }
+
+  private async isFacebookReady(businessId: string): Promise<boolean> {
+    const connection = await this.prisma.socialConnection.findUnique({
+      where: {
+        businessId_provider_platform: {
+          businessId,
+          provider: 'zernio',
+          platform: 'facebook',
         },
       },
     });

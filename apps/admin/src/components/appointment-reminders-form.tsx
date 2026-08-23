@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 
-type ReminderChannel = 'whatsapp' | 'email' | 'instagram';
+type ReminderChannel = 'whatsapp' | 'email' | 'instagram' | 'facebook';
 
 interface ReminderConfig {
   enabled: boolean;
@@ -15,6 +15,7 @@ interface ReminderConfig {
     whatsapp: { connected: boolean };
     email: { configured: boolean };
     instagram: { connected: boolean };
+    facebook: { connected: boolean };
   };
 }
 
@@ -40,6 +41,11 @@ const CHANNEL_META: Array<{
     label: 'Instagram',
     hint: 'Solo si la cita nació de un Direct',
   },
+  {
+    id: 'facebook',
+    label: 'Messenger',
+    hint: 'Solo si la cita nació de Messenger',
+  },
 ];
 
 export function AppointmentRemindersForm() {
@@ -55,6 +61,7 @@ export function AppointmentRemindersForm() {
     'whatsapp',
     'email',
     'instagram',
+    'facebook',
   ]);
   const [message, setMessage] = useState('');
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
@@ -174,7 +181,7 @@ export function AppointmentRemindersForm() {
 
       <div className="space-y-2">
         <p className="text-sm text-muted">Canales, en orden de preferencia</p>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {CHANNEL_META.map((channel) => {
             const index = channels.indexOf(channel.id);
             const on = index >= 0;
@@ -183,7 +190,9 @@ export function AppointmentRemindersForm() {
                 ? data?.channelsStatus.whatsapp.connected
                 : channel.id === 'email'
                   ? data?.channelsStatus.email.configured
-                  : data?.channelsStatus.instagram.connected;
+                  : channel.id === 'facebook'
+                    ? data?.channelsStatus.facebook.connected
+                    : data?.channelsStatus.instagram.connected;
             return (
               <button
                 key={channel.id}

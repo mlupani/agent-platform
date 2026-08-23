@@ -14,6 +14,14 @@ import { RedisService } from '../common/redis/redis.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { SocialAccountNotFoundError } from './social.errors';
 import { SocialProviderFactory } from './social-provider.factory';
+import {
+  SOCIAL_INBOX_PLATFORMS,
+  conversationChannelForPlatform,
+  isSocialInboxPlatform,
+  platformForConversationChannel,
+  type SocialInboxChannel,
+  type SocialInboxPlatform,
+} from './social.types';
 
 const PROVIDER = 'zernio';
 const MESSAGE_TTL_SECONDS = 86_400;
@@ -25,12 +33,25 @@ function pushLiveKey(businessId: string) {
   return `zernio:inbox:live:${businessId}`;
 }
 
+function lockPrefix(channel: SocialInboxChannel) {
+  return channel === 'FACEBOOK' ? 'fb' : 'ig';
+}
+
+function userExternalPrefix(channel: SocialInboxChannel) {
+  return channel === 'FACEBOOK' ? 'fb' : 'ig';
+}
+
+function inboxLabel(channel: SocialInboxChannel) {
+  return channel === 'FACEBOOK' ? 'Messenger' : 'Instagram';
+}
+
 export interface SocialInboxInbound {
   accountId: string;
   conversationId: string;
   messageId: string;
   text: string;
   fromMe: boolean;
+  channel: SocialInboxChannel;
   participantId?: string;
   participantName?: string | null;
   participantUsername?: string | null;
@@ -74,25 +95,37 @@ export class SocialInboxService {
     return (await this.isPushLive(businessId)) ? 'webhook' : 'poll';
   }
 
-  async purgeChats(businessId: string): Promise<number> {
+  async purgeChats(
+    businessId: string,
+    platform: SocialInboxPlatform = 'instagram',
+  ): Promise<number> {
+    const channel = conversationChannelForPlatform(platform);
+    if (!channel) return 0;
     this.lastChatSync.delete(businessId);
     await this.redis.del(pushLiveKey(businessId));
     const result = await this.prisma.conversation.deleteMany({
-      where: { businessId, channel: 'INSTAGRAM' },
+      where: { businessId, channel },
     });
     if (result.count > 0) {
       this.logger.log(
-        `Purged ${result.count} Instagram conversation(s) for ${businessId}`,
+        `Purged ${result.count} ${inboxLabel(channel)} conversation(s) for ${businessId}`,
       );
     }
     this.realtime.conversationInboxCleared(businessId, {
-      channel: 'INSTAGRAM',
+      channel,
       deleted: result.count,
     });
-    this.realtime.instagramStatusChanged(businessId, {
-      status: 'disconnected',
-      channel: 'INSTAGRAM',
-    });
+    if (channel === 'FACEBOOK') {
+      this.realtime.facebookStatusChanged(businessId, {
+        status: 'disconnected',
+        channel,
+      });
+    } else {
+      this.realtime.instagramStatusChanged(businessId, {
+        status: 'disconnected',
+        channel,
+      });
+    }
     return result.count;
   }
 
@@ -110,11 +143,15 @@ export class SocialInboxService {
     });
     if (
       !connection ||
-      connection.platform !== 'instagram' ||
+      !isSocialInboxPlatform(connection.platform) ||
       connection.status !== 'connected'
     ) {
       return false;
     }
+
+    const channel = conversationChannelForPlatform(connection.platform);
+    if (!channel) return false;
+    inbound.channel = channel;
 
     await this.markPushLive(connection.businessId);
     return this.persistAndRoute(connection.businessId, inbound, {
@@ -132,13 +169,16 @@ export class SocialInboxService {
       where: {
         id: input.conversationId,
         businessId: input.businessId,
-        channel: 'INSTAGRAM',
+        channel: { in: ['INSTAGRAM', 'FACEBOOK'] },
       },
     });
     const threadId = conversation?.externalId;
-    if (!threadId) {
+    const platform = platformForConversationChannel(
+      conversation?.channel ?? '',
+    );
+    if (!threadId || !platform) {
       this.logger.warn(
-        `Instagram send skipped: no thread for conversation=${input.conversationId}`,
+        `Social send skipped: no thread for conversation=${input.conversationId}`,
       );
       return {};
     }
@@ -148,12 +188,12 @@ export class SocialInboxService {
         businessId_provider_platform: {
           businessId: input.businessId,
           provider: PROVIDER,
-          platform: 'instagram',
+          platform,
         },
       },
     });
     if (!connection || connection.status !== 'connected') {
-      throw new SocialAccountNotFoundError('instagram');
+      throw new SocialAccountNotFoundError(platform);
     }
 
     const sent = await this.factory.get().sendInboxMessage({
@@ -237,16 +277,23 @@ export class SocialInboxService {
     conversationId: string,
   ): Promise<number> {
     const conversation = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, businessId, channel: 'INSTAGRAM' },
+      where: {
+        id: conversationId,
+        businessId,
+        channel: { in: ['INSTAGRAM', 'FACEBOOK'] },
+      },
     });
     if (!conversation?.externalId) return 0;
+    const platform = platformForConversationChannel(conversation.channel);
+    const channel = conversationChannelForPlatform(platform ?? '');
+    if (!platform || !channel) return 0;
 
     const connection = await this.prisma.socialConnection.findUnique({
       where: {
         businessId_provider_platform: {
           businessId,
           provider: PROVIDER,
-          platform: 'instagram',
+          platform,
         },
       },
     });
@@ -260,7 +307,7 @@ export class SocialInboxService {
       });
     } catch (error) {
       this.logger.warn(
-        `Instagram messages sync failed conv=${conversationId}: ${
+        `Inbox messages sync failed conv=${conversationId}: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -278,6 +325,7 @@ export class SocialInboxService {
         connection.externalAccountId,
         conversation,
         item,
+        channel,
       );
       await this.hydrateVoiceText(businessId, inbound);
       latest = {
@@ -303,7 +351,7 @@ export class SocialInboxService {
             createdAt: item.createdAt ?? undefined,
             metadata: {
               source: 'zernio_sync',
-              channel: 'INSTAGRAM',
+              channel,
             },
           },
         });
@@ -343,7 +391,7 @@ export class SocialInboxService {
           );
         } catch (error) {
           this.logger.warn(
-            `Instagram agent on sync failed conv=${conversationId}: ${
+            `Inbox agent on sync failed conv=${conversationId}: ${
               error instanceof Error ? error.message : 'unknown'
             }`,
           );
@@ -365,21 +413,37 @@ export class SocialInboxService {
   }
 
   private async runChatSync(businessId: string): Promise<number> {
-    const connection = await this.prisma.socialConnection.findUnique({
+    const connections = await this.prisma.socialConnection.findMany({
       where: {
-        businessId_provider_platform: {
-          businessId,
-          provider: PROVIDER,
-          platform: 'instagram',
-        },
+        businessId,
+        provider: PROVIDER,
+        platform: { in: [...SOCIAL_INBOX_PLATFORMS] },
+        status: 'connected',
       },
     });
-    if (!connection || connection.status !== 'connected') return 0;
+    let total = 0;
+    for (const connection of connections) {
+      total += await this.syncConnectionChats(businessId, connection);
+    }
+    return total;
+  }
+
+  private async syncConnectionChats(
+    businessId: string,
+    connection: {
+      externalAccountId: string;
+      zernioProfileId: string;
+      platform: string;
+    },
+  ): Promise<number> {
+    const channel = conversationChannelForPlatform(connection.platform);
+    if (!channel) return 0;
 
     try {
       const threads = await this.factory.get().listInboxThreads({
         accountId: connection.externalAccountId,
         profileId: connection.zernioProfileId,
+        platform: connection.platform as SocialInboxPlatform,
       });
       let upserted = 0;
       for (const thread of threads) {
@@ -390,8 +454,11 @@ export class SocialInboxService {
             accountId: connection.externalAccountId,
             conversationId: thread.id,
             messageId: `backfill:${thread.id}`,
-            text: thread.lastMessage?.trim() || 'Conversación de Instagram',
+            text:
+              thread.lastMessage?.trim() ||
+              `Conversación de ${inboxLabel(channel)}`,
             fromMe: false,
+            channel,
             participantId: thread.participantId || thread.id,
             participantName: thread.participantName,
             participantUsername: thread.participantUsername,
@@ -410,7 +477,6 @@ export class SocialInboxService {
               lastMessageAt: thread.updatedAt ?? new Date(),
               lastMessagePreview:
                 (thread.lastMessage ?? '').slice(0, 280) || undefined,
-              // El unread es del admin (mark-read). No pisarlo con el de Instagram.
             },
           });
           const previewChanged =
@@ -430,7 +496,7 @@ export class SocialInboxService {
                 lastMessageAt: thread.updatedAt ?? new Date(),
                 lastMessagePreview: thread.lastMessage?.slice(0, 280),
                 lastMessageSender: 'CLIENT',
-                channel: 'INSTAGRAM',
+                channel,
               });
             }
           }
@@ -438,12 +504,12 @@ export class SocialInboxService {
         upserted += 1;
       }
       this.logger.log(
-        `Instagram inbox sync ${businessId}: ${upserted}/${threads.length} hilo(s)`,
+        `${inboxLabel(channel)} inbox sync ${businessId}: ${upserted}/${threads.length} hilo(s)`,
       );
       return upserted;
     } catch (error) {
       this.logger.warn(
-        `Instagram inbox sync ${businessId}: ${
+        `${inboxLabel(channel)} inbox sync ${businessId}: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -477,7 +543,7 @@ export class SocialInboxService {
     }
 
     const claimed = await this.redis.acquireLock(
-      `ig:msgid:${businessId}:${inbound.messageId}`,
+      `${lockPrefix(inbound.channel)}:msgid:${businessId}:${inbound.messageId}`,
       MESSAGE_TTL_SECONDS,
     );
     if (!claimed) return false;
@@ -504,7 +570,7 @@ export class SocialInboxService {
           conversationId: conversation.id,
           status: conversation.status,
           hidden: false,
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
         });
       }
 
@@ -521,7 +587,7 @@ export class SocialInboxService {
       }
 
       const agentLock = await this.redis.acquireLock(
-        `ig:agent:${businessId}:${inbound.messageId}`,
+        `${lockPrefix(inbound.channel)}:agent:${businessId}:${inbound.messageId}`,
         120,
       );
       if (!agentLock) {
@@ -535,14 +601,14 @@ export class SocialInboxService {
           businessId,
           conversationId: conversation.id,
           userId: user.id,
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
           message: inbound.text,
           metadata: {
             contactName: inbound.participantName,
             contactUsername: inbound.participantUsername,
             externalMessageId: inbound.messageId,
             wamid: inbound.messageId,
-            channel: 'INSTAGRAM',
+            channel: inbound.channel,
           },
         });
       } catch (error) {
@@ -581,7 +647,7 @@ export class SocialInboxService {
         lastMessagePreview: inbound.text.slice(0, 280),
         lastMessageSender: 'CLIENT',
         unreadCount: afterInbound?.unreadCount,
-        channel: 'INSTAGRAM',
+        channel: inbound.channel,
       });
 
       if (previousStatus === 'AI' && result.status === 'AI' && result.message) {
@@ -603,12 +669,12 @@ export class SocialInboxService {
       this.realtime.conversationUpdated(businessId, {
         conversationId: conversation.id,
         status: result.status,
-        channel: 'INSTAGRAM',
+        channel: inbound.channel,
       });
       return true;
     } catch (error) {
       await this.redis.releaseLock(
-        `ig:msgid:${businessId}:${inbound.messageId}`,
+        `${lockPrefix(inbound.channel)}:msgid:${businessId}:${inbound.messageId}`,
       );
       throw error;
     }
@@ -629,6 +695,7 @@ export class SocialInboxService {
       fromMe: boolean;
       attachments?: SocialAudioAttachment[];
     },
+    channel: SocialInboxChannel,
   ): SocialInboxInbound {
     const meta =
       conversation.metadata && typeof conversation.metadata === 'object'
@@ -644,6 +711,7 @@ export class SocialInboxService {
       messageId: item.id,
       text: item.text,
       fromMe: item.fromMe,
+      channel,
       participantId,
       participantName: conversation.contactName,
       participantUsername: conversation.contactUsername,
@@ -666,7 +734,7 @@ export class SocialInboxService {
     if (existing.sender && existing.sender !== 'CLIENT') return false;
 
     const conversation = await this.prisma.conversation.findFirst({
-      where: { id: existing.conversationId, businessId, channel: 'INSTAGRAM' },
+      where: { id: existing.conversationId, businessId, channel: inbound.channel },
     });
     if (
       !conversation ||
@@ -687,7 +755,7 @@ export class SocialInboxService {
     if (hasReply) return false;
 
     const claimed = await this.redis.acquireLock(
-      `ig:agent:${businessId}:${inbound.messageId}`,
+      `${lockPrefix(inbound.channel)}:agent:${businessId}:${inbound.messageId}`,
       120,
     );
     if (!claimed) return false;
@@ -702,14 +770,14 @@ export class SocialInboxService {
       businessId,
       conversationId: conversation.id,
       userId,
-      channel: 'INSTAGRAM',
+      channel: inbound.channel,
       message: inbound.text,
       metadata: {
         contactName: inbound.participantName,
         contactUsername: inbound.participantUsername,
         externalMessageId: inbound.messageId,
         wamid: inbound.messageId,
-        channel: 'INSTAGRAM',
+        channel: inbound.channel,
       },
     });
 
@@ -731,7 +799,7 @@ export class SocialInboxService {
     this.realtime.conversationUpdated(businessId, {
       conversationId: conversation.id,
       status: result.status,
-      channel: 'INSTAGRAM',
+      channel: inbound.channel,
     });
     return true;
   }
@@ -758,7 +826,7 @@ export class SocialInboxService {
       }
     } catch (error) {
       this.logger.warn(
-        `Failed to send Instagram AI reply: ${
+        `Failed to send ${inboxLabel(inbound.channel)} AI reply: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -821,7 +889,7 @@ export class SocialInboxService {
         status: 'sent',
         metadata: {
           source: 'zernio_from_me',
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
         },
       },
     });
@@ -842,7 +910,7 @@ export class SocialInboxService {
       lastMessageAt: message.createdAt,
       lastMessagePreview: inbound.text.slice(0, 280),
       lastMessageSender: 'HUMAN',
-      channel: 'INSTAGRAM',
+      channel: inbound.channel,
     });
     return true;
   }
@@ -863,7 +931,7 @@ export class SocialInboxService {
         status: 'received',
         metadata: {
           source: 'zernio_backfill',
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
           externalUsername: inbound.participantUsername,
         },
       },
@@ -887,7 +955,7 @@ export class SocialInboxService {
       lastMessagePreview: inbound.text.slice(0, 280),
       lastMessageSender: 'CLIENT',
       unreadCount: updated.unreadCount,
-      channel: 'INSTAGRAM',
+      channel: inbound.channel,
     });
     return true;
   }
@@ -898,7 +966,7 @@ export class SocialInboxService {
     externalId: string;
   }) {
     await this.redis.acquireLock(
-      `ig:msgid:${input.businessId}:${input.externalId}`,
+      `social:msgid:${input.businessId}:${input.externalId}`,
       MESSAGE_TTL_SECONDS,
     );
     const lastOutbound = await this.prisma.message.findFirst({
@@ -922,7 +990,7 @@ export class SocialInboxService {
       });
     } catch (error) {
       this.logger.warn(
-        `No se pudo guardar externalId Instagram: ${
+        `No se pudo guardar externalId social: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -930,7 +998,7 @@ export class SocialInboxService {
   }
 
   private async upsertUser(businessId: string, inbound: SocialInboxInbound) {
-    const externalId = `ig:${inbound.participantId ?? inbound.conversationId}`;
+    const externalId = `${userExternalPrefix(inbound.channel)}:${inbound.participantId ?? inbound.conversationId}`;
     const name = inbound.participantName ?? inbound.participantUsername ?? null;
     const existing = await this.prisma.user.findFirst({
       where: { businessId, externalId },
@@ -950,7 +1018,7 @@ export class SocialInboxService {
         externalId,
         name,
         metadata: {
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
           username: inbound.participantUsername,
         },
       },
@@ -967,7 +1035,7 @@ export class SocialInboxService {
     const existing = await this.prisma.conversation.findFirst({
       where: {
         businessId,
-        channel: 'INSTAGRAM',
+        channel: inbound.channel,
         externalId: inbound.conversationId,
       },
     });
@@ -989,14 +1057,14 @@ export class SocialInboxService {
       data: {
         businessId,
         userId,
-        channel: 'INSTAGRAM',
+        channel: inbound.channel,
         status: 'AI',
         externalId: inbound.conversationId,
         contactName: contactName ?? null,
         contactUsername: inbound.participantUsername ?? null,
         contactAvatarUrl: inbound.participantPicture ?? null,
         metadata: {
-          channel: 'INSTAGRAM',
+          channel: inbound.channel,
           provider: PROVIDER,
           zernioAccountId: opts?.zernioAccountId,
           externalUserId: inbound.participantId,
@@ -1059,7 +1127,7 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
     stringOf(account?.platform) ??
     stringOf(message?.platform) ??
     stringOf(conversation?.platform);
-  if (platform && platform !== 'instagram') return null;
+  if (platform && !isSocialInboxPlatform(platform)) return null;
 
   const accountId =
     stringOf(account?.accountId) ??
@@ -1095,6 +1163,7 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
     messageId,
     text,
     fromMe,
+    channel: conversationChannelForPlatform(platform ?? 'instagram') ?? 'INSTAGRAM',
     participantId:
       stringOf(participant?.id) ??
       stringOf(conversation?.participantId) ??

@@ -62,6 +62,9 @@ const CHANNELS = new Set([
   'INSTAGRAM_STORY',
   'INSTAGRAM_FEED',
   'INSTAGRAM_REEL',
+  'FACEBOOK_STORY',
+  'FACEBOOK_FEED',
+  'FACEBOOK_REEL',
   'TIKTOK',
 ]);
 
@@ -1184,7 +1187,8 @@ export class ContentService {
         }
         const isVideo = (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO';
         const storyImageUrl =
-          channel === 'INSTAGRAM_STORY' && !isVideo
+          (channel === 'INSTAGRAM_STORY' || channel === 'FACEBOOK_STORY') &&
+          !isVideo
             ? (this.storage.buildTextOverlayUrl?.({
                 publicId: asset.storagePublicId,
                 fallbackUrl: asset.storageUrl,
@@ -1213,13 +1217,21 @@ export class ContentService {
           channel === 'INSTAGRAM_STORY' ||
           channel === 'INSTAGRAM_FEED' ||
           channel === 'INSTAGRAM_REEL' ||
+          channel === 'FACEBOOK_STORY' ||
+          channel === 'FACEBOOK_FEED' ||
+          channel === 'FACEBOOK_REEL' ||
           channel === 'TIKTOK'
         ) {
-          const platform = channel === 'TIKTOK' ? 'tiktok' : 'instagram';
+          const platform =
+            channel === 'TIKTOK'
+              ? 'tiktok'
+              : channel.startsWith('FACEBOOK')
+                ? 'facebook'
+                : 'instagram';
           const contentType =
-            channel === 'INSTAGRAM_STORY'
+            channel === 'INSTAGRAM_STORY' || channel === 'FACEBOOK_STORY'
               ? 'story'
-              : channel === 'INSTAGRAM_REEL'
+              : channel === 'INSTAGRAM_REEL' || channel === 'FACEBOOK_REEL'
                 ? 'reel'
                 : channel === 'TIKTOK'
                   ? 'video'
@@ -1229,7 +1241,8 @@ export class ContentService {
             platform,
             contentType,
             mediaUrl:
-              channel === 'INSTAGRAM_STORY' && !isVideo
+              (channel === 'INSTAGRAM_STORY' || channel === 'FACEBOOK_STORY') &&
+              !isVideo
                 ? storyImageUrl
                 : asset.storageUrl,
             mediaKind: isVideo ? 'video' : 'image',
@@ -1592,6 +1605,7 @@ export class ContentService {
     const images = assets.filter((a) => (a.type ?? 'IMAGE') !== 'VIDEO');
     const preferVideo =
       channel === 'INSTAGRAM_REEL' ||
+      channel === 'FACEBOOK_REEL' ||
       channel === 'TIKTOK' ||
       (videos.length > 0 && images.length === 0);
     const editedVideo = videos.find((a) => a.role === 'EDITED');
@@ -1599,14 +1613,18 @@ export class ContentService {
     const pool =
       preferVideo && videos.length ? videos : images.length ? images : assets;
 
-    if (channel === 'INSTAGRAM_FEED') {
+    if (channel === 'INSTAGRAM_FEED' || channel === 'FACEBOOK_FEED') {
       return (
         pool.find((a) => a.format === 'FEED_SQUARE') ||
         pool.find((a) => a.format.startsWith('FEED_')) ||
         pool[0]
       );
     }
-    if (channel === 'INSTAGRAM_REEL' || channel === 'TIKTOK') {
+    if (
+      channel === 'INSTAGRAM_REEL' ||
+      channel === 'FACEBOOK_REEL' ||
+      channel === 'TIKTOK'
+    ) {
       return (
         pool.find((a) => a.format === 'SHORT_VERTICAL') ||
         pool.find((a) => a.format === 'STORY_VERTICAL') ||
@@ -1761,9 +1779,13 @@ export class ContentService {
         c === 'WHATSAPP_STATUS' ||
         c === 'INSTAGRAM_STORY' ||
         c === 'INSTAGRAM_REEL' ||
+        c === 'FACEBOOK_STORY' ||
+        c === 'FACEBOOK_REEL' ||
         c === 'TIKTOK',
     );
-    const needsFeed = channels.includes('INSTAGRAM_FEED');
+    const needsFeed =
+      channels.includes('INSTAGRAM_FEED') ||
+      channels.includes('FACEBOOK_FEED');
     const formats: ContentAssetFormat[] = [];
     if (needsVertical) formats.push('STORY_VERTICAL');
     if (needsFeed) formats.push('FEED_SQUARE');

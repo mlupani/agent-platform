@@ -131,6 +131,16 @@ describe('SocialPublishingService', () => {
     expect(prisma.socialConnection.upsert).not.toHaveBeenCalled();
   });
 
+  it('traduce no_facebook_pages al volver del OAuth', async () => {
+    const result = await service.handleOAuthCallback({
+      error: 'no_facebook_pages',
+    });
+    const url = new URL(result.adminRedirect);
+    expect(url.searchParams.get('socialPlatform')).toBe('facebook');
+    expect(url.searchParams.get('socialError')).toMatch(/Página/);
+    expect(url.searchParams.get('socialError')).not.toMatch(/no_facebook_pages/);
+  });
+
   it('no deja usar la cuenta de otro tenant', async () => {
     prisma.socialConnection.findFirst.mockResolvedValue(null);
     await expect(
@@ -158,7 +168,7 @@ describe('SocialPublishingService', () => {
     });
     const result = await service.disconnect('biz-a', 'instagram');
     expect(provider.disconnect).toHaveBeenCalledWith('acc_1');
-    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a');
+    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a', 'instagram');
     expect(result.status).toBe('disconnected');
   });
 
@@ -237,7 +247,26 @@ describe('SocialPublishingService', () => {
       status: 'disconnected',
     });
     expect(result.applied).toBe(true);
-    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a');
+    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a', 'instagram');
+  });
+
+  it('al desconectar Facebook por webhook borra el inbox de Messenger', async () => {
+    prisma.socialConnection.findUnique.mockResolvedValue({
+      id: 'conn-fb',
+      businessId: 'biz-a',
+      platform: 'facebook',
+    });
+    prisma.socialConnection.update.mockResolvedValue({
+      platform: 'facebook',
+      status: 'disconnected',
+    });
+    const result = await service.upsertFromWebhook({
+      accountId: 'acc_fb',
+      platform: 'facebook',
+      status: 'disconnected',
+    });
+    expect(result.applied).toBe(true);
+    expect(inbox.purgeChats).toHaveBeenCalledWith('biz-a', 'facebook');
   });
 
   it('falla conectar si el negocio no existe', async () => {

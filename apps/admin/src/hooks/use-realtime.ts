@@ -187,6 +187,7 @@ export function useRealtimeInvalidation() {
       invalidateConversationList();
     });
     socket.on('instagram.status.changed', invalidateConversationList);
+    socket.on('facebook.status.changed', invalidateConversationList);
     socket.on(
       'whatsapp.qr.updated',
       (envelope: { payload?: { qrDataUrl?: string } }) => {

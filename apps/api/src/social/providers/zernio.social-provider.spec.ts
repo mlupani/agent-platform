@@ -88,6 +88,38 @@ describe('ZernioSocialProvider', () => {
     );
   });
 
+  it('publica un reel de Facebook', async () => {
+    mockSdk.posts.createPost.mockResolvedValue({
+      data: { post: { _id: 'post_fb_reel', status: 'published' } },
+    });
+    const provider = new ZernioSocialProvider(config as never);
+    const result = await provider.publish({
+      accountId: 'acc_fb',
+      platform: 'facebook',
+      contentType: 'reel',
+      mediaUrl: 'https://cdn.example/video.mp4',
+      mediaKind: 'video',
+      caption: 'Reel de Facebook',
+    });
+    expect(result.externalId).toBe('post_fb_reel');
+    expect(mockSdk.posts.createPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          platforms: [
+            expect.objectContaining({
+              platform: 'facebook',
+              accountId: 'acc_fb',
+              platformSpecificData: expect.objectContaining({
+                contentType: 'reel',
+                title: 'Reel de Facebook',
+              }),
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
   it('publica un video de TikTok con consent flags', async () => {
     mockSdk.posts.createPost.mockResolvedValue({
       data: { post: { _id: 'post_tt', status: 'publishing' } },

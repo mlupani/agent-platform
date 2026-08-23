@@ -175,7 +175,7 @@ export class BusinessesService {
           personality: input.personality,
           temperature: input.temperature ?? 0.3,
           enabledTools: tools,
-          enabledChannels: ['WEB', 'WHATSAPP', 'INSTAGRAM'],
+          enabledChannels: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK'],
           isDefault: true,
         },
       });

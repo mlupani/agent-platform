@@ -32,7 +32,7 @@ export interface LeadManualInput {
   email?: string | null;
   phone?: string | null;
   message?: string | null;
-  channel?: 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM';
+  channel?: 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK';
 }
 
 @Injectable()

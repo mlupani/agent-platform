@@ -54,7 +54,7 @@ export class ConversationsService {
       }
     } catch (error) {
       this.logger.warn(
-        `Instagram list sync skipped: ${
+        `Social inbox list sync skipped: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       );
@@ -121,14 +121,17 @@ export class ConversationsService {
           }`,
         );
       }
-    } else if (conversation.channel === 'INSTAGRAM') {
+    } else if (
+      conversation.channel === 'INSTAGRAM' ||
+      conversation.channel === 'FACEBOOK'
+    ) {
       try {
         await this.socialInbox.syncMessages(businessId, conversation.id, {
           force: true,
         });
       } catch (error) {
         this.logger.warn(
-          `Instagram messages sync skipped: ${
+          `Social inbox messages sync skipped: ${
             error instanceof Error ? error.message : 'unknown'
           }`,
         );
@@ -161,7 +164,7 @@ export class ConversationsService {
       needsAttention:
         refreshed.status === 'WAITING_HUMAN' || refreshed.status === 'HUMAN',
       inboxSync:
-        refreshed.channel === 'INSTAGRAM'
+        refreshed.channel === 'INSTAGRAM' || refreshed.channel === 'FACEBOOK'
           ? await this.socialInbox.inboxSyncMode(businessId)
           : undefined,
     };
@@ -419,7 +422,7 @@ export class ConversationsService {
    * La bandeja sigue filtrando por conexión.
    */
   private threadChannelFilter(role?: AdminRole) {
-    const channels: string[] = ['WEB', 'WHATSAPP', 'INSTAGRAM'];
+    const channels: string[] = ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK'];
     if (role === 'ADMIN') {
       channels.push(...ADMIN_ONLY_CONVERSATION_CHANNELS);
     }
@@ -428,20 +431,18 @@ export class ConversationsService {
 
   /** Solo canales con la integración conectada. WEB queda (no se reimporta). */
   private async inboxChannelFilter(businessId: string, role?: AdminRole) {
-    const [wa, ig] = await Promise.all([
+    const [wa, social] = await Promise.all([
       this.prisma.whatsAppConfig.findUnique({
         where: { businessId },
         select: { status: true, sessionStatus: true },
       }),
-      this.prisma.socialConnection.findUnique({
+      this.prisma.socialConnection.findMany({
         where: {
-          businessId_provider_platform: {
-            businessId,
-            provider: 'zernio',
-            platform: 'instagram',
-          },
+          businessId,
+          provider: 'zernio',
+          platform: { in: ['instagram', 'facebook'] },
         },
-        select: { status: true },
+        select: { platform: true, status: true },
       }),
     ]);
 
@@ -452,8 +453,11 @@ export class ConversationsService {
     if (wa?.status === 'connected' || wa?.sessionStatus === 'WORKING') {
       channels.push('WHATSAPP');
     }
-    if (ig?.status === 'connected') {
+    if (social.some((item) => item.platform === 'instagram' && item.status === 'connected')) {
       channels.push('INSTAGRAM');
+    }
+    if (social.some((item) => item.platform === 'facebook' && item.status === 'connected')) {
+      channels.push('FACEBOOK');
     }
     return { channel: { in: channels } };
   }

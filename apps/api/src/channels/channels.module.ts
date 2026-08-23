@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { ChannelRegistry } from './channel.registry';
+import { FacebookChannel } from './facebook.channel';
 import { InstagramChannel } from './instagram.channel';
 import { TelegramChannel } from './telegram.channel';
 import { WebChatChannel } from './web-chat.channel';
@@ -13,9 +14,10 @@ import { WhatsAppChannel } from './whatsapp.channel';
     WebChatChannel,
     WhatsAppChannel,
     InstagramChannel,
+    FacebookChannel,
     TelegramChannel,
     ChannelRegistry,
   ],
-  exports: [ChannelRegistry, WhatsAppChannel, InstagramChannel],
+  exports: [ChannelRegistry, WhatsAppChannel, InstagramChannel, FacebookChannel],
 })
 export class ChannelsModule {}

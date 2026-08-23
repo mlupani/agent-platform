@@ -28,6 +28,7 @@ export const channelTypes = [
   'WHATSAPP',
   'TELEGRAM',
   'INSTAGRAM',
+  'FACEBOOK',
 ] as const;
 export type ChannelType = (typeof channelTypes)[number];
 
@@ -35,7 +36,7 @@ export type ChannelType = (typeof channelTypes)[number];
 export const ADMIN_ONLY_CONVERSATION_CHANNELS = ['PLAYGROUND'] as const;
 
 /** Canales de mensajería con provider outbound */
-export const messagingChannels = ['WHATSAPP', 'INSTAGRAM'] as const;
+export const messagingChannels = ['WHATSAPP', 'INSTAGRAM', 'FACEBOOK'] as const;
 export type MessagingChannel = (typeof messagingChannels)[number];
 
 export const memoryTypes = ['SHORT_TERM', 'LONG_TERM'] as const;

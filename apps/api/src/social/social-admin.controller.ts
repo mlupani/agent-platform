@@ -17,7 +17,7 @@ import { isSocialPlatform } from './social.types';
 import { SocialOAuthError } from './social.errors';
 
 const connectSchema = z.object({
-  platform: z.enum(['instagram', 'tiktok']),
+  platform: z.enum(['instagram', 'tiktok', 'facebook']),
 });
 
 const agentEnabledSchema = z.object({
