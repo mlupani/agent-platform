@@ -821,7 +821,7 @@ model ContentGenerationExecution {
   @@map("content_generation_executions")
 }
 
-/// Cuentas sociales de publicación (Instagram / TikTok vía Zernio).
+/// Cuentas sociales de publicación (Instagram / Facebook / TikTok vía Zernio).
 /// No guarda tokens de Meta/TikTok: la API key de Zernio vive en env.
 model SocialConnection {
   id                String   @id @default(uuid())
@@ -829,7 +829,7 @@ model SocialConnection {
   business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   /// zernio (futuros: meta, etc.)
   provider          String   @default("zernio")
-  /// instagram | tiktok
+  /// instagram | tiktok | facebook
   platform          String
   /// Account `_id` en Zernio
   externalAccountId String
@@ -839,7 +839,7 @@ model SocialConnection {
   avatarUrl         String?
   /// connected | disconnected | revoked | error
   status            String   @default("connected")
-  /// Si false, Instagram recibe Direct en el inbox pero el agente no responde.
+  /// Si false, Instagram/Messenger reciben inbox pero el agente no responde.
   agentEnabled      Boolean  @default(true)
   lastError         String?
   createdAt         DateTime @default(now())

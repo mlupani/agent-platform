@@ -35,6 +35,7 @@ export interface SocialProvider {
   listInboxThreads(input: {
     accountId: string;
     profileId?: string;
+    platform?: SocialPlatform;
   }): Promise<SocialInboxThread[]>;
   listInboxMessages(input: {
     accountId: string;

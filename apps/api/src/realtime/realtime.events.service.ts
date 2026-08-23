@@ -86,6 +86,17 @@ export class RealtimeEventsService {
     );
   }
 
+  facebookStatusChanged(
+    businessId: string,
+    payload: Record<string, unknown> | object,
+  ) {
+    this.emit(
+      REALTIME_EVENTS.FACEBOOK_STATUS_CHANGED,
+      payload as Record<string, unknown>,
+      businessId,
+    );
+  }
+
   messageStatusUpdated(businessId: string, payload: Record<string, unknown>) {
     this.emit(REALTIME_EVENTS.MESSAGE_STATUS_UPDATED, payload, businessId);
   }

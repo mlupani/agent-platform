@@ -79,11 +79,40 @@ describe('parseInboxEvent', () => {
       },
     ]);
   });
+
+  it('parsea message.received de Messenger', () => {
+    const inbound = parseInboxEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_fb',
+        conversationId: 'conv_fb',
+        direction: 'incoming',
+        text: 'Hola desde Messenger',
+        sender: { id: 'fb_user', name: 'Ana' },
+      },
+      account: {
+        accountId: 'acc_fb',
+        platform: 'facebook',
+      },
+    });
+    expect(inbound).toEqual(
+      expect.objectContaining({
+        accountId: 'acc_fb',
+        conversationId: 'conv_fb',
+        messageId: 'msg_fb',
+        text: 'Hola desde Messenger',
+        fromMe: false,
+        channel: 'FACEBOOK',
+        participantId: 'fb_user',
+        participantName: 'Ana',
+      }),
+    );
+  });
 });
 
 describe('SocialInboxService', () => {
   const prisma = {
-    socialConnection: { findUnique: jest.fn() },
+    socialConnection: { findUnique: jest.fn(), findMany: jest.fn() },
     message: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
     conversation: {
       findFirst: jest.fn(),
@@ -120,6 +149,7 @@ describe('SocialInboxService', () => {
     conversationBotStatusChanged: jest.fn(),
     conversationInboxCleared: jest.fn(),
     instagramStatusChanged: jest.fn(),
+    facebookStatusChanged: jest.fn(),
   };
 
   const transcription = {
@@ -147,6 +177,15 @@ describe('SocialInboxService', () => {
       externalAccountId: 'acc_ig',
       zernioProfileId: 'prof_1',
     });
+    prisma.socialConnection.findMany.mockResolvedValue([
+      {
+        businessId: 'biz-a',
+        platform: 'instagram',
+        status: 'connected',
+        externalAccountId: 'acc_ig',
+        zernioProfileId: 'prof_1',
+      },
+    ]);
     prisma.message.findFirst.mockResolvedValue(null);
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue({ id: 'user-1', name: 'Jane' });
@@ -448,6 +487,19 @@ describe('SocialInboxService', () => {
     expect(realtime.conversationInboxCleared).toHaveBeenCalledWith(
       'biz-a',
       expect.objectContaining({ channel: 'INSTAGRAM', deleted: 4 }),
+    );
+  });
+
+  it('borra las conversaciones de Messenger al purgar Facebook', async () => {
+    prisma.conversation.deleteMany.mockResolvedValue({ count: 2 });
+    const count = await service.purgeChats('biz-a', 'facebook');
+    expect(count).toBe(2);
+    expect(prisma.conversation.deleteMany).toHaveBeenCalledWith({
+      where: { businessId: 'biz-a', channel: 'FACEBOOK' },
+    });
+    expect(realtime.facebookStatusChanged).toHaveBeenCalledWith(
+      'biz-a',
+      expect.objectContaining({ status: 'disconnected', channel: 'FACEBOOK' }),
     );
   });
 

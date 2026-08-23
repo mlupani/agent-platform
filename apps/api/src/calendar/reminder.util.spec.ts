@@ -26,6 +26,7 @@ describe('reminder.util', () => {
       'whatsapp',
       'email',
       'instagram',
+      'facebook',
     ]);
   });
 
@@ -63,9 +64,11 @@ describe('reminder.util', () => {
       whatsappReady: true,
       emailReady: true,
       instagramReady: true,
+      facebookReady: true,
       phone: '5491100000000',
       email: 'ana@test.com',
       instagramThread: true,
+      facebookThread: true,
     };
     expect(
       pickReminderChannel(['whatsapp', 'email'], availability),
@@ -78,6 +81,10 @@ describe('reminder.util', () => {
     ).toBe('email');
     expect(
       pickReminderChannel(['instagram'], { ...availability, instagramThread: false }),
+    ).toBeNull();
+    expect(pickReminderChannel(['facebook'], availability)).toBe('facebook');
+    expect(
+      pickReminderChannel(['facebook'], { ...availability, facebookThread: false }),
     ).toBeNull();
   });
 

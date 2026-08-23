@@ -12,6 +12,9 @@ export type ContentChannel =
   | 'INSTAGRAM_STORY'
   | 'INSTAGRAM_FEED'
   | 'INSTAGRAM_REEL'
+  | 'FACEBOOK_STORY'
+  | 'FACEBOOK_FEED'
+  | 'FACEBOOK_REEL'
   | 'TIKTOK';
 
 export type ContentMediaType = 'IMAGE' | 'VIDEO';

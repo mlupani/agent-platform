@@ -29,7 +29,7 @@ const createSchema = z.object({
   enabledTools: z.array(z.string().min(1).max(80)).max(40).default([]),
   enabledChannels: z
     .array(z.string())
-    .default(['WEB', 'WHATSAPP', 'INSTAGRAM']),
+    .default(['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK']),
   memoryStrategy: z
     .object({
       recentMessages: z.number().int().min(1).max(50).optional(),

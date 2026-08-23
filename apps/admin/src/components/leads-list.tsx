@@ -18,12 +18,13 @@ interface LeadRow {
   createdAt: string;
 }
 
-type LeadChannel = 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM';
+type LeadChannel = 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK';
 
 const CHANNEL_LABEL: Record<string, string> = {
   WEB: 'Chat web',
   WHATSAPP: 'WhatsApp',
   INSTAGRAM: 'Instagram',
+  FACEBOOK: 'Messenger',
   TELEGRAM: 'Telegram',
   PLAYGROUND: 'Playground',
   MANUAL: 'Carga manual',
@@ -33,6 +34,7 @@ const ORIGIN_OPTIONS: Array<{ value: LeadChannel; label: string }> = [
   { value: 'MANUAL', label: 'Carga manual' },
   { value: 'WHATSAPP', label: 'WhatsApp' },
   { value: 'INSTAGRAM', label: 'Instagram' },
+  { value: 'FACEBOOK', label: 'Messenger' },
   { value: 'WEB', label: 'Chat web' },
 ];
 

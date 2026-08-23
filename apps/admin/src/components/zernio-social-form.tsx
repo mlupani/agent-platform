@@ -1,12 +1,12 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { InstagramIconMono, TikTokIcon } from '@/components/channel-icons';
+import { FacebookIcon, InstagramIconMono, TikTokIcon } from '@/components/channel-icons';
 import { ChannelAgentRadios } from '@/components/channel-agent-radios';
 import { api } from '@/lib/api';
 
 interface SocialConnectionPublic {
-  platform: 'instagram' | 'tiktok';
+  platform: 'instagram' | 'tiktok' | 'facebook';
   status: string;
   username: string | null;
   displayName: string | null;
@@ -22,11 +22,11 @@ interface SocialListResponse {
 }
 
 interface ZernioSocialFormProps {
-  platform: 'instagram' | 'tiktok';
+  platform: 'instagram' | 'tiktok' | 'facebook';
 }
 
 const COPY: Record<
-  'instagram' | 'tiktok',
+  'instagram' | 'tiktok' | 'facebook',
   { title: string; subtitle: string; hint: string }
 > = {
   instagram: {
@@ -34,6 +34,12 @@ const COPY: Record<
     subtitle:
       'Conectá la cuenta para publicar Feed, Stories y Reels, atender Direct en Conversaciones y activar o pausar el asistente.',
     hint: 'Los Direct llegan a Conversaciones. Podés dejar Instagram conectado y el asistente apagado si querés responder vos.',
+  },
+  facebook: {
+    title: 'Facebook',
+    subtitle:
+      'Conectá una Página de Facebook (no el perfil personal) para publicar Feed, Stories y Reels, y atender Messenger.',
+    hint: 'Tenés que ser administrador o editor de al menos una Página. En Meta, aceptá todos los permisos, en especial el de ver las Páginas. Si la Página está en Business Manager, usá la cuenta que la administra.',
   },
   tiktok: {
     title: 'TikTok',
@@ -107,6 +113,10 @@ export function ZernioSocialForm({ platform }: ZernioSocialFormProps) {
               <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] grid place-items-center text-white shrink-0">
                 <InstagramIconMono className="h-5 w-5" title="Instagram" />
               </div>
+            ) : platform === 'facebook' ? (
+              <div className="h-10 w-10 rounded-xl bg-[#1877F2] grid place-items-center text-white shrink-0">
+                <FacebookIcon className="h-5 w-5" title="Facebook" />
+              </div>
             ) : (
               <div className="h-10 w-10 rounded-xl bg-black grid place-items-center text-white shrink-0">
                 <TikTokIcon className="h-5 w-5" title="TikTok" />
@@ -176,7 +186,11 @@ export function ZernioSocialForm({ platform }: ZernioSocialFormProps) {
                     ? confirm(
                         'Al desconectar se borran las conversaciones de Instagram de esta bandeja. Cuando vuelvas a conectar, se importan de nuevo.',
                       )
-                    : confirm('¿Desconectar TikTok?');
+                    : platform === 'facebook'
+                      ? confirm(
+                          'Al desconectar se borran las conversaciones de Messenger de esta bandeja. Cuando vuelvas a conectar, se importan de nuevo.',
+                        )
+                      : confirm('¿Desconectar TikTok?');
                 if (ok) disconnect.mutate();
               }}
               disabled={disconnect.isPending}
@@ -210,8 +224,10 @@ export function ZernioSocialForm({ platform }: ZernioSocialFormProps) {
           onChange={(next) => setAgent.mutate(next)}
           hint={
             platform === 'tiktok'
-              ? 'TikTok no tiene DMs acá. El valor queda guardado para el canal; Instagram y WhatsApp sí responden por inbox.'
-              : 'Instagram puede quedar conectado (publicar + Direct) sin que el agente conteste los mensajes.'
+              ? 'TikTok no tiene DMs acá. El valor queda guardado para el canal; Instagram, Facebook y WhatsApp sí responden por inbox.'
+              : platform === 'facebook'
+                ? 'Facebook puede quedar conectado (publicar + Messenger) sin que el agente conteste los mensajes.'
+                : 'Instagram puede quedar conectado (publicar + Direct) sin que el agente conteste los mensajes.'
           }
         />
       ) : (

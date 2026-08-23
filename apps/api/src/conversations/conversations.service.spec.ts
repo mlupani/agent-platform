@@ -9,7 +9,7 @@ describe('ConversationsService inbox', () => {
       update: jest.fn(),
     },
     whatsAppConfig: { findUnique: jest.fn() },
-    socialConnection: { findUnique: jest.fn() },
+    socialConnection: { findUnique: jest.fn(), findMany: jest.fn() },
     message: {
       create: jest.fn(),
     },
@@ -56,6 +56,9 @@ describe('ConversationsService inbox', () => {
     prisma.socialConnection.findUnique.mockResolvedValue({
       status: 'connected',
     });
+    prisma.socialConnection.findMany.mockResolvedValue([
+      { platform: 'instagram', status: 'connected' },
+    ]);
   });
 
   it('scopes get() to the current business', async () => {
@@ -69,7 +72,7 @@ describe('ConversationsService inbox', () => {
           id: 'conv-1',
           businessId: 'biz-1',
           hiddenAt: null,
-          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'PLAYGROUND'] },
+          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'PLAYGROUND'] },
         }),
       }),
     );
@@ -224,5 +227,24 @@ describe('ConversationsService inbox', () => {
     expect(socialInbox.syncChats).toHaveBeenCalledWith('biz-1', {
       force: true,
     });
+  });
+
+  it('incluye Messenger en la bandeja si Facebook está conectado', async () => {
+    prisma.socialConnection.findMany.mockResolvedValue([
+      { platform: 'facebook', status: 'connected' },
+    ]);
+    prisma.whatsAppConfig.findUnique.mockResolvedValue({
+      status: 'disconnected',
+      sessionStatus: 'STOPPED',
+    });
+    prisma.conversation.findMany.mockResolvedValue([]);
+    await service.list(undefined, { role: 'USER' });
+    expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { in: ['WEB', 'FACEBOOK'] },
+        }),
+      }),
+    );
   });
 });

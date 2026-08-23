@@ -6,7 +6,11 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { SocialInboxService } from './social-inbox.service';
 import { SocialProviderFactory } from './social-provider.factory';
-import { SocialAccountNotFoundError, SocialOAuthError } from './social.errors';
+import {
+  mapZernioOAuthError,
+  SocialAccountNotFoundError,
+  SocialOAuthError,
+} from './social.errors';
 import type {
   SocialAccountHealth,
   SocialConnectionPublic,
@@ -15,7 +19,7 @@ import type {
   SocialPlatform,
   SocialPublishResult,
 } from './social.types';
-import { isSocialPlatform } from './social.types';
+import { isSocialInboxPlatform, isSocialPlatform } from './social.types';
 
 const OAUTH_TTL_SECONDS = 600;
 const PROVIDER = 'zernio';
@@ -94,10 +98,22 @@ export class SocialPublishingService {
     const adminBase = this.adminBaseUrl();
     const zernioError = query.error || query.error_description;
     if (zernioError) {
+      const mapped = mapZernioOAuthError(query.error, query.error_description);
+      const platform =
+        mapped.platform ||
+        (query.platform === 'facebook' ||
+        query.platform === 'instagram' ||
+        query.platform === 'tiktok'
+          ? query.platform
+          : query.connected === 'facebook' ||
+              query.connected === 'instagram' ||
+              query.connected === 'tiktok'
+            ? query.connected
+            : undefined);
       return {
         adminRedirect: this.adminUrl(adminBase, {
-          socialError:
-            query.error_description || query.error || 'Conexión cancelada',
+          socialError: mapped.message,
+          ...(platform ? { socialPlatform: platform } : {}),
         }),
       };
     }
@@ -224,7 +240,7 @@ export class SocialPublishingService {
       throw error;
     }
 
-    if (platform === 'instagram') {
+    if (isSocialInboxPlatform(platform)) {
       void this.inbox.backfillFromZernio(payload.businessId);
     }
 
@@ -261,8 +277,8 @@ export class SocialPublishingService {
       where: { id: connection.id },
       data: { status: 'disconnected', lastError: null },
     });
-    if (platform === 'instagram') {
-      await this.inbox.purgeChats(businessId);
+    if (isSocialInboxPlatform(platform)) {
+      await this.inbox.purgeChats(businessId, platform);
     }
     return this.toPublicConnection(updated);
   }
@@ -333,8 +349,8 @@ export class SocialPublishingService {
           lastError: null,
         },
       });
-      if (existing.platform === 'instagram') {
-        await this.inbox.purgeChats(existing.businessId);
+      if (isSocialInboxPlatform(existing.platform)) {
+        await this.inbox.purgeChats(existing.businessId, existing.platform);
       }
       return { applied: true };
     }

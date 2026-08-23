@@ -1,4 +1,8 @@
-export type SocialPlatform = 'instagram' | 'tiktok';
+export type SocialPlatform = 'instagram' | 'tiktok' | 'facebook';
+
+export type SocialInboxPlatform = 'instagram' | 'facebook';
+
+export type SocialInboxChannel = 'INSTAGRAM' | 'FACEBOOK';
 
 export type SocialProviderName = 'zernio';
 
@@ -97,8 +101,38 @@ export interface SocialConnectionPublic {
 export const SOCIAL_PLATFORMS: readonly SocialPlatform[] = [
   'instagram',
   'tiktok',
+  'facebook',
+];
+
+export const SOCIAL_INBOX_PLATFORMS: readonly SocialInboxPlatform[] = [
+  'instagram',
+  'facebook',
 ];
 
 export function isSocialPlatform(value: string): value is SocialPlatform {
-  return value === 'instagram' || value === 'tiktok';
+  return (
+    value === 'instagram' || value === 'tiktok' || value === 'facebook'
+  );
+}
+
+export function isSocialInboxPlatform(
+  value: string,
+): value is SocialInboxPlatform {
+  return value === 'instagram' || value === 'facebook';
+}
+
+export function conversationChannelForPlatform(
+  platform: string,
+): SocialInboxChannel | null {
+  if (platform === 'instagram') return 'INSTAGRAM';
+  if (platform === 'facebook') return 'FACEBOOK';
+  return null;
+}
+
+export function platformForConversationChannel(
+  channel: string,
+): SocialInboxPlatform | null {
+  if (channel === 'INSTAGRAM') return 'instagram';
+  if (channel === 'FACEBOOK') return 'facebook';
+  return null;
 }
