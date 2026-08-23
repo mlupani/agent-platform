@@ -49,6 +49,14 @@ const updateSchema = z.object({
   status: z.enum(['DRAFT', 'READY']).optional(),
 });
 
+const autoEditSchema = z
+  .object({
+    headline: z.string().max(200).optional(),
+    cta: z.string().max(160).optional(),
+    hook: z.string().max(200).optional(),
+  })
+  .default({});
+
 const brandingSchema = z.object({
   logoUrl: z.union([z.string().url(), z.literal(''), z.null()]).optional(),
   primaryColor: z.string().max(32).nullable().optional(),
@@ -170,8 +178,12 @@ export class ContentAdminController {
   }
 
   @Post(':id/auto-edit')
-  autoEdit(@Param('id') id: string) {
-    return this.content.autoEdit(id);
+  autoEdit(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(autoEditSchema))
+    body: z.infer<typeof autoEditSchema>,
+  ) {
+    return this.content.autoEdit(id, body);
   }
 
   @Post(':id/publish')

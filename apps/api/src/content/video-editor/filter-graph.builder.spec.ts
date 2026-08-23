@@ -20,6 +20,7 @@ const settings: VideoEditorSettings = {
   barHeightRatio: 0.135,
   timeoutMs: 120000,
   durationToleranceSeconds: 2,
+  emojiFontFile: null,
 };
 
 const verticalProbe: VideoProbe = {
@@ -53,6 +54,27 @@ describe('planOperations / buildFilterGraph', () => {
     expect(ops).toEqual([]);
   });
 
+  it('fuerza intro/outro aunque no haya overlays', () => {
+    const ops = planOperations({
+      probe: verticalProbe,
+      settings,
+      addHook: false,
+      hookText: '',
+      hookStart: 0,
+      hookEnd: 3,
+      hookPosition: 'top',
+      addCta: false,
+      ctaText: '',
+      ctaStart: 9,
+      ctaEnd: 12,
+      ctaPosition: 'bottom',
+      addLogo: false,
+      logoPosition: 'bottom-right',
+      forceMotion: true,
+    });
+    expect(ops).toEqual([{ type: 'intro' }, { type: 'outro' }]);
+  });
+
   it('agrega crop/scale si no es 9:16', () => {
     const ops = planOperations({
       probe: { ...verticalProbe, width: 1920, height: 1080 },
@@ -70,7 +92,11 @@ describe('planOperations / buildFilterGraph', () => {
       addLogo: false,
       logoPosition: 'bottom-right',
     });
-    expect(ops).toEqual([{ type: 'resize', width: 720, height: 1280 }]);
+    expect(ops).toEqual([
+      { type: 'resize', width: 720, height: 1280 },
+      { type: 'intro' },
+      { type: 'outro' },
+    ]);
     const graph = buildFilterGraph({
       probe: { ...verticalProbe, width: 1920, height: 1080 },
       operations: ops,
@@ -81,6 +107,9 @@ describe('planOperations / buildFilterGraph', () => {
       'scale=720:1280:force_original_aspect_ratio=increase',
     );
     expect(graph.filterComplex).toContain('crop=720:1280');
+    expect(graph.filterComplex).toContain('eval=frame');
+    expect(graph.filterComplex).toContain('fade=t=in');
+    expect(graph.filterComplex).toContain('fade=t=out');
     expect(graph.filterComplex).not.toContain('drawtext=');
   });
 
@@ -113,7 +142,13 @@ describe('planOperations / buildFilterGraph', () => {
     expect(graph.filterComplex).toContain("enable='between(t,9,12)'");
     expect(graph.filterComplex).toContain('drawtext=');
     expect(graph.filterComplex).toContain('drawbox=');
+    expect(graph.filterComplex).toContain('fade=t=in');
+    expect(graph.filterComplex).toContain('fade=t=out');
+    expect(graph.filterComplex).toContain('0xE11D2E');
+    expect(graph.filterComplex).toContain('sin(2*PI');
     expect(graph.operations).toContain('bars');
+    expect(graph.operations).toContain('intro');
+    expect(graph.operations).toContain('outro');
     expect(graph.needsLogoInput).toBe(false);
   });
 
@@ -150,7 +185,7 @@ describe('planOperations / buildFilterGraph', () => {
     ).toBe(true);
   });
 
-  it('usa el color de marca en el botón de CTA', () => {
+  it('pinta el CTA en rojo centrado, con pulso y manito', () => {
     const ops = planOperations({
       probe: verticalProbe,
       settings,
@@ -173,10 +208,15 @@ describe('planOperations / buildFilterGraph', () => {
       settings,
       fontFile: settings.fontFile,
       ctaTextFile: '/tmp/cta.txt',
+      ctaHandFile: '/tmp/cta-hand.txt',
       accentColor: '#C45C26',
     });
+    expect(graph.filterComplex).toContain('0xE11D2E');
     expect(graph.filterComplex).toContain('0xC45C26');
     expect(graph.filterComplex).toContain('fontcolor=white');
+    expect(graph.filterComplex).toContain('cta-hand.txt');
+    expect(graph.filterComplex).toContain('sin(2*PI');
+    expect(graph.filterComplex).toMatch(/x=\(720-w\)\/2/);
   });
 
   it('no recorta un CTA largo: achica la letra o usa dos líneas', () => {

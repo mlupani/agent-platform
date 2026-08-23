@@ -192,6 +192,10 @@ describe('VideoEditorService', () => {
         (runner.run as jest.Mock).mock.calls[0][0] as string[]
       ).join(' ');
       expect(filter).toContain('cta.txt');
+      expect(filter).toContain('cta-hand.txt');
+      expect(filter).toContain('0xE11D2E');
+      expect(filter).toContain('fade=t=in');
+      expect(filter).toContain('fade=t=out');
       expect(filter).not.toContain('hook.txt');
     });
   });

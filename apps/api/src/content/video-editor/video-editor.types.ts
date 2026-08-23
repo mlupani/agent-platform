@@ -25,6 +25,7 @@ export interface VideoEditingInstructions {
   logoPosition: LogoCornerPosition;
   logoWidth?: number;
   logoOpacity?: number;
+  forceMotion?: boolean;
 }
 
 export interface VideoEditorBranding {
@@ -56,7 +57,9 @@ export type VideoEditOperation =
       position: LogoCornerPosition;
       width: number;
       opacity: number;
-    };
+    }
+  | { type: 'intro' }
+  | { type: 'outro' };
 
 export interface VideoProbe {
   path: string;

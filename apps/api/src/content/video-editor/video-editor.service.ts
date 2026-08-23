@@ -7,6 +7,7 @@ import { loadVideoEditorSettings } from './video-editor.config';
 import { VideoEditError } from './video-editor.errors';
 import { FFMPEG_RUNNER } from './ffmpeg.runner';
 import { buildFilterGraph, planOperations } from './filter-graph.builder';
+import { CTA_HAND_EMOJI, CTA_HAND_FALLBACK } from './overlay-style';
 import {
   defaultCtaWindow,
   defaultHookWindow,
@@ -123,6 +124,7 @@ export class VideoEditorService {
         logoPosition: input.instructions.logoPosition,
         logoWidth: input.instructions.logoWidth,
         logoOpacity: input.instructions.logoOpacity,
+        forceMotion: input.instructions.forceMotion,
       });
 
       if (!operations.length) {
@@ -136,7 +138,7 @@ export class VideoEditorService {
         };
       }
 
-      const textFiles = await this.writeTextFiles(workDir, operations);
+      const textFiles = await this.writeTextFiles(workDir, operations, settings);
       const graph = buildFilterGraph({
         probe,
         operations,
@@ -144,6 +146,7 @@ export class VideoEditorService {
         fontFile: settings.fontFile,
         hookTextFile: textFiles.hook,
         ctaTextFile: textFiles.cta,
+        ctaHandFile: textFiles.hand,
         accentColor: input.branding.primaryColor,
       });
 
@@ -224,9 +227,11 @@ export class VideoEditorService {
   private async writeTextFiles(
     workDir: string,
     operations: VideoEditOperation[],
-  ): Promise<{ hook: string | null; cta: string | null }> {
+    settings: { emojiFontFile: string | null },
+  ): Promise<{ hook: string | null; cta: string | null; hand: string | null }> {
     let hook: string | null = null;
     let cta: string | null = null;
+    let hand: string | null = null;
     for (const op of operations) {
       if (op.type !== 'text') continue;
       const filePath = join(workDir, `${op.id}.txt`);
@@ -234,7 +239,16 @@ export class VideoEditorService {
       if (op.id === 'hook') hook = filePath;
       if (op.id === 'cta') cta = filePath;
     }
-    return { hook, cta };
+    if (cta) {
+      const handPath = join(workDir, 'cta-hand.txt');
+      await writeFile(
+        handPath,
+        settings.emojiFontFile ? CTA_HAND_EMOJI : CTA_HAND_FALLBACK,
+        'utf8',
+      );
+      hand = handPath;
+    }
+    return { hook, cta, hand };
   }
 
   private async maybeDownloadLogo(

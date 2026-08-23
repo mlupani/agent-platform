@@ -20,6 +20,7 @@ export interface VideoEditorSettings {
   barHeightRatio: number;
   timeoutMs: number;
   durationToleranceSeconds: number;
+  emojiFontFile: string | null;
 }
 
 const FONT_CANDIDATES = [
@@ -28,6 +29,12 @@ const FONT_CANDIDATES = [
   '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   'C:/Windows/Fonts/arialbd.ttf',
   'C:/Windows/Fonts/arial.ttf',
+];
+
+const EMOJI_FONT_CANDIDATES = [
+  'C:/Windows/Fonts/seguiemj.ttf',
+  'C:/Windows/Fonts/seguisym.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf',
 ];
 
 function envBool(
@@ -84,6 +91,15 @@ export function resolveFontFile(configured?: string | null): string | null {
   return explicit || null;
 }
 
+export function resolveEmojiFontFile(configured?: string | null): string | null {
+  const explicit = configured?.trim();
+  if (explicit && existsSync(explicit)) return explicit;
+  for (const candidate of EMOJI_FONT_CANDIDATES) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 export function loadVideoEditorSettings(
   config: ConfigService,
 ): VideoEditorSettings {
@@ -112,6 +128,9 @@ export function loadVideoEditorSettings(
     logoWidth: envInt(config, 'VIDEO_EDITOR_LOGO_WIDTH', 132),
     logoOpacity: envFloat(config, 'VIDEO_EDITOR_LOGO_OPACITY', 0.92),
     barHeightRatio: envFloat(config, 'VIDEO_EDITOR_BAR_HEIGHT_RATIO', 0.135),
+    emojiFontFile: resolveEmojiFontFile(
+      config.get<string>('VIDEO_EDITOR_EMOJI_FONT_FILE'),
+    ),
     timeoutMs: envInt(config, 'VIDEO_EDITOR_TIMEOUT_MS', 120_000),
     durationToleranceSeconds: envFloat(
       config,
