@@ -25,6 +25,8 @@ import type {
 } from './agent.types';
 import type { ConfiguredMessagesPrompt } from '../prompts/prompt.types';
 import { DEFAULT_CONFIGURED_MESSAGES } from '../../common/constants';
+import { LeadContextService } from '../../leads/lead-context.service';
+import { LeadsService } from '../../leads/leads.service';
 
 @Injectable()
 export class AgentService {
@@ -41,6 +43,8 @@ export class AgentService {
     private readonly guardrails: GuardrailsService,
     private readonly costControl: CostControlService,
     private readonly cost: CostService,
+    private readonly leadContext: LeadContextService,
+    private readonly leads: LeadsService,
   ) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
@@ -167,6 +171,7 @@ export class AgentService {
             }),
       },
     });
+    await this.leads.recordInbound(business.id, conversation.id);
 
     const strategy = this.memory.parseStrategy(agentConfig.memoryStrategy);
     const recentMessages = await this.memory.getRecentMessages(
@@ -245,6 +250,10 @@ export class AgentService {
         .join('\n\n'),
       knowledgeContext: this.rag.formatContext(ragChunks),
       enabledTools: agentConfig.enabledTools,
+      leadContext:
+        (
+          await this.leadContext.snapshot(business.id, conversation.id)
+        )?.text ?? null,
     });
 
     const llmMessages: LlmMessage[] = [

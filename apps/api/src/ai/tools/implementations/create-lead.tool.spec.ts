@@ -48,6 +48,33 @@ describe('CreateLeadTool', () => {
     expect(result.success).toBe(false);
   });
 
+  it('forwards interest and status', async () => {
+    leads.capture.mockResolvedValue({ id: 'lead-1' });
+
+    const result = await tool.execute(
+      {
+        name: 'Ana',
+        interest: 'Pilates 2 veces por semana',
+        status: 'interested',
+      },
+      {
+        businessId: 'biz-1',
+        conversationId: 'conv-1',
+        channel: 'WEB',
+        enabledTools: ['createLead'],
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(leads.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interest: 'Pilates 2 veces por semana',
+        status: 'interested',
+        name: 'Ana',
+      }),
+    );
+  });
+
   it('rejects invalid email', async () => {
     await expect(
       tool.execute(

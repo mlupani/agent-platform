@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
+import { LeadConversionService } from '../leads/lead-conversion.service';
 
 export type PaymentCover = 'pack' | 'session';
 
@@ -47,6 +48,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly businesses: BusinessesService,
+    private readonly conversions: LeadConversionService,
   ) {}
 
   async list(filters: PaymentListFilters = {}) {
@@ -166,6 +168,11 @@ export class PaymentsService {
         },
         include: paymentInclude,
       });
+    });
+    await this.conversions.maybeConvertFromSignal({
+      businessId,
+      userId: client.id,
+      trigger: 'payment.created',
     });
     return this.toPayment(created);
   }

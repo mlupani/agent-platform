@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { SecretsService } from '../common/crypto/secrets.service';
 import { EmailModule } from '../email/email.module';
+import { LeadsModule } from '../leads/leads.module';
 import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AppointmentsAdminController } from './appointments-admin.controller';
@@ -26,6 +27,7 @@ import { GoogleCalendarService } from './google-calendar.service';
   imports: [
     BusinessesModule,
     EmailModule,
+    LeadsModule,
     forwardRef(() => WhatsAppModule),
     forwardRef(() => SocialModule),
     BullModule.registerQueue({ name: APPOINTMENT_REMINDER_QUEUE }),

@@ -8,13 +8,42 @@ describe('LeadsService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    conversation: {
+      findFirst: jest.fn(),
+    },
   };
   const businesses = { getCurrentId: jest.fn().mockResolvedValue('biz-1') };
-  const service = new LeadsService(prisma as never, businesses as never);
+  const contactability = {
+    resolve: jest.fn().mockResolvedValue({
+      isContactable: true,
+      channels: ['whatsapp'],
+      missingFields: [],
+    }),
+  };
+  const events = { append: jest.fn().mockResolvedValue(undefined) };
+  const conversion = { convert: jest.fn() };
+  const followUps = {
+    scheduleAutoSequence: jest.fn().mockResolvedValue([]),
+    cancelPendingAuto: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new LeadsService(
+    prisma as never,
+    businesses as never,
+    contactability as never,
+    events as never,
+    conversion as never,
+    followUps as never,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
     businesses.getCurrentId.mockResolvedValue('biz-1');
+    contactability.resolve.mockResolvedValue({
+      isContactable: true,
+      channels: ['whatsapp'],
+      missingFields: [],
+    });
+    prisma.conversation.findFirst.mockResolvedValue(null);
   });
 
   it('lists leads for the current business with conversation link', async () => {
@@ -22,19 +51,28 @@ describe('LeadsService', () => {
     prisma.lead.findMany.mockResolvedValue([
       {
         id: 'lead-1',
+        businessId: 'biz-1',
         name: 'Ana',
         email: 'ana@test.com',
         phone: '54911',
         message: 'Quiero un turno',
         source: 'WEB',
+        status: 'contacted',
+        interest: 'Pilates 2x',
+        isContactable: true,
         conversationId: 'conv-1',
         createdAt,
+        lastContactedAt: null,
+        lastInboundAt: null,
         conversation: {
           id: 'conv-1',
           channel: 'WEB',
           contactName: 'Ana',
+          contactPhone: null,
+          lastMessageAt: createdAt,
           hiddenAt: null,
         },
+        followUps: [{ scheduledAt: new Date('2026-08-23T12:00:00.000Z') }],
       },
     ]);
 
@@ -46,22 +84,25 @@ describe('LeadsService', () => {
         take: 200,
       }),
     );
-    expect(rows).toEqual([
-      {
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
         id: 'lead-1',
         name: 'Ana',
         email: 'ana@test.com',
         phone: '54911',
-        message: 'Quiero un turno',
-        source: 'WEB',
         channel: 'WEB',
         conversationId: 'conv-1',
-        createdAt,
-      },
-    ]);
+        status: 'contacted',
+        interest: 'Pilates 2x',
+        isContactable: true,
+        nextFollowUpAt: '2026-08-23T12:00:00.000Z',
+      }),
+    );
   });
 
   it('does not capture a lead without contact data', async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
+
     await expect(
       service.capture({
         businessId: 'biz-1',
@@ -93,8 +134,10 @@ describe('LeadsService', () => {
         name: 'Ana',
         phone: '54911',
         source: 'PLAYGROUND',
+        status: 'contacted',
       }),
     });
+    expect(events.append).toHaveBeenCalled();
   });
 
   it('updates the existing lead for the same conversation', async () => {
@@ -106,6 +149,10 @@ describe('LeadsService', () => {
       message: null,
       source: 'PLAYGROUND',
       userId: null,
+      status: 'contacted',
+      interest: null,
+      objections: null,
+      preferredChannel: null,
       metadata: { conversationId: 'conv-1' },
     });
     prisma.lead.update.mockResolvedValue({ id: 'lead-1' });
@@ -152,73 +199,15 @@ describe('LeadsService', () => {
         phone: '54911',
         source: 'WHATSAPP',
         message: 'Llamó por un turno',
-        metadata: { origin: 'manual', channel: 'WHATSAPP' },
       }),
     });
   });
 
   it('rejects a manual lead without contact data', async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
     await expect(service.createManual({ message: 'Sin datos' })).rejects.toThrow(
       'Hace falta al menos nombre, teléfono o email.',
     );
     expect(prisma.lead.create).not.toHaveBeenCalled();
-  });
-});
-
-
-describe('LeadsService', () => {
-  const prisma = {
-    lead: { findMany: jest.fn() },
-  };
-  const businesses = { getCurrentId: jest.fn().mockResolvedValue('biz-1') };
-  const service = new LeadsService(prisma as never, businesses as never);
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    businesses.getCurrentId.mockResolvedValue('biz-1');
-  });
-
-  it('lists leads for the current business with conversation link', async () => {
-    const createdAt = new Date('2026-08-22T12:00:00.000Z');
-    prisma.lead.findMany.mockResolvedValue([
-      {
-        id: 'lead-1',
-        name: 'Ana',
-        email: 'ana@test.com',
-        phone: '54911',
-        message: 'Quiero un turno',
-        source: 'WEB',
-        conversationId: 'conv-1',
-        createdAt,
-        conversation: {
-          id: 'conv-1',
-          channel: 'WEB',
-          contactName: 'Ana',
-          hiddenAt: null,
-        },
-      },
-    ]);
-
-    const rows = await service.list();
-
-    expect(prisma.lead.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { businessId: 'biz-1' },
-        take: 200,
-      }),
-    );
-    expect(rows).toEqual([
-      {
-        id: 'lead-1',
-        name: 'Ana',
-        email: 'ana@test.com',
-        phone: '54911',
-        message: 'Quiero un turno',
-        source: 'WEB',
-        channel: 'WEB',
-        conversationId: 'conv-1',
-        createdAt,
-      },
-    ]);
   });
 });

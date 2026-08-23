@@ -78,6 +78,28 @@ describe('PromptBuilderService', () => {
     expect(prompt).toContain('createAppointment ya guarda el lead');
   });
 
+  it('includes lead lifecycle tools and snapshot', () => {
+    const prompt = builder.buildFromContext({
+      assistantName: 'Luna',
+      tone: 'friendly',
+      business: {
+        name: 'Demo Business',
+        type: 'OTHER',
+        timezone: 'America/Argentina/Buenos_Aires',
+        language: 'es',
+      },
+      hoursText: '',
+      servicesText: '',
+      configuredMessages: {},
+      enabledTools: ['createLead', 'updateLeadStatus', 'scheduleFollowUp'],
+      leadContext: 'Lead actual: Ana · interested · falta teléfono.',
+    });
+
+    expect(prompt).toContain('updateLeadStatus');
+    expect(prompt).toContain('scheduleFollowUp');
+    expect(prompt).toContain('Lead actual: Ana');
+  });
+
   it('buildCurrentDateTime returns tomorrow relative to timezone', () => {
     const value = builder.buildCurrentDateTime(
       'America/Argentina/Buenos_Aires',

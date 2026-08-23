@@ -19,6 +19,8 @@ const TOOLS = [
   { name: 'cancelAppointment', risk: 'WRITE', requireConfirmation: false },
   { name: 'rescheduleAppointment', risk: 'WRITE', requireConfirmation: false },
   { name: 'createLead', risk: 'WRITE', requireConfirmation: false },
+  { name: 'updateLeadStatus', risk: 'WRITE', requireConfirmation: false },
+  { name: 'scheduleFollowUp', risk: 'WRITE', requireConfirmation: false },
   { name: 'requestHumanAssistance', risk: 'WRITE', requireConfirmation: false },
   { name: 'sendEmail', risk: 'WRITE', requireConfirmation: false },
   { name: 'sendWhatsAppMessage', risk: 'WRITE', requireConfirmation: false },

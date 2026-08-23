@@ -61,6 +61,9 @@ model Business {
   brandingConfig       BrandingConfig?
   socialContentConfig  SocialContentConfig?
   appointmentReminderConfig AppointmentReminderConfig?
+  leadLifecycleConfig  LeadLifecycleConfig?
+  leadFollowUps        LeadFollowUp[]
+  leadEvents           LeadEvent[]
   generatedContents    GeneratedContent[]
   contentGenerationExecutions ContentGenerationExecution[]
   contentPublications  ContentPublication[]
@@ -285,6 +288,7 @@ model Conversation {
   agentExecutions AgentExecution[]
   appointments    Appointment[]
   leads           Lead[]
+  followUps       LeadFollowUp[]
 
   @@index([businessId, status])
   @@index([businessId, userId])
@@ -632,24 +636,116 @@ model ToolExecution {
 }
 
 model Lead {
-  id             String        @id @default(uuid())
-  businessId     String
-  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId         String?
-  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  conversationId String?
-  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  name           String?
-  email          String?
-  phone          String?
-  message        String?
-  source         String?
-  metadata       Json?
-  createdAt      DateTime      @default(now())
+  id                String        @id @default(uuid())
+  businessId        String
+  business          Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  conversationId    String?
+  conversation      Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  name              String?
+  email             String?
+  phone             String?
+  message           String?
+  source            String?
+  metadata          Json?
+  /// new | contacted | interested | won | lost | inactive
+  status            String        @default("new")
+  interest          String?
+  objections        String?
+  preferredChannel  String?
+  convertedAt       DateTime?
+  conversionSource  String?
+  lastContactedAt   DateTime?
+  lastInboundAt     DateTime?
+  lostReason        String?
+  isContactable     Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  events            LeadEvent[]
+  followUps         LeadFollowUp[]
 
   @@index([businessId])
   @@index([businessId, createdAt])
+  @@index([businessId, status])
+  @@index([businessId, isContactable])
   @@map("leads")
+}
+
+/// Config 1:1 de lifecycle / follow-up (mismo patrón que AppointmentReminderConfig).
+model LeadLifecycleConfig {
+  id                         String   @id @default(uuid())
+  businessId                 String   @unique
+  business                   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  followUpEnabled            Boolean  @default(false)
+  /// manual | suggested | automatic
+  conversionMode             String   @default("manual")
+  conversionTriggers         String[] @default([])
+  followUpDelaysHours        Int[]    @default([24, 72, 168])
+  maxAttempts                Int      @default(3)
+  generateWithAi             Boolean  @default(true)
+  /// auto | review | reminder_only
+  sendMode                   String   @default("reminder_only")
+  quietHoursStart            String   @default("09:00")
+  quietHoursEnd              String   @default("21:00")
+  timezone                   String?
+  /// auto | whatsapp | email | instagram | facebook
+  preferredChannel           String   @default("auto")
+  askForMissingContact       Boolean  @default(true)
+  convertedClientStatusSlug  String   @default("activo")
+  trialClientStatusSlug      String   @default("visita")
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@map("lead_lifecycle_configs")
+}
+
+model LeadFollowUp {
+  id             String        @id @default(uuid())
+  businessId     String
+  business       Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  /// auto | manual | agent
+  source         String
+  objective      String
+  objectiveNote  String?
+  /// pending | generating | review | sent | cancelled | failed | skipped
+  status         String        @default("pending")
+  scheduledAt    DateTime
+  attemptNumber  Int           @default(1)
+  channel        String?
+  draftMessage   String?
+  sentMessage    String?
+  sentAt         DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([businessId, status, scheduledAt])
+  @@index([leadId, status])
+  @@map("lead_follow_ups")
+}
+
+model LeadEvent {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       String
+  payload    Json?
+  /// agent | admin | system
+  actor      String   @default("system")
+  createdAt  DateTime @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([businessId])
+  @@map("lead_events")
 }
 
 /// Identidad visual / voz de marca para el Content Agent.

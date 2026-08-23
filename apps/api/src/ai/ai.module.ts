@@ -4,6 +4,8 @@ import { AutomationsModule } from '../automations/automations.module';
 import { CalendarModule } from '../calendar/calendar.module';
 import { EmailModule } from '../email/email.module';
 import { LeadsModule } from '../leads/leads.module';
+import { ScheduleFollowUpTool } from './tools/implementations/schedule-follow-up.tool';
+import { UpdateLeadStatusTool } from './tools/implementations/update-lead-status.tool';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AgentService } from './agents/agent.service';
 import { AudioTranscriptionService } from './transcription/audio-transcription.service';
@@ -48,6 +50,8 @@ const demoTools = [
   CancelAppointmentTool,
   RescheduleAppointmentTool,
   CreateLeadTool,
+  UpdateLeadStatusTool,
+  ScheduleFollowUpTool,
   RequestHumanAssistanceTool,
   SendEmailTool,
   SendWhatsAppMessageTool,
@@ -60,7 +64,7 @@ const demoTools = [
     AnalyticsModule,
     forwardRef(() => CalendarModule),
     EmailModule,
-    LeadsModule,
+    forwardRef(() => LeadsModule),
     forwardRef(() => WhatsAppModule),
   ],
   controllers: [ToolsController],

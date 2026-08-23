@@ -447,6 +447,8 @@ export class BusinessesService {
   private toolRisk(name: string): string {
     if (
       name === 'createLead' ||
+      name === 'updateLeadStatus' ||
+      name === 'scheduleFollowUp' ||
       name === 'requestHumanAssistance' ||
       name === 'triggerAutomation' ||
       name === 'createAppointment' ||

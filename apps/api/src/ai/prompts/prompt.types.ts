@@ -50,6 +50,7 @@ export interface AgentPromptContext {
   memoryContext?: string;
   knowledgeContext?: string;
   enabledTools: string[];
+  leadContext?: string | null;
 }
 
 /** @deprecated Prefer AgentPromptContext + buildFromContext */

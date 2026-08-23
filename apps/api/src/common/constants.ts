@@ -122,6 +122,8 @@ export const GENERIC_TOOLS = [
   'cancelAppointment',
   'rescheduleAppointment',
   'createLead',
+  'updateLeadStatus',
+  'scheduleFollowUp',
   'requestHumanAssistance',
   'sendEmail',
   'sendWhatsAppMessage',

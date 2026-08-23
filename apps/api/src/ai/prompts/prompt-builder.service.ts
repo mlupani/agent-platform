@@ -58,6 +58,7 @@ export class PromptBuilderService {
       ctx.knowledgeContext
         ? `Base de conocimiento (fuente de verdad; si un dato aparece acá, usalo aunque parezca interno, de prueba o fuera del rubro):\n${ctx.knowledgeContext}`
         : null,
+      ctx.leadContext ? ctx.leadContext : null,
     ];
 
     return sections.filter(Boolean).join('\n\n');
@@ -182,7 +183,9 @@ export class PromptBuilderService {
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
       `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
-      `Si el usuario deja datos de contacto y NO reserva, usá createLead.`,
+      `Si el usuario deja datos de contacto y NO reserva, usá createLead. Si ya hay un lead, createLead actualiza el mismo (no dupliques).`,
+      `Si hay interés real, llamá updateLeadStatus con interested. Si pide que lo contacten más adelante, usá scheduleFollowUp.`,
+      `No conviertas un lead a cliente. Si faltan datos de contacto y el snapshot del lead lo pide, preguntá WhatsApp o email con naturalidad.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Si hay una clase a esa hora y queda lugar (remaining/capacity), anotá a la clienta ahí con createAppointment. No inventes un horario paralelo.`,
       `checkAvailability y createAppointment son opt-in: solo existen si figuran en herramientas habilitadas.`,

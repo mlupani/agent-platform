@@ -244,6 +244,81 @@ export interface ClientRow {
   conversations: number;
 }
 
+export interface LeadRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  message: string | null;
+  source: string | null;
+  channel: string | null;
+  conversationId: string | null;
+  status: string;
+  interest: string | null;
+  isContactable: boolean;
+  contactChannels: string[];
+  nextFollowUpAt: string | null;
+  lastActivityAt: string | null;
+  createdAt: string;
+}
+
+export interface LeadFollowUpRow {
+  id: string;
+  source: string;
+  objective: string;
+  objectiveNote: string | null;
+  status: string;
+  scheduledAt: string;
+  attemptNumber: number;
+  channel: string | null;
+  draftMessage: string | null;
+  sentMessage: string | null;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+}
+
+export interface LeadEventRow {
+  id: string;
+  type: string;
+  actor: string;
+  payload?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface LeadDetail extends LeadRow {
+  objections: string | null;
+  lostReason: string | null;
+  convertedAt: string | null;
+  conversionSource: string | null;
+  preferredChannel: string | null;
+  missingFields: string[];
+  user?: {
+    id: string;
+    name: string | null;
+    status?: { slug: string; name: string } | null;
+  } | null;
+  followUps: LeadFollowUpRow[];
+  events: LeadEventRow[];
+}
+
+export interface LeadLifecycleConfig {
+  followUpEnabled: boolean;
+  conversionMode: 'manual' | 'suggested' | 'automatic';
+  conversionTriggers: string[];
+  followUpDelaysHours: number[];
+  maxAttempts: number;
+  generateWithAi: boolean;
+  sendMode: 'auto' | 'review' | 'reminder_only';
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  timezone: string | null;
+  preferredChannel: string;
+  askForMissingContact: boolean;
+  convertedClientStatusSlug: string;
+  trialClientStatusSlug: string;
+}
+
 export interface CatalogService {
   id: string;
   name: string;

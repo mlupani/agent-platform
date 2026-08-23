@@ -4,6 +4,8 @@ import { CancelAppointmentTool } from './implementations/cancel-appointment.tool
 import { CheckAvailabilityTool } from './implementations/check-availability.tool';
 import { CreateAppointmentTool } from './implementations/create-appointment.tool';
 import { CreateLeadTool } from './implementations/create-lead.tool';
+import { ScheduleFollowUpTool } from './implementations/schedule-follow-up.tool';
+import { UpdateLeadStatusTool } from './implementations/update-lead-status.tool';
 import { GetBusinessInformationTool } from './implementations/get-business-information.tool';
 import { GetOpeningHoursTool } from './implementations/get-opening-hours.tool';
 import { GetServicesTool } from './implementations/get-services.tool';
@@ -17,6 +19,8 @@ import { ToolRegistry } from './tool-registry';
 const AUTO_ENABLE_TOOLS = [
   { name: 'sendEmail', risk: 'WRITE' },
   { name: 'sendWhatsAppMessage', risk: 'WRITE' },
+  { name: 'updateLeadStatus', risk: 'WRITE' },
+  { name: 'scheduleFollowUp', risk: 'WRITE' },
 ] as const;
 
 @Injectable()
@@ -34,6 +38,8 @@ export class ToolsBootstrap implements OnModuleInit {
     private readonly cancelAppointment: CancelAppointmentTool,
     private readonly rescheduleAppointment: RescheduleAppointmentTool,
     private readonly createLead: CreateLeadTool,
+    private readonly updateLeadStatus: UpdateLeadStatusTool,
+    private readonly scheduleFollowUp: ScheduleFollowUpTool,
     private readonly requestHumanAssistance: RequestHumanAssistanceTool,
     private readonly sendEmail: SendEmailTool,
     private readonly sendWhatsAppMessage: SendWhatsAppMessageTool,
@@ -49,6 +55,8 @@ export class ToolsBootstrap implements OnModuleInit {
     this.registry.register(this.cancelAppointment);
     this.registry.register(this.rescheduleAppointment);
     this.registry.register(this.createLead);
+    this.registry.register(this.updateLeadStatus);
+    this.registry.register(this.scheduleFollowUp);
     this.registry.register(this.requestHumanAssistance);
     this.registry.register(this.sendEmail);
     this.registry.register(this.sendWhatsAppMessage);

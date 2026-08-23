@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { LeadConversionService } from '../leads/lead-conversion.service';
 import { AvailabilityService } from './availability.service';
 import { GoogleCalendarService } from './google-calendar.service';
 import type { CreateAppointmentInput } from './calendar.types';
@@ -15,6 +16,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
     private readonly google: GoogleCalendarService,
+    private readonly conversions: LeadConversionService,
   ) {}
 
   async list(
@@ -498,7 +500,7 @@ export class AppointmentsService {
       attendeeEmail: contactEmail,
     });
 
-    return this.prisma.appointment.create({
+    const created = await this.prisma.appointment.create({
       data: {
         businessId: input.businessId,
         serviceId: service?.id,
@@ -525,6 +527,17 @@ export class AppointmentsService {
         },
       },
     });
+
+    if ((created.status ?? 'confirmed') === 'confirmed') {
+      await this.conversions.maybeConvertFromSignal({
+        businessId: input.businessId,
+        userId: input.userId,
+        conversationId: input.conversationId,
+        trigger: 'appointment.confirmed',
+      });
+    }
+
+    return created;
   }
 
   async cancel(businessId: string, id: string, reason?: string) {
