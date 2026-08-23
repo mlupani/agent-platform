@@ -18,6 +18,11 @@ import {
   buildBriefUserPrompt,
   sanitizeBrief,
 } from './suggest-brief';
+import {
+  restoreQuotedSpanish,
+  restoreSpanishOrthography,
+  SPANISH_ORTHOGRAPHY_RULE,
+} from './spanish-orthography';
 
 const strategySchema = z.object({
   topic: z.string().min(2).max(200),
@@ -292,7 +297,16 @@ export class ContentAgentService {
     return {
       strategy: {
         ...strategy,
-        hook: strategy.hook ?? undefined,
+        topic: restoreSpanishOrthography(strategy.topic),
+        headline: restoreSpanishOrthography(strategy.headline),
+        caption: restoreSpanishOrthography(strategy.caption),
+        cta: restoreSpanishOrthography(strategy.cta),
+        hook: strategy.hook
+          ? restoreSpanishOrthography(strategy.hook)
+          : undefined,
+        videoPrompt: strategy.videoPrompt
+          ? restoreQuotedSpanish(strategy.videoPrompt)
+          : undefined,
         hashtags: normalizeHashtags(strategy.hashtags),
       },
       provider: providerName,
@@ -539,7 +553,7 @@ Reglas de videoPrompt (CRÍTICO — el video es un SHORT vertical 9:16 de ${dura
 - VOZ OBLIGATORIA: el video NUNCA es mudo. Siempre hay una voz humana hablando en español rioplatense.
   Preferí un protagonista a cámara (owner/staff/customer) talking to camera with audible speech and lip-sync.
   Si no hay persona en frame, usá voice-over clara sobre el B-roll.
-- El videoPrompt DEBE incluir las frases habladas EXACTAS entre comillas (español) y pedir generate spoken audio / talking.
+- El videoPrompt DEBE incluir las frases habladas EXACTAS entre comillas (español con tildes correctas) y pedir generate spoken audio / talking.
 - Si USER REQUEST / Instructions trae un bloque VOZ, usá esas frases literales.
 - NO pidas texto, captions, headlines, logos ni watermarks DENTRO del video.
   El texto on-screen (hook/CTA) y el logo los aplica después nuestra app con FFmpeg.
@@ -567,6 +581,8 @@ Reglas de copy:
 - Caption en español rioplatense, natural. Los hashtags van en el array "hashtags" (máx 5), no hace falta repetirlos en el caption.
 - Evitá repetir temas/headlines/CTA de RECENT CONTENT.
 - CTA claro y accionable.
+${SPANISH_ORTHOGRAPHY_RULE}
+- headline, caption, cta, hook y las frases habladas entre comillas del videoPrompt DEBEN llevar tildes correctas.
 - Si hay branding, respetá colores, estilo, audiencia y "evitar".
 
 Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, no una foto suelta):

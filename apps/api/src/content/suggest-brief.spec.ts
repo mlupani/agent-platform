@@ -32,6 +32,20 @@ describe('suggest-brief', () => {
     expect(prompt).toContain('acción principal');
     expect(prompt).toContain('ON-SCREEN');
     expect(prompt).toContain('Oferta');
+    expect(prompt).toContain('ORTOGRAFÍA');
+    expect(prompt).toContain('tildes');
+  });
+
+  it('restaura tildes faltantes en el guion', () => {
+    expect(
+      sanitizeBrief('VOZ\n"Este sabado tenes un dia facil"\nON-SCREEN\nPedí atencion'),
+    ).toContain('sábado');
+    expect(
+      sanitizeBrief('VOZ\n"Este sabado tenes un dia facil"'),
+    ).toContain('tenés');
+    expect(
+      sanitizeBrief('ON-SCREEN\nAtencion y promocion'),
+    ).toContain('Atención');
   });
 
   it('incluye el negocio y el objetivo en el user prompt', () => {

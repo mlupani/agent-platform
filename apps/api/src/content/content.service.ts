@@ -197,9 +197,12 @@ export class ContentService {
     return content;
   }
 
-  async autoEdit(id: string) {
+  async autoEdit(
+    id: string,
+    input: { headline?: string; cta?: string; hook?: string } = {},
+  ) {
     const businessId = await this.businesses.getCurrentId();
-    const content = await this.prisma.generatedContent.findFirst({
+    let content = await this.prisma.generatedContent.findFirst({
       where: { id, businessId },
       include: {
         assets: { orderBy: { createdAt: 'desc' } },
@@ -209,8 +212,24 @@ export class ContentService {
     if (['GENERATING', 'PUBLISHING'].includes(content.status)) {
       throw new BadRequestException('El contenido se está procesando');
     }
-    if (content.autoEditStatus === 'PROCESSING') {
-      throw new BadRequestException('Ya hay una autoedición en curso');
+
+    const headline = input.headline?.trim();
+    const cta = input.cta?.trim();
+    const hook = input.hook?.trim();
+    if (headline !== undefined || cta !== undefined || hook !== undefined) {
+      content = await this.prisma.generatedContent.update({
+        where: { id: content.id },
+        data: {
+          ...(input.headline !== undefined
+            ? { headline: headline || null }
+            : {}),
+          ...(input.cta !== undefined ? { cta: cta || null } : {}),
+          ...(input.hook !== undefined ? { hook: hook || null } : {}),
+        },
+        include: {
+          assets: { orderBy: { createdAt: 'desc' } },
+        },
+      });
     }
 
     const videos = content.assets.filter(
@@ -232,6 +251,12 @@ export class ContentService {
     });
     const logoUrl = branding?.logoUrl?.trim() || null;
     const strategy = this.strategyFromStored(content);
+    strategy.editing = {
+      ...strategy.editing,
+      add_hook: Boolean(strategy.hook),
+      add_cta: Boolean(strategy.cta),
+      add_logo: Boolean(logoUrl),
+    };
 
     if (!content.hook && strategy.hook) {
       await this.prisma.generatedContent.update({
@@ -249,9 +274,10 @@ export class ContentService {
       strategy,
       logoUrl,
       primaryColor: branding?.primaryColor,
-      expectedDurationSeconds: content.durationSeconds ?? undefined,
       currentStatus: content.status,
       throwOnError: true,
+      forceMotion: true,
+      preserveEditedOnSkip: true,
     });
 
     return this.get(content.id);
@@ -825,13 +851,18 @@ export class ContentService {
     expectedDurationSeconds?: number;
     currentStatus?: string;
     throwOnError?: boolean;
+    forceMotion?: boolean;
+    preserveEditedOnSkip?: boolean;
   }) {
     const started = Date.now();
-    const instructions = normalizeVideoEditing({
-      strategy: input.strategy,
-      durationSeconds: input.expectedDurationSeconds ?? 12,
-      hasLogo: Boolean(input.logoUrl),
-    });
+    const instructions = {
+      ...normalizeVideoEditing({
+        strategy: input.strategy,
+        durationSeconds: input.expectedDurationSeconds ?? 12,
+        hasLogo: Boolean(input.logoUrl),
+      }),
+      forceMotion: input.forceMotion,
+    };
     const status = input.currentStatus ?? 'GENERATING';
 
     await this.prisma.generatedContent.update({
@@ -858,7 +889,9 @@ export class ContentService {
       });
 
       if (edited.skipped || !edited.buffer) {
-        await this.removeEditedAssets(input.contentId);
+        if (!input.preserveEditedOnSkip) {
+          await this.removeEditedAssets(input.contentId);
+        }
         await this.prisma.generatedContent.update({
           where: { id: input.contentId },
           data: { autoEditStatus: 'SKIPPED', autoEditError: null },

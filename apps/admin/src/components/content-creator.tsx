@@ -653,10 +653,15 @@ export function ContentCreator() {
       if (!selectedId) throw new Error('Sin contenido');
       return api<GeneratedContent>(`/admin/content/${selectedId}/auto-edit`, {
         method: 'POST',
+        body: JSON.stringify({
+          headline: editHeadline,
+          cta: editCta,
+        }),
       });
     },
     onSuccess: async (data) => {
       syncEditors(data);
+      queryClient.setQueryData(['content', data.id], data);
       await queryClient.invalidateQueries({ queryKey: ['content-list'] });
       await queryClient.invalidateQueries({ queryKey: ['content', data.id] });
     },
@@ -1389,6 +1394,7 @@ export function ContentCreator() {
                         }
                       >
                         <video
+                          key={asset.storageUrl}
                           src={asset.storageUrl}
                           className="w-full object-cover max-h-72 pointer-events-none"
                           muted

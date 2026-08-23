@@ -3,6 +3,10 @@ import type {
   ContentMediaType,
   ContentObjective,
 } from './content.types';
+import {
+  restoreSpanishOrthography,
+  SPANISH_ORTHOGRAPHY_RULE,
+} from './spanish-orthography';
 
 export const BRIEF_MAX_CHARS = 1800;
 
@@ -41,7 +45,7 @@ export function sanitizeBrief(raw: string): string {
     }
   }
 
-  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  text = restoreSpanishOrthography(text.replace(/\n{3,}/g, '\n\n').trim());
   if (text.length <= BRIEF_MAX_CHARS) return text;
 
   const cut = text.slice(0, BRIEF_MAX_CHARS);
@@ -77,11 +81,12 @@ Reglas:
 - IDEA: 1 o 2 frases. Ángulo específico de ESTE negocio, no genérico.
 - HOOK: lo que se ve y se siente en el primer segundo. Pregunta, tensión o beneficio concreto.
 - VOZ (OBLIGATORIO): siempre hay alguien que HABLA. Preferí un protagonista a cámara (dueño, staff o cliente) mirando a cámara. Si el rubro no admite persona en frame, usá locución en off clara.
-- En VOZ escribí EXACTAMENTE las frases dichas, en español rioplatense, entre comillas. Deben entrar en ${input.durationSeconds}s (~2,5 palabras por segundo). 1 a 3 frases, naturales, vendibles.
+- En VOZ escribí EXACTAMENTE las frases dichas, en español rioplatense, entre comillas, con tildes correctas. Deben entrar en ${input.durationSeconds}s (~2,5 palabras por segundo). 1 a 3 frases, naturales, vendibles.
 - ESCENA: una sola acción principal continua mientras habla (planos, producto, lugar). Si hay protagonista, mostralo hablando. Cámara simple (fija o un movimiento suave). No apiles caminar + manos complejas + varios objetos. Si hay manos o utensilios, describí qué objeto, cómo se sostiene y un movimiento lento y estable.
 - CIERRE: CTA accionable (reservar, escribir, pasar, pedir turno). La voz también lo dice.
 - ON-SCREEN: dos líneas cortas (máx 8 palabras cada una): hook + CTA. Sin emojis.
 - LOOK: estilo visual, luz, paleta, tono. NO pidas texto, logo ni watermark quemados en el video (eso va después).
+${SPANISH_ORTHOGRAPHY_RULE}
 - NUNCA armes un video mudo ni solo de producto/local sin voz.
 - No inventes precios, % off ni fechas si el negocio no los dio.
 - No uses hashtags ni copy de caption: esto es el brief de generación.
@@ -106,6 +111,7 @@ Reglas:
 - COMPOSICIÓN: qué se ve (hero, marca, jerarquía). Incluí logo o nombre del negocio.
 - CTA: frase accionable corta.
 - LOOK: estilo, luz, paleta, tono.
+${SPANISH_ORTHOGRAPHY_RULE}
 - No inventes precios ni % off si el negocio no los dio.
 - Máximo ${BRIEF_MAX_CHARS} caracteres. Sin markdown, sin JSON, sin preámbulo.`;
 }

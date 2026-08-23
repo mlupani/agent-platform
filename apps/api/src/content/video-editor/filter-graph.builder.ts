@@ -1,7 +1,7 @@
 import type { VideoEditorSettings } from './video-editor.config';
 import { escapeFfmpegPath, isNearAspectRatio } from './ffmpeg.escape';
 import { overlayPalette } from './overlay-style';
-import { fitOverlayText } from './text-overlay';
+import { fitOverlayText, measureLineWidth } from './text-overlay';
 import type {
   LogoCornerPosition,
   OverlayVerticalPosition,
@@ -46,6 +46,52 @@ function logoOverlayXY(
   return { x: right, y: top };
 }
 
+function fadeTiming(durationSeconds: number): {
+  fadeIn: number;
+  fadeOut: number;
+  fadeOutStart: number;
+} {
+  const duration = Math.max(0.8, durationSeconds);
+  const fadeIn = Number(Math.min(0.35, duration * 0.12).toFixed(2));
+  const fadeOut = Number(Math.min(0.42, duration * 0.14).toFixed(2));
+  return {
+    fadeIn,
+    fadeOut,
+    fadeOutStart: Number(Math.max(0, duration - fadeOut).toFixed(2)),
+  };
+}
+
+export function ctaButtonLayout(input: {
+  width: number;
+  height: number;
+  barH: number;
+  fontSize: number;
+  text: string;
+}): { btnW: number; btnH: number; btnX: number; btnY: number } {
+  const lines = input.text.split('\n').filter(Boolean);
+  const lineCount = Math.max(1, lines.length);
+  const textW = Math.max(
+    ...lines.map((line) => measureLineWidth(line, input.fontSize)),
+    80,
+  );
+  const textH = Math.round(input.fontSize * lineCount * 1.28);
+  const btnW = Math.min(
+    Math.round(input.width * 0.72),
+    Math.max(Math.round(input.width * 0.44), textW + 56),
+  );
+  const btnH = Math.min(
+    Math.round(input.barH * 0.7),
+    Math.max(50, textH + 24),
+  );
+  const btnX = Math.round((input.width - btnW) / 2);
+  const lowerCenter = input.height - Math.round(input.barH * 0.52);
+  const btnY = Math.max(
+    input.height - input.barH + 8,
+    lowerCenter - Math.round(btnH / 2),
+  );
+  return { btnW, btnH, btnX, btnY };
+}
+
 export function buildFilterGraph(input: {
   probe: VideoProbe;
   operations: VideoEditOperation[];
@@ -53,6 +99,7 @@ export function buildFilterGraph(input: {
   fontFile: string | null;
   hookTextFile?: string | null;
   ctaTextFile?: string | null;
+  ctaHandFile?: string | null;
   accentColor?: string | null;
 }): BuiltFilterGraph {
   const { probe, operations, settings } = input;
@@ -81,8 +128,27 @@ export function buildFilterGraph(input: {
   const barH = Math.max(96, Math.round(height * settings.barHeightRatio));
   const safeSide = Math.round(settings.safeMarginSide * scale);
   const fontfile = input.fontFile ? escapeFfmpegPath(input.fontFile) : '';
+  const handFont = settings.emojiFontFile
+    ? escapeFfmpegPath(settings.emojiFontFile)
+    : fontfile;
   const palette = overlayPalette(input.accentColor);
   const hasBars = operations.some((op) => op.type === 'bars');
+  const hasIntro = operations.some((op) => op.type === 'intro');
+  const hasOutro = operations.some((op) => op.type === 'outro');
+
+  if (hasIntro) {
+    const zoom = nextLabel();
+    filters.push(
+      `[${current}]scale=iw*(1+0.08*max(0\\,1-t/0.65)):ih*(1+0.08*max(0\\,1-t/0.65)):eval=frame,crop=${width}:${height}[${zoom}]`,
+    );
+    current = zoom;
+    const flash = nextLabel();
+    filters.push(
+      `[${current}]drawbox=x=0:y=0:w=${width}:h=${height}:color=white@0.2:t=fill:enable='lt(t,0.12)'[${flash}]`,
+    );
+    current = flash;
+    applied.push('intro');
+  }
 
   if (hasBars) {
     const topBar = nextLabel();
@@ -92,7 +158,7 @@ export function buildFilterGraph(input: {
     current = topBar;
     const bottomBar = nextLabel();
     filters.push(
-      `[${current}]drawbox=x=0:y=${height - barH}:w=${width}:h=${barH}:color=black@0.86:t=fill[${bottomBar}]`,
+      `[${current}]drawbox=x=0:y=${height - barH}:w=${width}:h=${barH}:color=black@0.78:t=fill[${bottomBar}]`,
     );
     current = bottomBar;
     const accent = nextLabel();
@@ -110,22 +176,31 @@ export function buildFilterGraph(input: {
     const fontSize = Math.max(12, Math.round(op.fontSize));
 
     if (op.id === 'cta') {
-      const lineCount = Math.max(1, op.text.split('\n').length);
-      const btnW = Math.round(width * 0.9);
-      const textH = Math.round(fontSize * lineCount * 1.28);
-      const btnH = Math.min(
-        barH - 12,
-        Math.max(
-          48,
-          textH + 22,
-          Math.round(barH * (lineCount > 1 ? 0.62 : 0.5)),
-        ),
+      const { btnW, btnH, btnY } = ctaButtonLayout({
+        width,
+        height,
+        barH,
+        fontSize,
+        text: op.text,
+      });
+      const appear = `between(t,${op.start},${op.end})`;
+      const slide = `26*max(0\\,1-(t-${op.start})/0.3)`;
+      const pulse = `10*sin(2*PI*(t-${op.start})*2.05)`;
+      const btnYExpr = `${btnY}+${slide}`;
+
+      const shadow = nextLabel();
+      filters.push(
+        `[${current}]drawbox=x=(${width}-w)/2:y=${btnYExpr}+5:w=${btnW}+${pulse}+10:h=${btnH}+8:color=${palette.ctaShadow}:t=fill:enable='${appear}'[${shadow}]`,
       );
-      const btnX = Math.round((width - btnW) / 2);
-      const btnY = height - barH + Math.round((barH - btnH) / 2);
+      current = shadow;
+      const ring = nextLabel();
+      filters.push(
+        `[${current}]drawbox=x=(${width}-w)/2:y=${btnYExpr}-3:w=${btnW}+${pulse}+8:h=${btnH}+6:color=${palette.ctaRing}:t=fill:enable='${appear}'[${ring}]`,
+      );
+      current = ring;
       const button = nextLabel();
       filters.push(
-        `[${current}]drawbox=x=${btnX}:y=${btnY}:w=${btnW}:h=${btnH}:color=${palette.ctaBg}:t=fill:enable='between(t,${op.start},${op.end})'[${button}]`,
+        `[${current}]drawbox=x=(${width}-w)/2:y=${btnYExpr}:w=${btnW}+${pulse}:h=${btnH}:color=${palette.ctaBg}:t=fill:enable='${appear}'[${button}]`,
       );
       current = button;
       const out = nextLabel();
@@ -138,11 +213,32 @@ export function buildFilterGraph(input: {
         'expansion=none',
         `line_spacing=${Math.round(fontSize * 0.12)}`,
         'x=(w-text_w)/2',
-        `y=${btnY}+(${btnH}-text_h)/2`,
-        `enable='between(t,${op.start},${op.end})'`,
+        `y=${btnYExpr}+(${btnH}-text_h)/2`,
+        `alpha='if(lt(t,${op.start}+0.22)\\,(t-${op.start})/0.22\\,1)'`,
+        `enable='${appear}'`,
       ];
       filters.push(`[${current}]drawtext=${options.join(':')}[${out}]`);
       current = out;
+
+      if (input.ctaHandFile && handFont) {
+        const handSize = Math.max(28, Math.round(fontSize * 1.15));
+        const bounce = `8*sin(2*PI*(t-${op.start})*2.6)`;
+        const hand = nextLabel();
+        const handOpts = [
+          `fontfile='${handFont}'`,
+          `textfile='${escapeFfmpegPath(input.ctaHandFile)}'`,
+          `fontsize=${handSize}`,
+          'fontcolor=white',
+          'borderw=2',
+          'bordercolor=black@0.45',
+          'expansion=none',
+          'x=(w-text_w)/2',
+          `y=${btnYExpr}-${handSize}-6+${bounce}`,
+          `enable='${appear}'`,
+        ];
+        filters.push(`[${current}]drawtext=${handOpts.join(':')}[${hand}]`);
+        current = hand;
+      }
       applied.push('text');
       continue;
     }
@@ -186,6 +282,16 @@ export function buildFilterGraph(input: {
     applied.push('logo');
   }
 
+  if (hasOutro) {
+    const { fadeIn, fadeOut, fadeOutStart } = fadeTiming(probe.durationSeconds);
+    const faded = nextLabel();
+    filters.push(
+      `[${current}]fade=t=in:st=0:d=${fadeIn}:color=black,fade=t=out:st=${fadeOutStart}:d=${fadeOut}:color=black[${faded}]`,
+    );
+    current = faded;
+    applied.push('outro');
+  }
+
   return {
     filterComplex: filters.join(';'),
     outputLabel: current,
@@ -214,6 +320,7 @@ export function planOperations(input: {
   logoPosition: LogoCornerPosition;
   logoWidth?: number;
   logoOpacity?: number;
+  forceMotion?: boolean;
 }): VideoEditOperation[] {
   const ops: VideoEditOperation[] = [];
   const { probe, settings } = input;
@@ -262,15 +369,15 @@ export function planOperations(input: {
 
   if (addCta) {
     const preferred = Math.max(
-      18,
-      Math.round((input.ctaFontSize ?? settings.ctaFontSize) * scale),
+      20,
+      Math.round((input.ctaFontSize ?? settings.ctaFontSize) * scale * 1.08),
     );
-    const btnW = Math.round(width * 0.9);
+    const btnW = Math.round(width * 0.68);
     const fitted = fitOverlayText({
       text: input.ctaText,
-      boxWidth: Math.max(100, btnW - 36),
+      boxWidth: Math.max(100, btnW - 48),
       preferredFontSize: preferred,
-      minFontSize: 16,
+      minFontSize: 18,
       maxLines: 2,
     });
     ops.push({
@@ -292,6 +399,10 @@ export function planOperations(input: {
       width: Math.round((input.logoWidth ?? settings.logoWidth) * scale),
       opacity: input.logoOpacity ?? settings.logoOpacity,
     });
+  }
+
+  if (ops.length || input.forceMotion) {
+    ops.push({ type: 'intro' }, { type: 'outro' });
   }
 
   return ops;
