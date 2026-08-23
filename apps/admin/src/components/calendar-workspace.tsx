@@ -3,19 +3,25 @@
 import { useState } from 'react';
 import { AppointmentRemindersForm } from '@/components/appointment-reminders-form';
 import { AppointmentsCalendar } from '@/components/appointments-calendar';
+import { ClassSchedulePanel } from '@/components/class-schedule-panel';
 
-type Tab = 'calendar' | 'reminders';
+type Tab = 'calendar' | 'schedule' | 'reminders';
 
 const TABS = [
   ['calendar', 'Calendario'],
+  ['schedule', 'Horarios de clase'],
   ['reminders', 'Recordatorios'],
 ] as const;
 
 export function CalendarWorkspace() {
   const [tab, setTab] = useState<Tab>('calendar');
   const [openedReminders, setOpenedReminders] = useState(false);
+  const [openedSchedule, setOpenedSchedule] = useState(false);
   if (tab === 'reminders' && !openedReminders) {
     setOpenedReminders(true);
+  }
+  if (tab === 'schedule' && !openedSchedule) {
+    setOpenedSchedule(true);
   }
 
   return (
@@ -43,6 +49,11 @@ export function CalendarWorkspace() {
       <div hidden={tab !== 'calendar'}>
         <AppointmentsCalendar />
       </div>
+      {openedSchedule ? (
+        <div hidden={tab !== 'schedule'}>
+          <ClassSchedulePanel />
+        </div>
+      ) : null}
       {openedReminders ? (
         <div hidden={tab !== 'reminders'}>
           <AppointmentRemindersForm />

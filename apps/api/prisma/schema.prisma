@@ -50,8 +50,10 @@ model Business {
   users           User[]
   leads           Lead[]
   payments        Payment[]
+  servicePasses   ServicePass[]
   businessHours   BusinessHour[]
   services        Service[]
+  classTemplates  ClassTemplate[]
   appointments    Appointment[]
   whatsappConfig  WhatsAppConfig?
   googleCalendarConfig GoogleCalendarConfig?
@@ -131,15 +133,43 @@ model Service {
   enabled             Boolean  @default(true)
   requiresAppointment Boolean  @default(true)
   sortOrder           Int      @default(0)
+  /// 1 = servicio de una vez. >1 = pack de N clases.
+  sessionCount        Int      @default(1)
+  /// 1 = turno exclusivo. >1 = clase grupal con ese cupo.
+  capacity            Int      @default(1)
   metadata            Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   appointments      Appointment[]
   generatedContents GeneratedContent[]
+  payments          Payment[]
+  passes            ServicePass[]
+  classTemplates    ClassTemplate[]
 
   @@index([businessId, enabled])
   @@map("services")
+}
+
+/// Grilla semanal de clases (un salón: un horario = un servicio).
+model ClassTemplate {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /// 0=lunes … 6=domingo
+  dayOfWeek  Int
+  startTime  String
+  /// Si es null, usa Service.capacity.
+  capacity   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([businessId, dayOfWeek, startTime])
+  @@index([businessId])
+  @@index([businessId, serviceId])
+  @@map("class_templates")
 }
 
 model User {
@@ -162,6 +192,7 @@ model User {
   leads         Lead[]
   appointments  Appointment[]
   payments      Payment[]
+  passes        ServicePass[]
 
   @@index([businessId])
   @@index([businessId, email])
@@ -180,20 +211,47 @@ model ClientStatus {
 }
 
 model Payment {
-  id         String   @id @default(uuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount     Decimal  @db.Decimal(12, 2)
-  paidAt     DateTime
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String   @id @default(uuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceId         String?
+  service           Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  passId            String?
+  pass              ServicePass? @relation(fields: [passId], references: [id], onDelete: SetNull)
+  amount            Decimal  @db.Decimal(12, 2)
+  paidAt            DateTime
+  notes             String?
+  sessionsGranted   Int      @default(0)
+  sessionsConsumed  Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([businessId, paidAt])
   @@index([businessId, userId])
+  @@index([businessId, serviceId])
   @@map("payments")
+}
+
+/// Pack comprado por un cliente para un servicio (clases pagadas vs usadas).
+model ServicePass {
+  id            String   @id @default(uuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceId     String
+  service       Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  sessionCount  Int
+  sessionsPaid  Int      @default(0)
+  sessionsUsed  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  payments      Payment[]
+
+  @@index([businessId, userId, serviceId])
+  @@map("service_passes")
 }
 
 model Conversation {

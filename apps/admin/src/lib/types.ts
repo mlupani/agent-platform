@@ -244,11 +244,32 @@ export interface ClientRow {
   conversations: number;
 }
 
+export interface CatalogService {
+  id: string;
+  name: string;
+  sessionCount: number;
+  capacity?: number;
+  enabled: boolean;
+  durationMinutes: number;
+  price?: string | number | null;
+}
+
+export interface PaymentPass {
+  id: string;
+  sessionCount: number;
+  sessionsPaid: number;
+  sessionsUsed: number;
+  remaining: number;
+  unusedCredits: number;
+}
+
 export interface PaymentRow {
   id: string;
   amount: number;
   paidAt: string;
   notes: string | null;
+  sessionsGranted: number;
+  sessionsConsumed: number;
   createdAt: string;
   updatedAt: string;
   client: {
@@ -257,6 +278,21 @@ export interface PaymentRow {
     phone: string | null;
     email: string | null;
   };
+  service: {
+    id: string;
+    name: string;
+    sessionCount: number;
+  } | null;
+  pass: PaymentPass | null;
+}
+
+export interface PaymentStatsRow {
+  serviceId: string | null;
+  name: string;
+  sessionCount: number;
+  payments: number;
+  amount: number;
+  sessionsGranted: number;
 }
 
 export interface SpendBucket {

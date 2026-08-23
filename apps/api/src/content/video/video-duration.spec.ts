@@ -12,9 +12,11 @@ describe('video duration', () => {
     expect(parseVideoDuration(7)).toBe(5);
   });
 
-  it('clampa Seedance a 12s', () => {
+  it('clampa Seedance 1.5 a 12s y Seedance 2 a 15s', () => {
     expect(clampDurationForKie('bytedance/seedance-1.5-pro', 15)).toBe(12);
     expect(clampDurationForKie('bytedance/seedance-1.5-pro', 10)).toBe(10);
+    expect(clampDurationForKie('bytedance/seedance-2', 15)).toBe(15);
+    expect(clampDurationForKie('bytedance/seedance-2.0', 15)).toBe(15);
   });
 
   it('clampa Kling v1 de fal a 5 o 10', () => {

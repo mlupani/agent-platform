@@ -30,7 +30,7 @@ const schema = z.object({
 export class CheckAvailabilityTool implements AgentTool {
   readonly name = 'checkAvailability';
   readonly description =
-    'Consulta turnos libres para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
+    'Consulta turnos y cupos de clase para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Devuelve remaining/capacity. Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 
@@ -87,7 +87,7 @@ export class CheckAvailabilityTool implements AgentTool {
         hint:
           result.slots.length === 0
             ? 'Sin turnos libres ese día (horarios del negocio y/o calendario). Probá otra fecha o derivá a un humano.'
-            : `Respondé YA al cliente con 2–4 opciones de ${result.dayLabel || result.date}. No vuelvas a llamar getServices ni checkAvailability para la misma fecha.`,
+            : `Respondé YA al cliente con 2–4 opciones de ${result.dayLabel || result.date}, indicando lugares (ej. 09:00 · 7 lugares) si el slot trae remaining/capacity. No vuelvas a llamar getServices ni checkAvailability para la misma fecha.`,
       },
     };
   }

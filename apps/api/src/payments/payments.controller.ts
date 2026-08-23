@@ -29,6 +29,11 @@ const paymentSchema = z.object({
   amount: z.coerce.number().positive().max(99_999_999.99),
   paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: z.preprocess(trimOrNull, z.string().max(2000).nullable().optional()),
+  serviceId: z.preprocess(
+    trimOrNull,
+    z.string().uuid().nullable().optional(),
+  ),
+  cover: z.enum(['pack', 'session']).optional(),
 });
 
 const paymentUpdateSchema = paymentSchema.partial();
@@ -39,22 +44,33 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
-  @Get()
-  list(
+  @Get('stats')
+  stats(
     @Query('clientId') clientId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    if (clientId && !z.string().uuid().safeParse(clientId).success) {
-      throw new BadRequestException('Cliente no válido');
+    this.assertListQuery(clientId, from, to);
+    return this.payments.stats({ userId: clientId, from, to });
+  }
+
+  @Get()
+  list(
+    @Query('clientId') clientId?: string,
+    @Query('serviceId') serviceId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    this.assertListQuery(clientId, from, to);
+    if (serviceId && !z.string().uuid().safeParse(serviceId).success) {
+      throw new BadRequestException('Servicio no válido');
     }
-    if (from && !daySchema.safeParse(from).success) {
-      throw new BadRequestException('La fecha de inicio no es válida.');
-    }
-    if (to && !daySchema.safeParse(to).success) {
-      throw new BadRequestException('La fecha de fin no es válida.');
-    }
-    return this.payments.list({ userId: clientId, from, to });
+    return this.payments.list({ userId: clientId, serviceId, from, to });
+  }
+
+  @Post('passes/:id/use')
+  useSession(@Param('id') id: string) {
+    return this.payments.useSession(id);
   }
 
   @Post()
@@ -77,5 +93,17 @@ export class PaymentsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.payments.remove(id);
+  }
+
+  private assertListQuery(clientId?: string, from?: string, to?: string) {
+    if (clientId && !z.string().uuid().safeParse(clientId).success) {
+      throw new BadRequestException('Cliente no válido');
+    }
+    if (from && !daySchema.safeParse(from).success) {
+      throw new BadRequestException('La fecha de inicio no es válida.');
+    }
+    if (to && !daySchema.safeParse(to).success) {
+      throw new BadRequestException('La fecha de fin no es válida.');
+    }
   }
 }

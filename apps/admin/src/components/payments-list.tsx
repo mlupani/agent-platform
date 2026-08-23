@@ -3,7 +3,12 @@
 import { useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { ClientRow, PaymentRow } from '@/lib/types';
+import type {
+  ClientRow,
+  CatalogService,
+  PaymentRow,
+  PaymentStatsRow,
+} from '@/lib/types';
 
 function clientLabel(client: {
   name: string | null;
@@ -30,13 +35,40 @@ function monthRange(now = new Date()) {
   };
 }
 
-function paymentsQueryPath(clientId: string, from: string, to: string) {
+function paymentsQueryPath(
+  clientId: string,
+  serviceId: string,
+  from: string,
+  to: string,
+) {
+  const params = new URLSearchParams();
+  if (clientId) params.set('clientId', clientId);
+  if (serviceId) params.set('serviceId', serviceId);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const query = params.toString();
+  return `/admin/payments${query ? `?${query}` : ''}`;
+}
+
+function statsQueryPath(clientId: string, from: string, to: string) {
   const params = new URLSearchParams();
   if (clientId) params.set('clientId', clientId);
   if (from) params.set('from', from);
   if (to) params.set('to', to);
   const query = params.toString();
-  return `/admin/payments${query ? `?${query}` : ''}`;
+  return `/admin/payments/stats${query ? `?${query}` : ''}`;
+}
+
+function packLabel(pass: {
+  sessionsPaid: number;
+  sessionCount: number;
+  remaining: number;
+}) {
+  return `${pass.sessionsPaid}/${pass.sessionCount} pagadas · ${pass.remaining} por pagar`;
+}
+
+function canUseClass(pass: { unusedCredits?: number; sessionsPaid: number; sessionsUsed: number }) {
+  return (pass.unusedCredits ?? pass.sessionsPaid - pass.sessionsUsed) > 0;
 }
 
 function money(value: number) {
@@ -56,6 +88,7 @@ function dateLabel(value: string) {
 export function PaymentsList() {
   const queryClient = useQueryClient();
   const [clientId, setClientId] = useState('');
+  const [serviceId, setServiceId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -77,9 +110,22 @@ export function PaymentsList() {
     staleTime: 30_000,
   });
 
+  const { data: services = [] } = useQuery({
+    queryKey: ['services'],
+    queryFn: () => api<CatalogService[]>('/admin/services'),
+    staleTime: 30_000,
+  });
+
   const { data = [], isLoading, error } = useQuery({
-    queryKey: ['payments', clientId, from, to],
-    queryFn: () => api<PaymentRow[]>(paymentsQueryPath(clientId, from, to)),
+    queryKey: ['payments', clientId, serviceId, from, to],
+    queryFn: () =>
+      api<PaymentRow[]>(paymentsQueryPath(clientId, serviceId, from, to)),
+    placeholderData: keepPreviousData,
+  });
+
+  const { data: ranking = [] } = useQuery({
+    queryKey: ['payments-stats', clientId, from, to],
+    queryFn: () => api<PaymentStatsRow[]>(statsQueryPath(clientId, from, to)),
     placeholderData: keepPreviousData,
   });
 
@@ -97,8 +143,17 @@ export function PaymentsList() {
   }
 
   async function refresh() {
-    await queryClient.invalidateQueries({ queryKey: ['payments'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['payments'] }),
+      queryClient.invalidateQueries({ queryKey: ['payments-stats'] }),
+    ]);
   }
+
+  const consumePass = useMutation({
+    mutationFn: (passId: string) =>
+      api(`/admin/payments/passes/${passId}/use`, { method: 'POST' }),
+    onSuccess: () => refresh(),
+  });
 
   const remove = useMutation({
     mutationFn: (id: string) =>
@@ -119,7 +174,7 @@ export function PaymentsList() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Pagos</h2>
           <p className="text-sm text-muted mt-1">
-            Registrá lo que pagó cada cliente: importe, fecha y una observación.
+            Registrá lo que pagó cada cliente y el servicio que está cubriendo.
           </p>
         </div>
         <button
@@ -140,7 +195,7 @@ export function PaymentsList() {
 
       <div className="space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid gap-3 sm:grid-cols-3 flex-1">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 flex-1">
             <label className="space-y-1 text-sm">
               <span className="text-muted">Cliente</span>
               <select
@@ -152,6 +207,22 @@ export function PaymentsList() {
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>
                     {clientLabel(client)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-muted">Servicio</span>
+              <select
+                className="input w-full"
+                value={serviceId}
+                onChange={(event) => setServiceId(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {services.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                    {item.sessionCount > 1 ? ` (${item.sessionCount} clases)` : ''}
                   </option>
                 ))}
               </select>
@@ -228,12 +299,32 @@ export function PaymentsList() {
         </div>
       </div>
 
+      {ranking.length ? (
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {ranking.slice(0, 4).map((row) => (
+            <article
+              key={row.serviceId ?? 'none'}
+              className="panel rounded-2xl px-4 py-3"
+            >
+              <p className="text-xs text-muted">Más vendido</p>
+              <p className="font-medium mt-1 truncate">{row.name}</p>
+              <p className="text-sm text-muted mt-1 tabular-nums">
+                {row.payments} {row.payments === 1 ? 'pago' : 'pagos'} ·{' '}
+                {money(row.amount)}
+              </p>
+            </article>
+          ))}
+        </section>
+      ) : null}
+
       {formOpen ? (
         <PaymentForm
           key={editing?.id ?? 'new'}
           payment={editing}
           clients={clients}
+          services={services}
           defaultClientId={clientId || editing?.client.id}
+          defaultServiceId={serviceId || editing?.service?.id}
           onCancel={() => {
             setFormOpen(false);
             setEditing(null);
@@ -267,8 +358,10 @@ export function PaymentsList() {
               <thead className="text-xs text-muted border-b border-line bg-panel-2">
                 <tr>
                   <th className="font-medium px-5 py-3">Cliente</th>
+                  <th className="font-medium px-5 py-3">Servicio</th>
                   <th className="font-medium px-5 py-3">Fecha</th>
                   <th className="font-medium px-5 py-3 text-right">Importe</th>
+                  <th className="font-medium px-5 py-3">Pack</th>
                   <th className="font-medium px-5 py-3">Observación</th>
                   <th className="font-medium px-5 py-3" />
                 </tr>
@@ -279,17 +372,33 @@ export function PaymentsList() {
                     <td className="px-5 py-4 font-medium">
                       {clientLabel(payment.client)}
                     </td>
+                    <td className="px-5 py-4 text-muted">
+                      {payment.service?.name ?? 'Sin servicio'}
+                    </td>
                     <td className="px-5 py-4 text-muted whitespace-nowrap">
                       {dateLabel(payment.paidAt)}
                     </td>
                     <td className="px-5 py-4 text-right tabular-nums font-medium whitespace-nowrap">
                       {money(payment.amount)}
                     </td>
+                    <td className="px-5 py-4 text-muted whitespace-nowrap text-xs">
+                      {payment.pass ? packLabel(payment.pass) : '—'}
+                    </td>
                     <td className="px-5 py-4 text-muted max-w-xs">
                       {payment.notes || 'Sin observación'}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-wrap gap-2 justify-end">
+                        {payment.pass && canUseClass(payment.pass) ? (
+                          <button
+                            type="button"
+                            className="btn-secondary min-h-10 px-3 text-sm"
+                            disabled={consumePass.isPending}
+                            onClick={() => consumePass.mutate(payment.pass!.id)}
+                          >
+                            Usar clase
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn-secondary min-h-10 px-3 text-sm"
@@ -350,13 +459,17 @@ export function PaymentsList() {
 function PaymentForm({
   payment,
   clients,
+  services,
   defaultClientId,
+  defaultServiceId,
   onCancel,
   onSaved,
 }: {
   payment: PaymentRow | null;
   clients: ClientRow[];
+  services: CatalogService[];
   defaultClientId?: string;
+  defaultServiceId?: string;
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -364,11 +477,19 @@ function PaymentForm({
   const [userId, setUserId] = useState(
     payment?.client.id ?? defaultClientId ?? '',
   );
+  const [serviceId, setServiceId] = useState(
+    payment?.service?.id ?? defaultServiceId ?? '',
+  );
+  const [cover, setCover] = useState<'pack' | 'session'>(
+    payment ? (payment.sessionsGranted > 1 ? 'pack' : 'session') : 'pack',
+  );
   const [amount, setAmount] = useState(
     payment ? String(payment.amount).replace('.', ',') : '',
   );
   const [paidAt, setPaidAt] = useState(payment?.paidAt ?? todayIso());
   const [notes, setNotes] = useState(payment?.notes ?? '');
+  const selected = services.find((item) => item.id === serviceId);
+  const isPack = (selected?.sessionCount ?? 1) > 1;
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -377,6 +498,8 @@ function PaymentForm({
         amount: Number(amount.replace(',', '.')),
         paidAt,
         notes: notes.trim() || null,
+        serviceId: serviceId || null,
+        cover: isPack ? cover : undefined,
       });
       if (payment) {
         return api<PaymentRow>(`/admin/payments/${payment.id}`, {
@@ -412,7 +535,8 @@ function PaymentForm({
           {isEdit ? 'Editar pago' : 'Nuevo pago'}
         </h3>
         <p className="text-xs text-muted mt-1">
-          El importe y la fecha son obligatorios.
+          El importe y la fecha son obligatorios. Si es un pack, elegí si paga
+          todas las clases o una sola.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -432,6 +556,47 @@ function PaymentForm({
             ))}
           </select>
         </label>
+        <label className="space-y-1 text-sm sm:col-span-3">
+          <span className="text-muted">Servicio</span>
+          <select
+            className="input w-full"
+            value={serviceId}
+            onChange={(event) => setServiceId(event.target.value)}
+          >
+            <option value="">Sin servicio</option>
+            {services.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+                {item.sessionCount > 1 ? ` · pack de ${item.sessionCount}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        {isPack ? (
+          <fieldset className="sm:col-span-3 space-y-2">
+            <legend className="text-sm text-muted">Este pago cubre</legend>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2 text-sm min-h-10 px-3 rounded-full border border-line">
+                <input
+                  type="radio"
+                  name="cover"
+                  checked={cover === 'pack'}
+                  onChange={() => setCover('pack')}
+                />
+                Pack completo ({selected?.sessionCount} clases)
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm min-h-10 px-3 rounded-full border border-line">
+                <input
+                  type="radio"
+                  name="cover"
+                  checked={cover === 'session'}
+                  onChange={() => setCover('session')}
+                />
+                1 clase
+              </label>
+            </div>
+          </fieldset>
+        ) : null}
         <label className="space-y-1 text-sm">
           <span className="text-muted">Importe</span>
           <input

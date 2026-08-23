@@ -39,6 +39,8 @@ export class ServicesService {
     enabled?: boolean;
     requiresAppointment?: boolean;
     sortOrder?: number;
+    sessionCount?: number;
+    capacity?: number;
     metadata?: object;
   }) {
     const businessId = await this.businesses.getCurrentId();
@@ -56,6 +58,8 @@ export class ServicesService {
         enabled: input.enabled ?? true,
         requiresAppointment: input.requiresAppointment ?? true,
         sortOrder: input.sortOrder ?? 0,
+        sessionCount: input.sessionCount ?? 1,
+        capacity: input.capacity ?? 1,
         metadata: input.metadata,
       },
     });
@@ -72,6 +76,8 @@ export class ServicesService {
       enabled: boolean;
       requiresAppointment: boolean;
       sortOrder: number;
+      sessionCount: number;
+      capacity: number;
       metadata: object;
     }>,
   ) {
@@ -104,6 +110,8 @@ export class ServicesService {
       price: Prisma.Decimal | null;
       priceDescription: string | null;
       requiresAppointment: boolean;
+      sessionCount?: number;
+      capacity?: number;
     }>,
   ): string {
     if (!services.length) return 'No hay servicios cargados todavía.';
@@ -114,7 +122,13 @@ export class ServicesService {
           (service.price != null
             ? `$${service.price.toString()}`
             : 'Consultar');
-        return `- ${service.name} (${service.durationMinutes} min) — ${price}${
+        const pack =
+          (service.sessionCount ?? 1) > 1
+            ? ` pack de ${service.sessionCount} clases`
+            : '';
+        const cupo =
+          (service.capacity ?? 1) > 1 ? ` cupo ${service.capacity}` : '';
+        return `- ${service.name} (${service.durationMinutes} min${pack}${cupo}) — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;
       })

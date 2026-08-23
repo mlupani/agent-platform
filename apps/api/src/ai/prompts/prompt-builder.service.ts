@@ -184,6 +184,8 @@ export class PromptBuilderService {
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
       `Si el usuario deja datos de contacto y NO reserva, usá createLead.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
+      `Si hay una clase a esa hora y queda lugar (remaining/capacity), anotá a la clienta ahí con createAppointment. No inventes un horario paralelo.`,
+      `checkAvailability y createAppointment son opt-in: solo existen si figuran en herramientas habilitadas.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
       `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`,
       ctx.business.googleReviewsUrl
@@ -238,6 +240,8 @@ export class PromptBuilderService {
       price?: { toString(): string } | string | null;
       priceDescription?: string | null;
       requiresAppointment?: boolean;
+      sessionCount?: number;
+      capacity?: number;
     }>,
   ): string {
     if (!services.length) return '';
@@ -247,7 +251,13 @@ export class PromptBuilderService {
           service.priceDescription ||
           (service.price != null ? `$${String(service.price)}` : 'Consultar');
         const idPart = service.id ? ` [id=${service.id}]` : '';
-        return `- ${service.name}${idPart} (${service.durationMinutes} min) — ${price}${
+        const pack =
+          (service.sessionCount ?? 1) > 1
+            ? ` pack de ${service.sessionCount} clases`
+            : '';
+        const cupo =
+          (service.capacity ?? 1) > 1 ? ` cupo ${service.capacity}` : '';
+        return `- ${service.name}${idPart} (${service.durationMinutes} min${pack}${cupo}) — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;
       })

@@ -32,7 +32,7 @@ export class CreateAppointmentTool implements AgentTool {
   private readonly logger = new Logger(CreateAppointmentTool.name);
   readonly name = 'createAppointment';
   readonly description =
-    'Reserva una cita en un horario disponible (usar checkAvailability antes). serviceId puede ser UUID o nombre del servicio. También guarda el lead si hay datos de contacto.';
+    'Anota una cita o suma a una alumna a una clase con lugar (usar checkAvailability antes). serviceId puede ser UUID o nombre del servicio. También guarda el lead si hay datos de contacto.';
   readonly schema = schema;
   readonly risk = 'WRITE' as const;
 

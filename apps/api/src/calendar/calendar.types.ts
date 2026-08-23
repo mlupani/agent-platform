@@ -20,6 +20,9 @@ export interface AvailableSlot {
   end: string;
   startIso: string;
   endIso: string;
+  remaining?: number;
+  capacity?: number;
+  serviceId?: string;
 }
 
 export interface CreateAppointmentInput {

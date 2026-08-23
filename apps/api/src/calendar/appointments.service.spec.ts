@@ -58,7 +58,7 @@ describe('AppointmentsService', () => {
     });
 
     expect(availability.getAvailableSlots).toHaveBeenCalledWith(
-      expect.objectContaining({ durationMinutes: 45 }),
+      expect.objectContaining({ durationMinutes: 45, serviceId: 'svc-1' }),
     );
     expect(result.slots).toHaveLength(1);
     expect(result.serviceName).toBe('Consulta');

@@ -39,7 +39,14 @@ export class AppointmentsService {
           : {}),
       },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
       orderBy: { startsAt: 'asc' },
       take: 200,
@@ -123,6 +130,195 @@ export class AppointmentsService {
     };
   }
 
+  async listClasses(businessId: string, from: string, to: string) {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { timezone: true },
+    });
+    const zone = business.timezone;
+    const fromDt = DateTime.fromISO(from, { setZone: true }).setZone(zone);
+    const toDt = DateTime.fromISO(to, { setZone: true }).setZone(zone);
+    const rangeStart = fromDt.toUTC().toJSDate();
+    const rangeEnd = toDt.toUTC().toJSDate();
+
+    const [appointments, templates] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          businessId,
+          status: { in: ['pending', 'confirmed'] },
+          startsAt: { gte: rangeStart, lt: rangeEnd },
+        },
+        include: {
+          service: {
+            select: {
+              id: true,
+              name: true,
+              durationMinutes: true,
+              capacity: true,
+            },
+          },
+        },
+        orderBy: { startsAt: 'asc' },
+      }),
+      this.prisma.classTemplate.findMany({
+        where: { businessId },
+        include: {
+          service: {
+            select: {
+              id: true,
+              name: true,
+              durationMinutes: true,
+              capacity: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const sessions = new Map<
+      string,
+      {
+        id: string;
+        date: string;
+        start: string;
+        startsAt: string;
+        endsAt: string;
+        dayOfWeek: number;
+        service: {
+          id: string;
+          name: string;
+          durationMinutes: number;
+          capacity: number;
+        } | null;
+        capacity: number;
+        booked: number;
+        remaining: number;
+        templateId: string | null;
+        attendees: Array<{
+          id: string;
+          contactName: string | null;
+          contactPhone: string | null;
+          contactEmail: string | null;
+          userId: string | null;
+          status: string;
+          notes: string | null;
+        }>;
+      }
+    >();
+
+    const keyOf = (serviceId: string | null, startsAt: DateTime) =>
+      `${serviceId ?? 'none'}|${startsAt.toUTC().toISO()}`;
+
+    for (const row of appointments) {
+      const startsAt = DateTime.fromJSDate(row.startsAt, {
+        zone: 'utc',
+      }).setZone(zone);
+      const endsAt = DateTime.fromJSDate(row.endsAt, { zone: 'utc' }).setZone(
+        zone,
+      );
+      const key = keyOf(row.serviceId, startsAt);
+      const existing = sessions.get(key);
+      const attendee = {
+        id: row.id,
+        contactName: row.contactName,
+        contactPhone: row.contactPhone,
+        contactEmail: row.contactEmail,
+        userId: row.userId,
+        status: row.status,
+        notes: row.notes,
+      };
+      if (existing) {
+        existing.attendees.push(attendee);
+        existing.booked += 1;
+        existing.remaining = Math.max(0, existing.capacity - existing.booked);
+        continue;
+      }
+      const capacity = Math.max(1, row.service?.capacity ?? 1);
+      sessions.set(key, {
+        id: key,
+        date: startsAt.toISODate()!,
+        start: startsAt.toFormat('HH:mm'),
+        startsAt: startsAt.toISO()!,
+        endsAt: endsAt.toISO()!,
+        dayOfWeek: startsAt.weekday - 1,
+        service: row.service
+          ? {
+              id: row.service.id,
+              name: row.service.name,
+              durationMinutes: row.service.durationMinutes,
+              capacity: row.service.capacity,
+            }
+          : null,
+        capacity,
+        booked: 1,
+        remaining: Math.max(0, capacity - 1),
+        templateId: null,
+        attendees: [attendee],
+      });
+    }
+
+    for (
+      let cursor = fromDt.startOf('day');
+      cursor < toDt;
+      cursor = cursor.plus({ days: 1 })
+    ) {
+      const dayOfWeek = cursor.weekday - 1;
+      for (const template of templates.filter(
+        (item) => item.dayOfWeek === dayOfWeek,
+      )) {
+        const [hour, minute] = template.startTime.split(':').map(Number);
+        const startsAt = cursor.set({
+          hour,
+          minute,
+          second: 0,
+          millisecond: 0,
+        });
+        const endsAt = startsAt.plus({
+          minutes: template.service.durationMinutes,
+        });
+        const capacity = Math.max(
+          1,
+          template.capacity ?? template.service.capacity ?? 1,
+        );
+        const key = keyOf(template.serviceId, startsAt);
+        const existing = sessions.get(key);
+        if (existing) {
+          existing.templateId = template.id;
+          existing.capacity = capacity;
+          existing.remaining = Math.max(0, capacity - existing.booked);
+          continue;
+        }
+        sessions.set(key, {
+          id: key,
+          date: startsAt.toISODate()!,
+          start: startsAt.toFormat('HH:mm'),
+          startsAt: startsAt.toISO()!,
+          endsAt: endsAt.toISO()!,
+          dayOfWeek,
+          service: {
+            id: template.service.id,
+            name: template.service.name,
+            durationMinutes: template.service.durationMinutes,
+            capacity: template.service.capacity,
+          },
+          capacity,
+          booked: 0,
+          remaining: capacity,
+          templateId: template.id,
+          attendees: [],
+        });
+      }
+    }
+
+    return {
+      timezone: zone,
+      sessions: [...sessions.values()].sort(
+        (a, b) =>
+          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+      ),
+    };
+  }
+
   async deleteFeedItem(
     businessId: string,
     source: 'local' | 'google',
@@ -147,7 +343,14 @@ export class AppointmentsService {
     const appointment = await this.prisma.appointment.findFirst({
       where: { id, businessId },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
     });
     if (!appointment) throw new NotFoundException('Cita no encontrada');
@@ -184,6 +387,7 @@ export class AppointmentsService {
       date: params.date,
       durationMinutes: duration,
       timezone: business.timezone,
+      serviceId: params.serviceId,
     });
 
     const zone = business.timezone || 'UTC';
@@ -226,7 +430,7 @@ export class AppointmentsService {
           businessId: input.businessId,
           enabled: true,
         },
-        select: { id: true, name: true, durationMinutes: true },
+        select: { id: true, name: true, durationMinutes: true, capacity: true },
       });
       if (!service) throw new NotFoundException('Servicio no encontrado');
     }
@@ -248,15 +452,25 @@ export class AppointmentsService {
       date,
       durationMinutes,
       timezone,
+      serviceId: service?.id,
     });
     const match = slots.find(
       (slot) =>
         DateTime.fromISO(slot.startIso).toMillis() === startsAt.toMillis(),
     );
     if (!match) {
-      throw new BadRequestException(
-        'Ese horario no está disponible. Pedí checkAvailability primero.',
-      );
+      const canJoin = await this.canJoinClass({
+        businessId: input.businessId,
+        serviceId: service?.id,
+        startsAt,
+        endsAt,
+        timezone,
+      });
+      if (!canJoin) {
+        throw new BadRequestException(
+          'Ese horario no está disponible. Pedí checkAvailability primero.',
+        );
+      }
     }
 
     const extras = await this.resolveContactExtras(input);
@@ -301,7 +515,14 @@ export class AppointmentsService {
         notes: input.notes,
       },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
     });
   }
@@ -325,7 +546,14 @@ export class AppointmentsService {
           : appointment.notes,
       },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
     });
   }
@@ -353,6 +581,7 @@ export class AppointmentsService {
       durationMinutes,
       timezone,
       excludeAppointmentId: id,
+      serviceId: appointment.serviceId ?? undefined,
     });
     const match = slots.find(
       (slot) =>
@@ -387,7 +616,14 @@ export class AppointmentsService {
         status: 'confirmed',
       },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
     });
   }
@@ -405,11 +641,81 @@ export class AppointmentsService {
         ],
       },
       include: {
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
       },
       orderBy: { startsAt: 'asc' },
       take: 10,
     });
+  }
+
+  private async canJoinClass(params: {
+    businessId: string;
+    serviceId?: string;
+    startsAt: DateTime;
+    endsAt: DateTime;
+    timezone: string;
+  }): Promise<boolean> {
+    if (!params.serviceId) return false;
+    const dayOfWeek = params.startsAt.weekday - 1;
+    const startTime = params.startsAt.toFormat('HH:mm');
+    const from = params.startsAt.toUTC().toJSDate();
+    const to = params.endsAt.toUTC().toJSDate();
+
+    const [overlapping, template, service] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          businessId: params.businessId,
+          status: { in: ['pending', 'confirmed'] },
+          startsAt: { lt: to },
+          endsAt: { gt: from },
+        },
+        select: { serviceId: true, startsAt: true },
+      }),
+      this.prisma.classTemplate.findFirst({
+        where: {
+          businessId: params.businessId,
+          serviceId: params.serviceId,
+          dayOfWeek,
+          startTime,
+        },
+      }),
+      this.prisma.service.findFirst({
+        where: { id: params.serviceId, businessId: params.businessId },
+        select: { capacity: true },
+      }),
+    ]);
+
+    const otherClass = overlapping.some(
+      (row) => row.serviceId && row.serviceId !== params.serviceId,
+    );
+    if (otherClass) return false;
+
+    const sameStart = overlapping.filter(
+      (row) =>
+        DateTime.fromJSDate(row.startsAt, { zone: 'utc' })
+          .setZone(params.timezone)
+          .toMillis() === params.startsAt.toMillis(),
+    );
+    if (
+      overlapping.length &&
+      sameStart.length !== overlapping.length &&
+      !sameStart.length
+    ) {
+      return false;
+    }
+
+    const capacity = Math.max(
+      1,
+      template?.capacity ?? service?.capacity ?? 1,
+    );
+    return sameStart.length < capacity;
   }
 
   private async resolveContactExtras(input: CreateAppointmentInput): Promise<{

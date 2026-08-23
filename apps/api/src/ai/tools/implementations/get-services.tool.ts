@@ -38,6 +38,8 @@ export class GetServicesTool implements AgentTool {
         priceDescription: true,
         requiresAppointment: true,
         enabled: true,
+        sessionCount: true,
+        capacity: true,
       },
     });
 

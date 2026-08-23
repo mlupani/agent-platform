@@ -14,6 +14,11 @@ import type {
 } from '../video-generation.provider';
 import { clampDurationForKie } from '../video-duration';
 import {
+  buildKieMarketInput,
+  DEFAULT_KIE_VIDEO_MODEL,
+  resolveKieVideoModel,
+} from '../kie-market-input';
+import {
   VideoGenerationFailedError,
   VideoProviderUnavailableError,
 } from '../video.errors';
@@ -40,9 +45,11 @@ export class KieVideoProvider implements VideoGenerationProvider {
     this.baseUrl = (
       this.config.get<string>('KIE_API_URL') || 'https://api.kie.ai'
     ).replace(/\/$/, '');
-    this.model =
-      this.config.get<string>('KIE_VIDEO_MODEL')?.trim() ||
-      'bytedance/seedance-1.5-pro';
+    const configured = this.config.get<string>('KIE_VIDEO_MODEL')?.trim();
+    this.model = resolveKieVideoModel(configured || DEFAULT_KIE_VIDEO_MODEL);
+    if (configured && configured !== this.model) {
+      this.logger.log(`Kie model alias ${configured} → ${this.model}`);
+    }
     this.timeoutMs = Number(
       this.config.get<string>('VIDEO_TIMEOUT_MS') || 12 * 60 * 1000,
     );
@@ -137,8 +144,17 @@ export class KieVideoProvider implements VideoGenerationProvider {
   ): Promise<string> {
     const payload = {
       model: this.model,
-      input: this.buildMarketInput(input, prompt, aspectRatio, durationSeconds),
+      input: buildKieMarketInput({
+        model: this.model,
+        prompt,
+        aspectRatio,
+        durationSeconds,
+        generateAudio: Boolean(input.generateAudio),
+        resolution: input.resolution,
+        referenceImageUrls: input.referenceImageUrls,
+      }),
     };
+    this.logger.log(`Kie createTask model=${this.model}`);
 
     const res = await requestJson<{
       code?: number;
@@ -166,27 +182,6 @@ export class KieVideoProvider implements VideoGenerationProvider {
       );
     }
     return taskId;
-  }
-
-  private buildMarketInput(
-    input: VideoGenerationInput,
-    prompt: string,
-    aspectRatio: string,
-    durationSeconds: number,
-  ): Record<string, unknown> {
-    const refs = (input.referenceImageUrls ?? []).filter(Boolean).slice(0, 2);
-    const body: Record<string, unknown> = {
-      prompt,
-      aspect_ratio: aspectRatio,
-      duration: durationSeconds,
-      generate_audio: Boolean(input.generateAudio),
-    };
-    if (input.resolution) body.resolution = input.resolution;
-    if (refs.length) {
-      body.input_urls = refs;
-      body.image_urls = refs;
-    }
-    return body;
   }
 
   private async createVeoTask(

@@ -60,17 +60,19 @@ export const replaceHoursSchema = z.object({
 export const createServiceSchema = z.object({
   name: z.string().min(1).max(160),
   description: z.string().max(2000).optional(),
-  durationMinutes: z
+  durationMinutes: z.coerce
     .number()
     .int()
     .min(5)
     .max(24 * 60)
     .default(30),
-  price: z.number().nonnegative().optional().nullable(),
+  price: z.coerce.number().nonnegative().optional().nullable(),
   priceDescription: z.string().max(200).optional().nullable(),
   enabled: z.boolean().optional(),
   requiresAppointment: z.boolean().optional(),
-  sortOrder: z.number().int().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+  sessionCount: z.coerce.number().int().min(1).max(500).optional(),
+  capacity: z.coerce.number().int().min(1).max(80).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 

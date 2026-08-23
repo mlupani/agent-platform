@@ -29,6 +29,8 @@ interface ServiceRow {
   durationMinutes: number;
   price?: string | number | null;
   enabled: boolean;
+  sessionCount?: number;
+  capacity?: number;
 }
 
 interface BrandingConfig {
@@ -669,41 +671,7 @@ export function PersonalizationEditor() {
       ) : null}
 
       {tab === 'servicios' ? (
-        <section className="panel rounded-2xl p-5 space-y-3">
-          <p className="text-sm text-muted">
-            Servicios que el agente puede ofrecer al agendar citas.
-          </p>
-          <ul className="divide-y divide-line">
-            {(data?.services ?? []).map((service) => (
-              <li
-                key={service.id}
-                className="py-3 flex items-center justify-between gap-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{service.name}</p>
-                  <p className="text-xs text-muted">
-                    {service.durationMinutes} min
-                    {service.price !== null && service.price !== undefined
-                      ? ` · $${service.price}`
-                      : ''}
-                  </p>
-                </div>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full ${
-                    service.enabled ? 'badge-success' : 'badge-muted'
-                  }`}
-                >
-                  {service.enabled ? 'Activo' : 'Off'}
-                </span>
-              </li>
-            ))}
-            {!data?.services?.length ? (
-              <li className="py-4 text-sm text-muted">
-                No hay servicios todavía.
-              </li>
-            ) : null}
-          </ul>
-        </section>
+        <ServicesPanel services={data?.services ?? []} />
       ) : null}
 
       {tab === 'mensajes' ? (
@@ -723,5 +691,222 @@ export function PersonalizationEditor() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function ServicesPanel({ services }: { services: ServiceRow[] }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('30');
+  const [price, setPrice] = useState('');
+  const [sessionCount, setSessionCount] = useState('1');
+  const [capacity, setCapacity] = useState('1');
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [capacities, setCapacities] = useState<Record<string, string>>({});
+
+  const create = useMutation({
+    mutationFn: () =>
+      api('/admin/services', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          durationMinutes: Number(durationMinutes) || 30,
+          price: price.trim() ? Number(price.replace(',', '.')) : null,
+          sessionCount: Math.max(1, Number(sessionCount) || 1),
+          capacity: Math.max(1, Number(capacity) || 1),
+        }),
+      }),
+    onSuccess: async () => {
+      setName('');
+      setDurationMinutes('30');
+      setPrice('');
+      setSessionCount('1');
+      setCapacity('1');
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+      await queryClient.invalidateQueries({ queryKey: ['services'] });
+    },
+  });
+
+  const updateCount = useMutation({
+    mutationFn: ({
+      id,
+      sessionCount: count,
+      capacity: cupo,
+    }: {
+      id: string;
+      sessionCount?: number;
+      capacity?: number;
+    }) =>
+      api(`/admin/services/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          ...(count !== undefined ? { sessionCount: count } : {}),
+          ...(cupo !== undefined ? { capacity: cupo } : {}),
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+      await queryClient.invalidateQueries({ queryKey: ['services'] });
+    },
+  });
+
+  return (
+    <section className="panel rounded-2xl p-5 space-y-5">
+      <p className="text-sm text-muted">
+        1 clase = se paga y se usa una sola vez. 8 = pack de 8 clases.
+      </p>
+      <form
+        className="grid gap-3 sm:grid-cols-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!name.trim() || create.isPending) return;
+          create.mutate();
+        }}
+      >
+        <label className="space-y-1 text-sm sm:col-span-2">
+          <span className="text-muted">Nuevo servicio</span>
+          <input
+            className="input w-full"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Pack 8 clases"
+            required
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-muted">Duración (min)</span>
+          <input
+            className="input w-full"
+            inputMode="numeric"
+            value={durationMinutes}
+            onChange={(event) => setDurationMinutes(event.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-muted">Precio</span>
+          <input
+            className="input w-full"
+            inputMode="decimal"
+            value={price}
+            onChange={(event) => setPrice(event.target.value)}
+            placeholder="Opcional"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-muted">Clases del pack</span>
+          <input
+            className="input w-full"
+            inputMode="numeric"
+            value={sessionCount}
+            onChange={(event) => setSessionCount(event.target.value)}
+            placeholder="1"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="text-muted">Cupo de la clase</span>
+          <input
+            className="input w-full"
+            inputMode="numeric"
+            value={capacity}
+            onChange={(event) => setCapacity(event.target.value)}
+            placeholder="1"
+          />
+        </label>
+        <div className="sm:col-span-5">
+          <button
+            type="submit"
+            className="btn-primary min-h-11 px-4"
+            disabled={!name.trim() || create.isPending}
+          >
+            {create.isPending ? 'Agregando…' : 'Agregar servicio'}
+          </button>
+        </div>
+        {create.isError ? (
+          <p className="text-sm text-rose sm:col-span-5">
+            {(create.error as Error).message || 'No se pudo crear el servicio.'}
+          </p>
+        ) : null}
+      </form>
+      <ul className="divide-y divide-line">
+        {services.map((service) => {
+          const count = counts[service.id] ?? String(service.sessionCount ?? 1);
+          const cupo = capacities[service.id] ?? String(service.capacity ?? 1);
+          return (
+            <li
+              key={service.id}
+              className="py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm"
+            >
+              <div>
+                <p className="font-medium">{service.name}</p>
+                <p className="text-xs text-muted">
+                  {service.durationMinutes} min
+                  {service.price !== null && service.price !== undefined
+                    ? ` · $${service.price}`
+                    : ''}
+                  {(service.sessionCount ?? 1) > 1
+                    ? ` · pack de ${service.sessionCount} clases`
+                    : ' · servicio único'}
+                  {(service.capacity ?? 1) > 1
+                    ? ` · cupo ${service.capacity}`
+                    : ' · turno exclusivo'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  Pack
+                  <input
+                    className="input w-16"
+                    inputMode="numeric"
+                    value={count}
+                    onChange={(event) =>
+                      setCounts((prev) => ({
+                        ...prev,
+                        [service.id]: event.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      const next = Math.max(1, Number(count) || 1);
+                      if (next === (service.sessionCount ?? 1)) return;
+                      updateCount.mutate({ id: service.id, sessionCount: next });
+                    }}
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  Cupo
+                  <input
+                    className="input w-16"
+                    inputMode="numeric"
+                    value={cupo}
+                    onChange={(event) =>
+                      setCapacities((prev) => ({
+                        ...prev,
+                        [service.id]: event.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      const next = Math.max(1, Number(cupo) || 1);
+                      if (next === (service.capacity ?? 1)) return;
+                      updateCount.mutate({ id: service.id, capacity: next });
+                    }}
+                  />
+                </label>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${
+                    service.enabled ? 'badge-success' : 'badge-muted'
+                  }`}
+                >
+                  {service.enabled ? 'Activo' : 'Off'}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+        {!services.length ? (
+          <li className="py-4 text-sm text-muted">
+            No hay servicios todavía.
+          </li>
+        ) : null}
+      </ul>
+    </section>
   );
 }

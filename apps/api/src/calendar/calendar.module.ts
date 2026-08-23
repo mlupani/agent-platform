@@ -8,6 +8,8 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AppointmentsAdminController } from './appointments-admin.controller';
 import { AppointmentsService } from './appointments.service';
 import { AvailabilityService } from './availability.service';
+import { ClassTemplatesAdminController } from './class-templates-admin.controller';
+import { ClassTemplatesService } from './class-templates.service';
 import { AppointmentReminderProcessor } from './appointment-reminder.processor';
 import { APPOINTMENT_REMINDER_QUEUE } from './appointment-reminder.queue';
 import { AppointmentReminderScheduler } from './appointment-reminder.scheduler';
@@ -32,6 +34,7 @@ import { GoogleCalendarService } from './google-calendar.service';
     CalendarAdminController,
     GoogleOAuthController,
     AppointmentsAdminController,
+    ClassTemplatesAdminController,
     AppointmentRemindersAdminController,
   ],
   providers: [
@@ -40,6 +43,7 @@ import { GoogleCalendarService } from './google-calendar.service';
     GoogleCalendarService,
     AvailabilityService,
     AppointmentsService,
+    ClassTemplatesService,
     AppointmentReminderService,
     AppointmentReminderScheduler,
     AppointmentReminderProcessor,

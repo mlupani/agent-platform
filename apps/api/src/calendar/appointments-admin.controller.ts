@@ -75,6 +75,15 @@ export class AppointmentsAdminController {
     return this.appointments.deleteFeedItem(businessId, body.source, body.id);
   }
 
+  @Get('classes')
+  async classes(@Query('from') from: string, @Query('to') to: string) {
+    if (!from || !to) {
+      return { timezone: 'UTC', sessions: [] };
+    }
+    const businessId = await this.businesses.getCurrentId();
+    return this.appointments.listClasses(businessId, from, to);
+  }
+
   @Get('availability')
   async availability(
     @Query('date') date: string,
