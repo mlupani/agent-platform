@@ -47,7 +47,7 @@ const NAV = [
   },
   {
     href: '/clientes',
-    label: 'Clientes',
+    label: 'Alumnos',
     icon: (
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
         <circle cx="12" cy="8" r="3" />

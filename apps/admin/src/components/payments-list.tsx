@@ -174,7 +174,7 @@ export function PaymentsList() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Pagos</h2>
           <p className="text-sm text-muted mt-1">
-            Registrá lo que pagó cada cliente y el servicio que está cubriendo.
+            Registrá lo que pagó cada alumno y el servicio que está cubriendo.
           </p>
         </div>
         <button
@@ -197,7 +197,7 @@ export function PaymentsList() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 flex-1">
             <label className="space-y-1 text-sm">
-              <span className="text-muted">Cliente</span>
+              <span className="text-muted">Alumno</span>
               <select
                 className="input w-full"
                 value={clientId}
@@ -249,7 +249,7 @@ export function PaymentsList() {
             </label>
           </div>
           <p className="text-sm text-muted tabular-nums lg:text-right lg:pb-2">
-            Total{hasPeriod ? ' del período' : clientId ? ' del cliente' : ''}:{' '}
+            Total{hasPeriod ? ' del período' : clientId ? ' del alumno' : ''}:{' '}
             <span className="font-semibold text-text">{money(total)}</span>
           </p>
         </div>
@@ -349,7 +349,7 @@ export function PaymentsList() {
             {hasPeriod
               ? 'No hay pagos en este período.'
               : clientId
-                ? 'Todavía no hay pagos de este cliente. Registrá el primero.'
+                ? 'Todavía no hay pagos de este alumno. Registrá el primero.'
                 : 'Todavía no hay pagos. Registrá el primero.'}
           </p>
         ) : (
@@ -357,7 +357,7 @@ export function PaymentsList() {
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-muted border-b border-line bg-panel-2">
                 <tr>
-                  <th className="font-medium px-5 py-3">Cliente</th>
+                  <th className="font-medium px-5 py-3">Alumno</th>
                   <th className="font-medium px-5 py-3">Servicio</th>
                   <th className="font-medium px-5 py-3">Fecha</th>
                   <th className="font-medium px-5 py-3 text-right">Importe</th>
@@ -541,14 +541,14 @@ function PaymentForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="space-y-1 text-sm sm:col-span-3">
-          <span className="text-muted">Cliente</span>
+          <span className="text-muted">Alumno</span>
           <select
             className="input w-full"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
             required
           >
-            <option value="">Elegí un cliente</option>
+            <option value="">Elegí un alumno</option>
             {clients.map((client) => (
               <option key={client.id} value={client.id}>
                 {clientLabel(client)}

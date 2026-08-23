@@ -40,7 +40,7 @@ const EVENT_LABEL: Record<string, string> = {
   captured: 'Lead capturado',
   status_changed: 'Estado actualizado',
   conversion_suggested: 'Conversión sugerida',
-  converted: 'Convertido a cliente',
+  converted: 'Convertido a alumno',
   follow_up_scheduled: 'Seguimiento programado',
   follow_up_rescheduled: 'Seguimiento reprogramado',
   follow_up_cancelled: 'Seguimiento cancelado',
@@ -148,7 +148,7 @@ export function LeadDetailView({ id }: { id: string }) {
               href="/clientes"
               className="btn-secondary min-h-11 px-4 inline-flex items-center"
             >
-              Ver cliente
+              Ver alumno
             </Link>
           ) : null}
         </div>
@@ -157,7 +157,7 @@ export function LeadDetailView({ id }: { id: string }) {
       {suggested && data.status !== 'won' ? (
         <div className="rounded-2xl border border-accent/40 bg-accent/10 p-4 text-sm">
           Hay una señal de conversión pendiente. Revisá si este lead ya es
-          cliente y confirmalo a mano.
+          alumno y confirmalo a mano.
         </div>
       ) : null}
 
@@ -332,7 +332,7 @@ function LeadActions({
     return (
       <section className="panel rounded-2xl p-5 text-sm text-muted">
         Este lead ya se convirtió
-        {lead.user?.name ? ` en ${lead.user.name}` : ' en cliente'}.
+        {lead.user?.name ? ` en ${lead.user.name}` : ' en alumno'}.
         {lead.user?.status?.name ? ` Estado: ${lead.user.status.name}.` : ''}
       </section>
     );
@@ -342,7 +342,7 @@ function LeadActions({
     <section className="panel rounded-2xl p-5 space-y-4">
       <h3 className="font-medium">Conversión</h3>
       <p className="text-sm text-muted">
-        Convertir vincula o crea el cliente y deja la conversación intacta.
+        Convertir vincula o crea el alumno y deja la conversación intacta.
       </p>
       {convert.isError ? (
         <p className="text-sm text-rose">{(convert.error as Error).message}</p>
@@ -353,7 +353,7 @@ function LeadActions({
         disabled={convert.isPending || lead.status === 'lost'}
         onClick={() => convert.mutate()}
       >
-        {convert.isPending ? 'Convirtiendo…' : 'Convertir a cliente'}
+        {convert.isPending ? 'Convirtiendo…' : 'Convertir a alumno'}
       </button>
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <label className="space-y-1 text-sm">

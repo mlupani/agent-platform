@@ -34,7 +34,7 @@ const CHANNEL_META: Array<{
   {
     id: 'email',
     label: 'Email',
-    hint: 'Usa el email del cliente',
+    hint: 'Usa el email del alumno',
   },
   {
     id: 'instagram',
@@ -120,7 +120,7 @@ export function AppointmentRemindersForm() {
         <div>
           <h3 className="font-medium">Recordatorios automáticos</h3>
           <p className="text-sm text-muted mt-1 max-w-xl">
-            Avisamos al cliente antes del turno por el primer canal que tenga
+            Avisamos al alumno antes del turno por el primer canal que tenga
             datos y esté conectado.
           </p>
         </div>

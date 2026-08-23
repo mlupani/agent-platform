@@ -82,7 +82,7 @@ export function DashboardHome() {
       href: '/leads',
     },
     {
-      label: 'Clientes nuevos',
+      label: 'Alumnos nuevos',
       value: m?.newClientsMonth ?? 0,
       hint: deltaCopy(m?.newClientsMonthDelta),
       tone: deltaClass(m?.newClientsMonthDelta),
@@ -115,7 +115,7 @@ export function DashboardHome() {
           <p className="text-sm text-muted mt-1">
             {dashboard
               ? `Panorama de ${dashboard.period.monthLabel} · ${dashboard.business.name}`
-              : 'Resumen de leads, clientes y canales de tu negocio.'}
+              : 'Resumen de leads, alumnos y canales de tu negocio.'}
           </p>
         </div>
         <label className="flex flex-col gap-1.5 min-w-[13.5rem]">
@@ -180,7 +180,7 @@ export function DashboardHome() {
                 <div>
                   <h3 className="font-medium">Crecimiento diario</h3>
                   <p className="text-xs text-muted mt-1">
-                    Leads, clientes nuevos y conversaciones de{' '}
+                    Leads, alumnos nuevos y conversaciones de{' '}
                     {dashboard?.period.monthLabel?.toLowerCase() ?? 'este mes'}.
                   </p>
                 </div>
@@ -419,14 +419,14 @@ function MonthlyTrendChart({
     <div className="mt-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted mb-2">
         <LegendSwatch className="bg-accent" label="Leads" />
-        <LegendSwatch className="bg-teal" label="Clientes nuevos" />
+        <LegendSwatch className="bg-teal" label="Alumnos nuevos" />
         <LegendSwatch className="bg-line" label="Conversaciones" />
       </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-[220px]"
         role="img"
-        aria-label="Gráfico diario de leads, clientes y conversaciones"
+        aria-label="Gráfico diario de leads, alumnos y conversaciones"
         onMouseLeave={() => setHover(null)}
       >
         {ticks.map((tick) => (
@@ -498,7 +498,7 @@ function MonthlyTrendChart({
               onMouseEnter={() => setHover(index)}
             >
               <title>
-                {point.date}: {point.leads} leads, {point.clients} clientes,{' '}
+                {point.date}: {point.leads} leads, {point.clients} alumnos,{' '}
                 {point.conversations} conversaciones
               </title>
             </rect>
@@ -534,7 +534,7 @@ function MonthlyTrendChart({
       {active ? (
         <p className="text-xs text-muted mt-1">
           Día {Number(active.date.slice(-2))}: {active.leads} lead
-          {active.leads === 1 ? '' : 's'}, {active.clients} cliente
+          {active.leads === 1 ? '' : 's'}, {active.clients} alumno
           {active.clients === 1 ? '' : 's'}, {active.conversations}{' '}
           {active.conversations === 1 ? 'conversación' : 'conversaciones'}.
         </p>

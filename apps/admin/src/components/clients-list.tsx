@@ -144,7 +144,7 @@ export function ClientsList() {
     <div className="space-y-6 max-w-4xl">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Clientes</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Alumnos</h2>
           <p className="text-sm text-muted mt-1">
             Contactos del negocio: los que llegan por el asistente y los que
             cargás a mano.
@@ -161,7 +161,7 @@ export function ClientsList() {
             openCreate();
           }}
         >
-          {formOpen && !editing ? 'Cerrar' : 'Nuevo cliente'}
+          {formOpen && !editing ? 'Cerrar' : 'Nuevo alumno'}
         </button>
       </header>
 
@@ -226,14 +226,14 @@ export function ClientsList() {
 
       <section className="panel rounded-2xl overflow-hidden">
         {isLoading ? (
-          <p className="p-5 text-sm text-muted">Cargando clientes…</p>
+          <p className="p-5 text-sm text-muted">Cargando alumnos…</p>
         ) : !data.length ? (
           <p className="p-5 text-sm text-muted">
             {nameQuery
-              ? 'No hay clientes que coincidan con esa búsqueda.'
+              ? 'No hay alumnos que coincidan con esa búsqueda.'
               : filter === 'todos'
-                ? 'Todavía no hay clientes. Cargá uno a mano o esperá a que el asistente registre un contacto.'
-                : 'No hay clientes con este estado.'}
+                ? 'Todavía no hay alumnos. Cargá uno a mano o esperá a que el asistente registre un contacto.'
+                : 'No hay alumnos con este estado.'}
           </p>
         ) : (
           <ul className="divide-y divide-line">
@@ -364,7 +364,7 @@ export function ClientsList() {
                 {remove.isError && confirmId === client.id ? (
                   <p className="text-sm text-rose">
                     {(remove.error as Error).message ||
-                      'No se pudo eliminar el cliente.'}
+                      'No se pudo eliminar el alumno.'}
                   </p>
                 ) : null}
               </li>
@@ -434,7 +434,7 @@ function ClientForm({
     >
       <div>
         <h3 className="font-medium">
-          {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
+          {isEdit ? 'Editar alumno' : 'Nuevo alumno'}
         </h3>
         <p className="text-xs text-muted mt-1">
           Completá al menos un dato de contacto.
@@ -498,7 +498,7 @@ function ClientForm({
       </label>
       {mutation.isError ? (
         <p className="text-sm text-rose">
-          {(mutation.error as Error).message || 'No se pudo guardar el cliente.'}
+          {(mutation.error as Error).message || 'No se pudo guardar el alumno.'}
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -511,7 +511,7 @@ function ClientForm({
             ? 'Guardando…'
             : isEdit
               ? 'Guardar cambios'
-              : 'Guardar cliente'}
+              : 'Guardar alumno'}
         </button>
         <button
           type="button"

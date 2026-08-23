@@ -504,7 +504,7 @@ export function PersonalizationEditor() {
             />
             <span className="block text-xs text-muted">
               Se agrega al email o WhatsApp de confirmación de turno para que
-              el cliente deje una reseña. Lo copiás desde Google Maps o Google
+              el alumno deje una reseña. Lo copiás desde Google Maps o Google
               Business Profile.
             </span>
           </label>
