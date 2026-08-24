@@ -89,6 +89,19 @@ export class BusinessesService {
       }
     }
 
+    // Auto-migración de allowedModels: asegurar que gpt-4.1 y familia estén permitidos
+    const requiredModels = ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini'];
+    const currentAllowed: string[] = (business as unknown as { allowedModels?: string[] }).allowedModels ?? [];
+    const missing = requiredModels.filter((m) => !currentAllowed.includes(m));
+    if (missing.length) {
+      const updatedAllowed = [...currentAllowed, ...missing];
+      await this.prisma.business.update({
+        where: { id: business.id },
+        data: { allowedModels: updatedAllowed },
+      });
+      (business as unknown as { allowedModels: string[] }).allowedModels = updatedAllowed;
+    }
+
     return business;
   }
 
@@ -351,6 +364,20 @@ export class BusinessesService {
     if (!agent) {
       throw new NotFoundException('No hay asistente configurado');
     }
+
+    // Si se cambia el modelo, asegurar que esté permitido en business.allowedModels
+    if (data.model && data.model !== agent.model) {
+      const allowed = current.allowedModels ?? [];
+      if (!allowed.includes(data.model)) {
+        await this.prisma.business.update({
+          where: { id: current.id },
+          data: { allowedModels: [...allowed, data.model] },
+        });
+        // Actualizar en memoria para que el caller vea el nuevo allowedModels si lo necesita
+        current.allowedModels = [...allowed, data.model];
+      }
+    }
+
     return this.prisma.agentConfig.update({
       where: { id: agent.id },
       data: {

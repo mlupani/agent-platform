@@ -22,6 +22,8 @@ interface AgentConfig {
   systemPrompt: string;
   customInstructions?: string | null;
   personality?: string | null;
+  model?: string;
+  provider?: string;
 }
 
 interface BusinessHour {
@@ -64,6 +66,7 @@ interface BusinessDetail {
   website?: string | null;
   googleReviewsUrl?: string | null;
   timezone: string;
+  allowedModels?: string[];
   defaultMessages?: Record<string, string> | null;
   agentConfigs?: AgentConfig[];
   businessHours?: BusinessHour[];
@@ -78,6 +81,8 @@ const TONE_OPTIONS = [
   { value: 'casual', label: 'casual' },
   { value: 'custom', label: 'personalizado' },
 ];
+
+
 
 const DAY_LABELS = [
   'Lunes',
@@ -109,6 +114,7 @@ export function PersonalizationEditor() {
   const agent = data?.agentConfigs?.[0];
   const [tone, setTone] = useState('professional_warm');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [model, setModel] = useState('gpt-4.1-mini');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [phone, setPhone] = useState('');
@@ -169,6 +175,7 @@ export function PersonalizationEditor() {
     if (agent) {
       setTone(agent.tone ?? 'professional_warm');
       setSystemPrompt(agent.systemPrompt ?? '');
+      setModel(agent.model ?? 'gpt-4.1-mini');
     }
   }
 
@@ -176,7 +183,7 @@ export function PersonalizationEditor() {
     mutationFn: () =>
       api('/admin/business/assistant', {
         method: 'PATCH',
-        body: JSON.stringify({ tone, systemPrompt }),
+        body: JSON.stringify({ tone, systemPrompt, model: model.trim() || 'gpt-4.1-mini' }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['current-business'] });
@@ -322,6 +329,31 @@ export function PersonalizationEditor() {
         <section className="panel rounded-2xl p-5 space-y-4">
           <h3 className="font-medium">Identidad del agente</h3>
           <label className="block space-y-1 text-sm">
+            <span className="text-muted">Modelo</span>
+            <input
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2 mono text-sm"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="gpt-4.1-mini"
+              list="model-suggestions"
+            />
+            <datalist id="model-suggestions">
+              <option value="gpt-4.1-mini" />
+              <option value="gpt-5-mini" />
+              <option value="gpt-4.1" />
+              <option value="gpt-4o-mini" />
+              <option value="gpt-5" />
+            </datalist>
+            <span className="block text-xs text-muted mt-1">
+              Texto libre — probá <code className="mono text-[11px]">gpt-4.1-mini</code> vs <code className="mono text-[11px]">gpt-5-mini</code>. Se guarda en DB (<code className="mono text-[11px]">agent_configs.model</code>, no en .env). El <code className="mono text-[11px]">.env: OPENAI_DEFAULT_MODEL</code> solo se usa al crear/seedear el negocio y es ignorado después — el input manda. Ver playground debug para confirmar modelo real.
+            </span>
+            {data?.allowedModels && !data.allowedModels.includes(model.trim()) && model.trim() ? (
+              <span className="block text-xs text-amber-700 mt-1">
+                Se agregará a <code className="mono text-[11px]">allowedModels</code> al guardar ({data.allowedModels.join(', ')}).
+              </span>
+            ) : null}
+          </label>
+          <label className="block space-y-1 text-sm">
             <span className="text-muted">Tono</span>
             <select
               className="w-full rounded-lg border border-line bg-panel px-3 py-2"
@@ -343,6 +375,11 @@ export function PersonalizationEditor() {
               onChange={(e) => setSystemPrompt(e.target.value)}
             />
           </label>
+          {agent ? (
+            <p className="text-xs text-muted">
+              Actual en DB: <span className="mono">{agent.model}</span> · provider: {agent.provider ?? 'openai'} · {agent.name}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
