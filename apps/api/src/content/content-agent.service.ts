@@ -626,8 +626,9 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
 - Diferenciá: GENERATIVE BRAND ELEMENTS (sí en prompt) = colores de marca, estilo visual, mood, composición, tipografía del headline (no del logo).
 - EXACT BRAND ASSETS (NO generar) = logo, QR, códigos — se componen después sin modificación.
 - Si no hay logo, podés incluir el nombre del negocio tipografiado de forma legible como marca genérica, manteniendo jerarquía limpia.
-- Espacio tipográfico limpio para un headline corto (pocas palabras, alto contraste).
-- Jerarquía: foto/hero + mensaje + colores de marca (sin logo).
+- Para FEED_SQUARE 1:1: NO renderices ningún texto/headline en la imagen. Dejá un área superior limpia (15% altura) con fondo sólido, sin tipografía. El headline se agregará después vía BrandingRenderer (Sharp) arriba con 8% margen.
+- Para otros formatos (STORY_VERTICAL, etc.): Renderiza el headline del brief como texto nítido, centrado arriba, con al menos 5% margen seguro desde borde superior/izquierdo/derecho, nunca cortado, alto contraste, pocas palabras.
+- Jerarquía: foto/hero + headline (solo si no es FEED_SQUARE) arriba con margen seguro + colores de marca (sin logo).
 - Si Objective es OFFER: badge "OFERTA"/"PROMO"/"% OFF" legible (no garabatos) + colores de marca.
 - Si Objective es SERVICE_PROMOTION: hero del servicio + headline corto.
 - Si Objective es SPECIAL_DATE: badge de ocasión + estética de marca.

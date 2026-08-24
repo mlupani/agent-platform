@@ -690,18 +690,19 @@ export class ContentService {
       const referenceImages =
         await this.loadReferenceImageBuffers(imageRefUrls);
 
-      const marketingPrompt = this.enrichMarketingImagePrompt({
-        basePrompt: strategyResult.strategy.imagePrompt,
-        headline: strategyResult.strategy.headline,
-        objective,
-        businessName,
-        hasLogo: Boolean(logoUrl),
-        primaryColor: branding?.primaryColor,
-        secondaryColor: branding?.secondaryColor,
-      });
-
       const formats = this.resolveFormats(channels);
       for (const format of formats) {
+        const marketingPrompt = this.enrichMarketingImagePrompt({
+          basePrompt: strategyResult.strategy.imagePrompt,
+          headline: strategyResult.strategy.headline,
+          objective,
+          businessName,
+          hasLogo: Boolean(logoUrl),
+          primaryColor: branding?.primaryColor,
+          secondaryColor: branding?.secondaryColor,
+          format,
+        });
+        const isFeedSquare = format === 'FEED_SQUARE';
         await this.generateImageAsset({
           contentId,
           businessId,
@@ -709,7 +710,8 @@ export class ContentService {
           prompt: marketingPrompt,
           referenceImages,
           logoUrl,
-          headline: strategyResult.strategy.headline,
+          // FEED_SQUARE: texto lo quemamos con Sharp arriba para evitar corte; resto: texto lo genera el modelo
+          headline: isFeedSquare ? strategyResult.strategy.headline : null,
         });
       }
     }
@@ -781,12 +783,15 @@ export class ContentService {
     let finalMimeType = image.mimeType;
     const hasLogo = Boolean(input.logoUrl?.trim());
     const hasHeadline = Boolean(input.headline?.trim());
+    const isFeedSquare = input.format === 'FEED_SQUARE';
     if (hasLogo || hasHeadline) {
       try {
         const branded = await this.brandingRenderer.apply({
           imageBuffer: image.buffer,
           logoUrl: input.logoUrl,
           headline: input.headline,
+          format: input.format,
+          forceHeadline: isFeedSquare && hasHeadline,
           mimeType: image.mimeType,
         });
         if (branded.applied) {
@@ -1726,6 +1731,7 @@ export class ContentService {
     hasLogo: boolean;
     primaryColor?: string | null;
     secondaryColor?: string | null;
+    format?: ContentAssetFormat;
   }): string {
     const brandMark = input.hasLogo
       ? `The brand logo will be applied programmatically after generation (BrandingRenderer, Sharp). Do NOT render any logo in the image — leave a clean safe margin at the corner (bottom-right). Use brand colors/style only.`
@@ -1738,9 +1744,15 @@ export class ContentService {
           ? `Add a short occasion badge (readable, not decorative gibberish).`
           : '';
 
+    const isFeedSquare = input.format === 'FEED_SQUARE';
+    // FEED_SQUARE se corta arriba si el modelo lo genera: lo dejamos limpio y lo quemamos con Sharp
     const headline = input.headline?.trim()
-      ? `Short headline text on image (few words only): "${input.headline.trim()}".`
-      : 'Leave a clean area for a short headline (few words, high contrast).';
+      ? isFeedSquare
+        ? `DO NOT render any text, letters or headline in the image. Leave a clean, unobstructed top area (at least 15% of image height) with solid background, no typography. The headline "${input.headline.trim()}" will be added programmatically later — do not draw any letters, do not leave placeholder text.`
+        : `Render headline text EXACTLY as: "${input.headline.trim()}" — keep ALL letters fully visible inside image with at least 5% safe margin from top/left/right edges, centered top, high contrast, never cropped or cut off at top. Short headline only, no extra words.`
+      : isFeedSquare
+        ? 'Leave a clean top area (15% height) with solid background, no text — headline will be added programmatically.'
+        : 'Leave a clean area for a short headline (few words, high contrast) with 5% safe margin from edges if added later.';
 
     const colors = [
       input.primaryColor ? `primary ${input.primaryColor}` : null,

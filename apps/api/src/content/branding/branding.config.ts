@@ -102,7 +102,7 @@ export function loadBrandingConfig(config: ConfigService): BrandingConfig {
       marginPercent,
     },
     text: {
-      enabled: envBool(config, 'BRANDING_TEXT_ENABLED', true),
+      enabled: envBool(config, 'BRANDING_TEXT_ENABLED', false),
       position: textPosition,
       widthPercent: textWidthPercent,
       marginPercent: textMarginPercent,

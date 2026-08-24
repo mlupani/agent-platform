@@ -9,6 +9,8 @@ export interface BrandingApplyInput {
   mimeType?: string;
   headline?: string | null;
   businessName?: string | null;
+  format?: string | null;
+  forceHeadline?: boolean;
 }
 
 export interface BrandingApplyResult {
@@ -35,7 +37,7 @@ export class BrandingRenderer {
     const logoUrl = input.logoUrl?.trim() || null;
     const headline = input.headline?.trim() || null;
     const hasLogo = Boolean(logoUrl && branding.logo.enabled);
-    const hasText = Boolean(headline && branding.text.enabled);
+    const hasText = Boolean(headline && (branding.text.enabled || input.forceHeadline));
 
     if (!hasLogo && !hasText) {
       this.logger.log('[BRANDING] Logo found: false — skipping branding (no logo, no headline)');
@@ -56,7 +58,7 @@ export class BrandingRenderer {
       const composites: Array<{ input: Buffer; left: number; top: number }> = [];
       let anyApplied = false;
 
-      // 1) Headline text overlay (programmatic, not model-generated)
+      // 1) Headline text overlay (only for FEED_SQUARE to avoid cut; other formats use model text)
       if (hasText && headline) {
         try {
           const textOverlay = await this.buildHeadlineOverlay(
@@ -64,6 +66,7 @@ export class BrandingRenderer {
             baseWidth,
             baseHeight,
             branding,
+            input.format,
           );
           if (textOverlay) {
             composites.push(textOverlay);
@@ -150,17 +153,21 @@ export class BrandingRenderer {
     baseWidth: number,
     baseHeight: number,
     branding: ReturnType<typeof loadBrandingConfig>,
+    format?: string | null,
   ): Promise<{ input: Buffer; left: number; top: number } | null> {
     const clean = headline.replace(/\s+/g, ' ').trim();
     if (!clean) return null;
     // Never render fake lorem ipsum / gibberish
     if (/lorem ipsum/i.test(clean)) return null;
 
-    const widthPercent = branding.text.widthPercent;
-    const marginPercent = branding.text.marginPercent;
+    const isFeedSquare = format === 'FEED_SQUARE';
+    const widthPercent = isFeedSquare ? 84 : branding.text.widthPercent;
+    const marginPercent = isFeedSquare ? 8 : branding.text.marginPercent;
     const targetWidth = Math.max(200, Math.round(baseWidth * (widthPercent / 100)));
-    // Font size proportional to base width, clamp 22..56
-    const fontSize = Math.min(56, Math.max(22, Math.round(baseWidth * 0.045)));
+    // Font size proportional to base width, clamp 22..56 — feed_square slightly smaller to fit 3 lines safely
+    const fontSize = isFeedSquare
+      ? Math.min(48, Math.max(20, Math.round(baseWidth * 0.038)))
+      : Math.min(56, Math.max(22, Math.round(baseWidth * 0.045)));
     const lineSpacing = Math.round(fontSize * 0.3);
     const paddingX = Math.round(fontSize * 0.6);
     const paddingY = Math.round(fontSize * 0.45);
@@ -203,11 +210,12 @@ export class BrandingRenderer {
 
     const margin = Math.round(baseWidth * (marginPercent / 100));
     const svgBuffer = Buffer.from(svg);
-    const { left, top } = this.calculatePosition(branding.text.position, baseWidth, baseHeight, svgWidth, svgHeight, margin);
+    const effectivePosition = isFeedSquare ? 'top-center' : branding.text.position;
+    const { left, top } = this.calculatePosition(effectivePosition, baseWidth, baseHeight, svgWidth, svgHeight, margin);
 
     // Avoid overlap with bottom-right logo: if text is bottom and logo is bottom-right, shift text up
     // Simple heuristic: if both at bottom, keep text centered but logo sits at margin — no shift needed as text is centered
-    this.logger.log(`[BRANDING] Text overlay: "${clean.slice(0, 60)}" -> ${svgWidth}x${svgHeight} font=${fontSize}px lines=${truncated.length} pos=${branding.text.position}`);
+    this.logger.log(`[BRANDING] Text overlay: "${clean.slice(0, 60)}" -> ${svgWidth}x${svgHeight} font=${fontSize}px lines=${truncated.length} pos=${effectivePosition}${isFeedSquare ? ' (feed_square forced top)' : ''}`);
 
     // Validate SVG renders via Sharp (will throw if invalid)
     try {

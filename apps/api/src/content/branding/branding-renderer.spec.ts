@@ -212,7 +212,7 @@ describe('BrandingRenderer', () => {
 
   it('applies headline text overlay without cutting', async () => {
     const base = await createPngBuffer(1024, 1024, { r: 30, g: 30, b: 30 });
-    const renderer = new BrandingRenderer(config());
+    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_ENABLED: 'true' }));
     const result = await renderer.apply({
       imageBuffer: base,
       headline: 'Oferta exclusiva: 2x1 en Pilates',
@@ -229,7 +229,7 @@ describe('BrandingRenderer', () => {
     const base = await createPngBuffer(1024, 1350, { r: 255, g: 255, b: 255 });
     const longHeadline =
       'Esta es una promoción larguísima que debería cortarse en tres líneas como máximo para no tapar toda la imagen con texto';
-    const renderer = new BrandingRenderer(config());
+    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_ENABLED: 'true' }));
     const result = await renderer.apply({ imageBuffer: base, headline: longHeadline });
     expect(result.applied).toBe(true);
     // Should truncate with …
@@ -256,7 +256,7 @@ describe('BrandingRenderer', () => {
     const logo = await createPngBuffer(100, 50, { r: 255, g: 0, b: 0 });
     const base = await createPngBuffer(1080, 1350, { r: 240, g: 240, b: 240 });
     global.fetch = jest.fn(async () => new Response(logo, { headers: { 'content-type': 'image/png' } })) as any;
-    const renderer = new BrandingRenderer(config());
+    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_ENABLED: 'true' }));
     const result = await renderer.apply({
       imageBuffer: base,
       logoUrl: 'https://example.com/logo.png',
@@ -270,12 +270,43 @@ describe('BrandingRenderer', () => {
 
   it('headline overlay never exceeds safe margins (width 85% of base)', async () => {
     const base = await createPngBuffer(1080, 1080, { r: 255, g: 255, b: 255 });
-    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_WIDTH_PERCENT: '85' }));
+    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_ENABLED: 'true', BRANDING_TEXT_WIDTH_PERCENT: '85' }));
     const result = await renderer.apply({ imageBuffer: base, headline: 'Test safe margins' });
     expect(result.applied).toBe(true);
     // Text overlay width should be 85% of 1080 = 918, leaving 81px margin each side (centered)
     // Verify image still 1080x1080 and composite succeeded
     const meta = await sharp(result.buffer).metadata();
     expect(meta.width).toBe(1080);
+  });
+
+  it('FEED_SQUARE headline is forced at top-center even when text branding disabled (no cut)', async () => {
+    const base = await createPngBuffer(1024, 1024, { r: 240, g: 240, b: 240 });
+    const renderer = new BrandingRenderer(config()); // text disabled by default
+    const result = await renderer.apply({
+      imageBuffer: base,
+      headline: 'CUIDA TUS MECHAS DESDE CASA',
+      format: 'FEED_SQUARE',
+      forceHeadline: true,
+    });
+    expect(result.applied).toBe(true);
+    const meta = await sharp(result.buffer).metadata();
+    expect(meta.width).toBe(1024);
+    expect(meta.height).toBe(1024);
+  });
+
+  it('FEED_SQUARE headline not cut at top (8% margin)', async () => {
+    const base = await createPngBuffer(1024, 1024, { r: 255, g: 255, b: 255 });
+    const renderer = new BrandingRenderer(config({ BRANDING_TEXT_ENABLED: 'true' }));
+    const result = await renderer.apply({
+      imageBuffer: base,
+      headline: 'CUIDA TUS MECHAS DESDE CASA',
+      format: 'FEED_SQUARE',
+      forceHeadline: true,
+    });
+    expect(result.applied).toBe(true);
+    // Should be top-center, not center, to avoid covering face
+    // Verify dimensions preserved
+    const meta = await sharp(result.buffer).metadata();
+    expect(meta.height).toBe(1024);
   });
 });
