@@ -19,6 +19,14 @@ export class KnowledgeService {
 
   async getWorkspace() {
     const businessId = await this.businesses.getCurrentId();
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const expectedName = business?.name
+      ? `${business.name} — Conocimiento`
+      : 'Conocimiento principal';
+
     const bases = await this.prisma.knowledgeBase.findMany({
       where: { businessId },
       include: {
@@ -36,7 +44,7 @@ export class KnowledgeService {
       knowledgeBase = await this.prisma.knowledgeBase.create({
         data: {
           businessId,
-          name: 'Conocimiento principal',
+          name: expectedName,
           description: 'Información que conoce tu asistente',
         },
         include: {
@@ -57,10 +65,29 @@ export class KnowledgeService {
           data: { knowledgeBaseId: knowledgeBase.id },
         });
       }
+    } else if (
+      business?.name &&
+      knowledgeBase.name !== expectedName &&
+      (knowledgeBase.name.startsWith('Conocimiento') ||
+        knowledgeBase.name === 'Conocimiento principal')
+    ) {
+      // Auto-migración de seeds hardcodeados ("Conocimiento Lumina", etc.)
+      knowledgeBase = await this.prisma.knowledgeBase.update({
+        where: { id: knowledgeBase.id },
+        data: { name: expectedName },
+        include: {
+          _count: { select: { documents: true } },
+          documents: {
+            orderBy: { updatedAt: 'desc' },
+            include: { _count: { select: { chunks: true } } },
+          },
+        },
+      });
     }
 
     return {
       businessId,
+      businessName: business?.name ?? null,
       vectorsEnabled: this.routing.getMode() !== 'free',
       knowledgeBase: this.toPublicBase(knowledgeBase),
     };

@@ -19,6 +19,7 @@ interface KnowledgeDocument {
 
 interface KnowledgeWorkspace {
   businessId: string;
+  businessName?: string | null;
   vectorsEnabled: boolean;
   knowledgeBase: {
     id: string;
@@ -294,7 +295,11 @@ export function KnowledgeManager() {
 
       <section className="panel rounded-2xl p-5 space-y-4">
         <div>
-          <h3 className="font-medium">{data.knowledgeBase.name}</h3>
+          <h3 className="font-medium">
+            {data.businessName
+              ? `${data.businessName} — Conocimiento`
+              : data.knowledgeBase.name}
+          </h3>
           <p className="text-sm text-muted mt-1">
             {data.knowledgeBase.documentCount}{' '}
             {data.knowledgeBase.documentCount === 1 ? 'ítem' : 'ítems'}

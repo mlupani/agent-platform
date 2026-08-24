@@ -51,6 +51,44 @@ export class BusinessesService {
         'No hay un negocio configurado. Ejecutá el seed o creá uno.',
       );
     }
+
+    // Auto-migración de nombres hardcodeados de seed (Asistente Lumina, etc.)
+    const expectedAgentName = `Asistente ${business.name}`;
+    const legacyAgent = business.agentConfigs.find(
+      (a) =>
+        (a.name === 'Asistente' || a.name.startsWith('Asistente ')) &&
+        a.name !== expectedAgentName,
+    );
+    if (legacyAgent) {
+      await this.prisma.agentConfig.updateMany({
+        where: {
+          businessId: business.id,
+          name: legacyAgent.name,
+        },
+        data: { name: expectedAgentName },
+      });
+      // Refrescar el objeto en memoria para el caller
+      const idx = business.agentConfigs.findIndex((a) => a.id === legacyAgent.id);
+      if (idx !== -1) business.agentConfigs[idx].name = expectedAgentName;
+      // Si había varios con prefijo Asistente, normalizar también
+      const others = business.agentConfigs.filter(
+        (a) => a.id !== legacyAgent.id && (a.name === 'Asistente' || a.name.startsWith('Asistente ')),
+      );
+      if (others.length) {
+        await this.prisma.agentConfig.updateMany({
+          where: {
+            businessId: business.id,
+            id: { in: others.map((a) => a.id) },
+          },
+          data: { name: expectedAgentName },
+        });
+        for (const o of others) {
+          const j = business.agentConfigs.findIndex((a) => a.id === o.id);
+          if (j !== -1) business.agentConfigs[j].name = expectedAgentName;
+        }
+      }
+    }
+
     return business;
   }
 
@@ -161,7 +199,7 @@ export class BusinessesService {
         data: {
           businessId: business.id,
           knowledgeBaseId: knowledgeBase.id,
-          name: 'Asistente',
+          name: `Asistente ${business.name}`,
           description: input.description,
           provider: 'openai',
           model: input.model ?? 'gpt-4.1-mini',
@@ -236,7 +274,7 @@ export class BusinessesService {
     const googleReviewsUrl =
       data.googleReviewsUrl === '' ? null : data.googleReviewsUrl;
 
-    return this.prisma.business.update({
+    const updated = await this.prisma.business.update({
       where: { id: current.id },
       data: {
         ...data,
@@ -260,6 +298,30 @@ export class BusinessesService {
         services: true,
       },
     });
+
+    if (data.name && data.name !== current.name) {
+      const expectedKbName = `${data.name} — Conocimiento`;
+      await this.prisma.knowledgeBase.updateMany({
+        where: { businessId: current.id, name: { startsWith: 'Conocimiento' } },
+        data: { name: expectedKbName },
+      });
+      // Fallback para bases con nombre legacy exacto "Conocimiento principal"
+      await this.prisma.knowledgeBase.updateMany({
+        where: { businessId: current.id, name: 'Conocimiento principal' },
+        data: { name: expectedKbName },
+      });
+
+      const expectedAgentName = `Asistente ${data.name}`;
+      await this.prisma.agentConfig.updateMany({
+        where: {
+          businessId: current.id,
+          OR: [{ name: 'Asistente' }, { name: { startsWith: 'Asistente ' } }],
+        },
+        data: { name: expectedAgentName },
+      });
+    }
+
+    return updated;
   }
 
   /** @deprecated use updateProfile for single-business */

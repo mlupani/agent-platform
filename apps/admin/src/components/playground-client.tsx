@@ -188,7 +188,7 @@ export function PlaygroundClient() {
             >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <p className="mono text-[10px] text-muted">
-                  {message.role === 'user' ? 'Vos' : 'Agente'}
+                  {message.role === 'user' ? 'Vos' : (agent?.name ?? business.name ?? 'Agente')}
                 </p>
                 {message.debug ? (
                   <button
