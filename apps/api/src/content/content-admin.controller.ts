@@ -48,6 +48,7 @@ const generateSchema = z.object({
   contentStyle: contentStyleSchema.optional(),
   videoProvider: z.enum(['kie', 'fal', 'veo']).optional(),
   videoModel: z.string().max(200).optional(),
+  generateAudio: z.boolean().optional(),
 });
 
 const updateSchema = z.object({

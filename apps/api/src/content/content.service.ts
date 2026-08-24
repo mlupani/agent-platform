@@ -440,6 +440,7 @@ export class ContentService {
     contentStyle?: string;
     videoProvider?: string;
     videoModel?: string;
+    generateAudio?: boolean;
   }) {
     const businessId =
       input.businessId ?? (await this.businesses.getCurrentId());
@@ -480,9 +481,10 @@ export class ContentService {
         : (content?.referenceImageUrls ?? []),
     );
 
-    // Resolver video provider/model por negocio y por generación (override)
+    // Resolver video provider/model y audio flag por negocio y por generación (override)
     let resolvedVideoProvider: string | null = null;
     let resolvedVideoModel: string | null = null;
+    let resolvedGenerateAudio: boolean | null = null;
     if (mediaType === 'VIDEO') {
       const resolved = await this.resolveVideoConfig(
         businessId,
@@ -491,6 +493,16 @@ export class ContentService {
       );
       resolvedVideoProvider = resolved.provider;
       resolvedVideoModel = resolved.model;
+      // generateAudio: input override > env default
+      if (typeof input.generateAudio === 'boolean') {
+        resolvedGenerateAudio = input.generateAudio;
+      } else {
+        const envDefault =
+          (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'true')
+            .trim()
+            .toLowerCase() !== 'false';
+        resolvedGenerateAudio = envDefault;
+      }
     }
 
     const strategySeed = {
@@ -500,6 +512,9 @@ export class ContentService {
         : {}),
       ...(mediaType === 'VIDEO' && resolvedVideoModel
         ? { videoModel: resolvedVideoModel }
+        : {}),
+      ...(mediaType === 'VIDEO' && resolvedGenerateAudio !== null
+        ? { videoGenerateAudio: resolvedGenerateAudio }
         : {}),
     } as Prisma.InputJsonValue;
 
@@ -582,6 +597,7 @@ export class ContentService {
         contentStyle,
         videoProvider: resolvedVideoProvider,
         videoModel: resolvedVideoModel,
+        videoGenerateAudio: resolvedGenerateAudio,
       });
     } catch (error) {
       const message =
@@ -602,6 +618,10 @@ export class ContentService {
         typeof stored?.videoProvider === 'string' ? (stored.videoProvider as string) : null;
       const storedVideoModel =
         typeof stored?.videoModel === 'string' ? (stored.videoModel as string) : null;
+      const storedGenerateAudio =
+        typeof stored?.videoGenerateAudio === 'boolean'
+          ? (stored.videoGenerateAudio as boolean)
+          : null;
       const resolvedVideo =
         content.mediaType === 'VIDEO'
           ? await this.resolveVideoConfig(businessId, storedVideoProvider, storedVideoModel)
@@ -619,6 +639,7 @@ export class ContentService {
         contentStyle: this.contentStyleFromStrategy(content.strategy),
         videoProvider: resolvedVideo?.provider ?? storedVideoProvider,
         videoModel: resolvedVideo?.model ?? storedVideoModel,
+        videoGenerateAudio: storedGenerateAudio,
       });
       if (content.generationMode === 'AUTOMATIC' && ready) {
         await this.notify.notifyAutoGeneration({
@@ -659,6 +680,7 @@ export class ContentService {
     contentStyle?: ContentStyle;
     videoProvider?: string | null;
     videoModel?: string | null;
+    videoGenerateAudio?: boolean | null;
   }) {
     const { contentId, businessId, objective, channels, mediaType } = input;
     const referenceImageUrls = input.referenceImageUrls;
@@ -707,6 +729,12 @@ export class ContentService {
     const imageRefUrls = this.normalizeReferenceUrls(referenceImageUrls);
 
     if (mediaType === 'VIDEO') {
+      const videoGenerateAudio =
+        typeof input.videoGenerateAudio === 'boolean'
+          ? input.videoGenerateAudio
+          : (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'true')
+                .trim()
+                .toLowerCase() !== 'false';
       await this.generateVideoAsset({
         contentId,
         businessId,
@@ -723,6 +751,7 @@ export class ContentService {
         primaryColor: branding?.primaryColor,
         provider: input.videoProvider,
         model: input.videoModel,
+        generateAudio: videoGenerateAudio,
       });
     } else {
       const referenceImages =
@@ -897,6 +926,7 @@ export class ContentService {
     primaryColor?: string | null;
     provider?: string | null;
     model?: string | null;
+    generateAudio?: boolean;
   }) {
     const durationSeconds = input.durationSeconds;
     const aspectRatio = (this.config.get<string>('VIDEO_ASPECT_RATIO') ||
@@ -904,9 +934,11 @@ export class ContentService {
     const resolution = (this.config.get<string>('VIDEO_RESOLUTION') ||
       '720p') as '480p' | '720p' | '1080p';
     const generateAudio =
-      (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'true')
-        .trim()
-        .toLowerCase() !== 'false';
+      typeof input.generateAudio === 'boolean'
+        ? input.generateAudio
+        : (this.config.get<string>('VIDEO_GENERATE_AUDIO') ?? 'true')
+              .trim()
+              .toLowerCase() !== 'false';
 
     const video = await this.videos.generate({
       prompt: input.prompt,

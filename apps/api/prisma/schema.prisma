@@ -70,6 +70,7 @@ model Business {
   /// Profile `_id` de Zernio (un profile por tenant).
   zernioProfileId      String?
   socialConnections    SocialConnection[]
+  audioAssets          AudioAsset[]
 
   @@map("businesses")
 }
@@ -845,6 +846,7 @@ model GeneratedContent {
   assets      ContentAsset[]
   executions  ContentGenerationExecution[]
   publications ContentPublication[]
+  audioAssets AudioAsset[]
 
   @@index([businessId, status])
   @@index([businessId, createdAt])
@@ -874,6 +876,30 @@ model ContentAsset {
 
   @@index([contentId])
   @@map("content_assets")
+}
+
+model AudioAsset {
+  id              String   @id @default(uuid())
+  contentId       String
+  content         GeneratedContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  provider        String   // seedance | elevenlabs
+  voiceId         String?
+  voiceName       String?
+  text            String?
+  model           String?
+  storageUrl      String?
+  storagePublicId String?
+  durationSeconds Float?
+  status          String   @default("COMPLETED") // PENDING | PROCESSING | COMPLETED | FAILED
+  error           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([contentId])
+  @@index([businessId])
+  @@map("audio_assets")
 }
 
 model ContentPublication {

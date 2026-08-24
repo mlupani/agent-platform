@@ -11,6 +11,6 @@ import { VideoEditorService } from './video-editor.service';
     },
     VideoEditorService,
   ],
-  exports: [VideoEditorService],
+  exports: [VideoEditorService, FFMPEG_RUNNER],
 })
 export class VideoEditorModule {}

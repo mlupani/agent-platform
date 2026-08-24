@@ -28,6 +28,8 @@ import { ObservabilityModule } from './observability/observability.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ContentModule } from './content/content.module';
 import { SocialModule } from './social/social.module';
+import { VoiceModule } from './voice/voice.module';
+import { CompositionModule } from './composition/composition.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -74,6 +76,8 @@ import { AppService } from './app.service';
     WebChatModule,
     ContentModule,
     SocialModule,
+    VoiceModule,
+    CompositionModule,
   ],
   controllers: [AppController],
   providers: [

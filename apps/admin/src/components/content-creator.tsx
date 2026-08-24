@@ -14,6 +14,8 @@ interface ContentAsset {
   storageUrl: string;
   width?: number | null;
   height?: number | null;
+  provider?: string | null;
+  model?: string | null;
 }
 
 interface GeneratedContent {
@@ -410,6 +412,7 @@ export function ContentCreator() {
   const [videoModel, setVideoModel] = useState('');
   const [preferredVideoProvider, setPreferredVideoProvider] = useState('');
   const [preferredVideoModel, setPreferredVideoModel] = useState('');
+  const [videoGenerateAudio, setVideoGenerateAudio] = useState(true);
   const [lightbox, setLightbox] = useState<LightboxMedia | null>(null);
   const [workspace, setWorkspace] = useState<
     'create' | 'library' | 'schedule' | 'guidelines'
@@ -611,6 +614,7 @@ export function ContentCreator() {
                 durationSeconds: videoDuration,
                 ...(videoProvider ? { videoProvider } : {}),
                 ...(videoModel ? { videoModel } : {}),
+                generateAudio: videoGenerateAudio,
               }
             : {}),
         }),
@@ -1177,39 +1181,69 @@ export function ContentCreator() {
           ) : null}
 
           {mediaKind === 'video' ? (
-            <div className="space-y-3 text-sm rounded-xl border border-line/60 bg-panel-2/40 p-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-1">
-                  <span className="text-muted">Provider (opcional)</span>
-                  <select
-                    className="w-full rounded-lg border border-line bg-panel px-3 py-2"
-                    value={videoProvider}
-                    onChange={(e) => setVideoProvider(e.target.value)}
-                  >
-                    <option value="">Por defecto (negocio / env)</option>
-                    <option value="kie">kie.ai</option>
-                    <option value="fal">fal.ai</option>
-                    <option value="veo">Veo (Google)</option>
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-muted">Modelo (opcional)</span>
-                  <input
-                    className="w-full rounded-lg border border-line bg-panel px-3 py-2"
-                    value={videoModel}
-                    onChange={(e) => setVideoModel(e.target.value)}
-                    placeholder="bytedance/seedance-1.5-pro"
-                  />
-                </label>
+            <>
+              <div className="space-y-2 text-sm">
+                <span className="text-muted">Audio / Voz</span>
+                <div className="flex flex-wrap gap-2">
+                  <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer ${videoGenerateAudio ? 'border-accent bg-accent/10' : 'border-line'}`}>
+                    <input
+                      type="radio"
+                      name="videoGenerateAudio"
+                      checked={videoGenerateAudio}
+                      onChange={() => setVideoGenerateAudio(true)}
+                    />
+                    <span className="text-sm">Generar voz con Seedance</span>
+                  </label>
+                  <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer ${!videoGenerateAudio ? 'border-accent bg-accent/10' : 'border-line'}`}>
+                    <input
+                      type="radio"
+                      name="videoGenerateAudio"
+                      checked={!videoGenerateAudio}
+                      onChange={() => setVideoGenerateAudio(false)}
+                    />
+                    <span className="text-sm">Generar video sin voz</span>
+                  </label>
+                </div>
+                <p className="text-xs text-muted">
+                  {videoGenerateAudio
+                    ? 'Seedance genera video + audio. Podés editar la voz después con ElevenLabs.'
+                    : 'Solo video, sin audio. Podés agregar voz con ElevenLabs después.'}
+                </p>
               </div>
-              <p className="text-xs text-muted">
-                Escribí el modelo y cambialo al momento. Vacío usa el configurado por negocio o{' '}
-                <code className="mono text-[11px]">KIE_VIDEO_MODEL</code> del .env. Ej:{' '}
-                <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code>,{' '}
-                <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code>,{' '}
-                <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code>
-              </p>
-            </div>
+              <div className="space-y-3 text-sm rounded-xl border border-line/60 bg-panel-2/40 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="text-muted">Provider (opcional)</span>
+                    <select
+                      className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                      value={videoProvider}
+                      onChange={(e) => setVideoProvider(e.target.value)}
+                    >
+                      <option value="">Por defecto (negocio / env)</option>
+                      <option value="kie">kie.ai</option>
+                      <option value="fal">fal.ai</option>
+                      <option value="veo">Veo (Google)</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-muted">Modelo (opcional)</span>
+                    <input
+                      className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                      value={videoModel}
+                      onChange={(e) => setVideoModel(e.target.value)}
+                      placeholder="bytedance/seedance-1.5-pro"
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-muted">
+                  Escribí el modelo y cambialo al momento. Vacío usa el configurado por negocio o{' '}
+                  <code className="mono text-[11px]">KIE_VIDEO_MODEL</code> del .env. Ej:{' '}
+                  <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code>,{' '}
+                  <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code>,{' '}
+                  <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code>
+                </p>
+              </div>
+            </>
           ) : null}
 
           <label className="block space-y-1 text-sm">
@@ -1547,7 +1581,7 @@ export function ContentCreator() {
                   </figure>
                   );
                 })}
-                {!detail.assets?.length && isGeneratingPiece ? (
+                  {!detail.assets?.length && isGeneratingPiece ? (
                   <div className="sm:col-span-2 rounded-xl border border-dashed border-line bg-panel-2 min-h-48 grid place-items-center px-6 py-10">
                     <div className="flex flex-col items-center gap-2 text-center">
                       <BusySpinner className="h-8 w-8" />
@@ -1558,6 +1592,10 @@ export function ContentCreator() {
                   </div>
                 ) : null}
               </div>
+
+              {detail && isVideoContent(detail) ? (
+                <VideoVoiceEditor contentId={detail.id} detail={detail} />
+              ) : null}
 
               <nav
                 className="flex gap-1 border-b border-line"
@@ -2053,5 +2091,204 @@ export function ContentCreator() {
         <MediaLightbox media={lightbox} onClose={() => setLightbox(null)} />
       ) : null}
     </div>
+  );
+}
+
+function VideoVoiceEditor({ contentId, detail }: { contentId: string; detail: GeneratedContent }) {
+  const queryClient = useQueryClient();
+  const [text, setText] = useState(detail.hook || detail.caption || detail.headline || '');
+  const [selectedVoice, setSelectedVoice] = useState('');
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    setText(detail.hook || detail.caption || detail.headline || '');
+  }, [detail.hook, detail.caption, detail.headline]);
+
+  const voicesQuery = useQuery({
+    queryKey: ['voices'],
+    queryFn: () => api<{ voices: Array<{ voiceId: string; name: string; language?: string; gender?: string; previewUrl?: string | null; accent?: string }> }>('/admin/voices'),
+  });
+
+  const audioList = useQuery({
+    queryKey: ['audio-assets', contentId],
+    queryFn: () => api<Array<{ id: string; voiceId: string; voiceName?: string; text: string; status: string; storageUrl?: string; createdAt: string }>>(`/admin/content/${contentId}/audio`),
+    enabled: Boolean(contentId),
+  });
+
+  const voices = voicesQuery.data?.voices ?? [];
+
+  useEffect(() => {
+    if (!selectedVoice && voices.length) setSelectedVoice(voices[0].voiceId);
+  }, [voices, selectedVoice]);
+
+  const preview = async () => {
+    if (!text.trim() || !selectedVoice) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/admin/voice/preview`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.trim(), voiceId: selectedVoice }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setPreviewAudioUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo generar preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const generateVoice = useMutation({
+    mutationFn: () =>
+      api<{ id: string }>(`/admin/content/${contentId}/voice`, {
+        method: 'POST',
+        body: JSON.stringify({
+          text: text.trim(),
+          voiceId: selectedVoice,
+          voiceName: voices.find((v) => v.voiceId === selectedVoice)?.name,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['audio-assets', contentId] });
+      await queryClient.invalidateQueries({ queryKey: ['content-list'] });
+      await queryClient.invalidateQueries({ queryKey: ['content', contentId] });
+    },
+  });
+
+  const replaceAudio = useMutation({
+    mutationFn: (audioAssetId: string) =>
+      api(`/admin/content/${contentId}/replace-audio`, {
+        method: 'POST',
+        body: JSON.stringify({ audioAssetId }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['content-list'] });
+      await queryClient.invalidateQueries({ queryKey: ['content', contentId] });
+      await queryClient.invalidateQueries({ queryKey: ['audio-assets', contentId] });
+    },
+  });
+
+  const isVideo = isVideoContent(detail);
+  const voiceProviderInfo = detail.assets?.some((a) => a.provider === 'elevenlabs') ? 'elevenlabs' : isVideo ? 'seedance' : null;
+
+  return (
+    <section className="rounded-2xl border border-line bg-panel-2/60 p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-medium text-sm">Voz del video</h4>
+        <span className="text-xs text-muted">
+          {isVideo ? 'Seedance genera video + audio. Podés reemplazar solo el audio.' : '—'}
+        </span>
+      </div>
+
+      <div className="text-xs text-muted">
+        {voiceProviderInfo === 'seedance' ? 'Voz actual: Seedance' : voiceProviderInfo === 'elevenlabs' ? 'Voz: ElevenLabs' : 'Sin voz / original'}
+        {detail.assets?.find((a) => a.role === 'COMPOSED') ? ' · versión compuesta disponible' : ''}
+      </div>
+
+      <label className="block space-y-1 text-sm">
+        <span className="text-muted">Narración</span>
+        <textarea
+          className="w-full min-h-24 rounded-lg border border-line bg-panel px-3 py-2"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Encontrá tu próximo hogar en Villa Crespo."
+          maxLength={5000}
+        />
+        <span className="block text-xs text-muted">{text.length}/5000</span>
+      </label>
+
+      <label className="block space-y-1 text-sm">
+        <span className="text-muted">Voz ElevenLabs</span>
+        <select
+          className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+          value={selectedVoice}
+          onChange={(e) => setSelectedVoice(e.target.value)}
+          disabled={voicesQuery.isLoading}
+        >
+          {voicesQuery.isLoading ? <option>Cargando voces…</option> : null}
+          {!voices.length && !voicesQuery.isLoading ? <option value="">Sin voces (configurá ELEVENLABS_API_KEY)</option> : null}
+          {voices.map((v) => (
+            <option key={v.voiceId} value={v.voiceId}>
+              {v.name} {v.language ? `— ${v.language}` : ''} {v.gender ? `(${v.gender})` : ''} — {v.voiceId}
+            </option>
+          ))}
+        </select>
+        {voicesQuery.isError ? (
+          <span className="block text-xs text-amber-700">No se pudieron cargar voces. Verificá ELEVENLABS_API_KEY en env.</span>
+        ) : null}
+        {voices.find((v) => v.voiceId === selectedVoice)?.previewUrl ? (
+          <audio controls src={voices.find((v) => v.voiceId === selectedVoice)?.previewUrl ?? undefined} className="w-full mt-2 h-8" />
+        ) : null}
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!text.trim() || !selectedVoice || previewLoading}
+          onClick={preview}
+          className="rounded-lg border border-line bg-panel px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {previewLoading ? 'Cargando…' : '▶ Escuchar preview'}
+        </button>
+        <button
+          type="button"
+          disabled={!text.trim() || !selectedVoice || generateVoice.isPending}
+          onClick={() => generateVoice.mutate()}
+          className="rounded-lg bg-accent text-white px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {generateVoice.isPending ? 'Generando…' : 'Generar nueva voz'}
+        </button>
+      </div>
+      {previewAudioUrl ? (
+        <audio controls src={previewAudioUrl} autoPlay className="w-full h-8 mt-2" />
+      ) : null}
+      {generateVoice.isError ? (
+        <p className="text-xs text-red-600">{(generateVoice.error as Error).message}</p>
+      ) : null}
+      {generateVoice.isSuccess ? (
+        <p className="text-xs text-emerald-700">Voz generada. Aparece abajo — podés reemplazar el audio del video.</p>
+      ) : null}
+
+      {audioList.data?.length ? (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Versiones de audio</p>
+          <ul className="space-y-2">
+            {audioList.data.map((a) => (
+              <li key={a.id} className="rounded-lg border border-line bg-panel p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate max-w-[320px]">{a.voiceName || a.voiceId}</p>
+                  <p className="text-xs text-muted truncate max-w-[320px]">{a.text?.slice(0, 80)}</p>
+                  <p className="text-[11px] text-muted">{a.status} · {new Date(a.createdAt).toLocaleString('es-AR')}</p>
+                  {a.storageUrl ? <audio controls src={a.storageUrl} className="w-full mt-1 h-7" /> : null}
+                </div>
+                <button
+                  type="button"
+                  disabled={replaceAudio.isPending}
+                  onClick={() => {
+                    if (confirm('¿Reemplazar audio del video por esta voz? No se regenera el video, solo se compone el audio con FFmpeg.')) {
+                      replaceAudio.mutate(a.id);
+                    }
+                  }}
+                  className="rounded-lg bg-nav-active text-white px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {replaceAudio.isPending ? 'Componiendo…' : 'Reemplazar audio'}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {replaceAudio.isError ? <p className="text-xs text-red-600">{(replaceAudio.error as Error).message}</p> : null}
+          {replaceAudio.isSuccess ? <p className="text-xs text-emerald-700">✓ Video actualizado con nueva voz (preservando original).</p> : null}
+          <p className="text-xs text-muted">El video original Seedance permanece intacto. Cada composición crea un nuevo asset COMPOSED.</p>
+        </div>
+      ) : null}
+    </section>
   );
 }
