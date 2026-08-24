@@ -67,6 +67,7 @@
     "luxon": "3.7.2",
     "nodemailer": "^9.0.5",
     "openai": "^7.4.0",
+    "sharp": "^0.35.3",
     "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",

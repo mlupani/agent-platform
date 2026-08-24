@@ -24,6 +24,7 @@ import { CloudinaryStorageProvider } from './storage/cloudinary-storage.provider
 import { STORAGE_PROVIDER } from './storage/storage.provider';
 import { VideoModule } from './video/video.module';
 import { VideoEditorModule } from './video-editor/video-editor.module';
+import { BrandingRenderer } from './branding/branding-renderer.service';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { VideoEditorModule } from './video-editor/video-editor.module';
     ContentVideoGenerateProcessor,
     OpenAIImageGenerationProvider,
     CloudinaryStorageProvider,
+    BrandingRenderer,
     {
       provide: IMAGE_GENERATION_PROVIDER,
       useExisting: OpenAIImageGenerationProvider,

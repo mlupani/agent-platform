@@ -553,16 +553,15 @@ export class ContentAgentService {
   }
 
   private mergeLogoAndRefs(
-    logoUrl: string | null,
+    _logoUrl: string | null,
     refs: string[] | undefined,
   ): string[] {
+    // Logo ya NO se envía como reference image — se aplica después vía BrandingRenderer (Sharp)
+    // Mantener firma por compatibilidad, pero ignorar logoUrl
     const cleaned = [
       ...new Set((refs ?? []).map((u) => u.trim()).filter(Boolean)),
     ];
-    const withLogo = logoUrl
-      ? [logoUrl, ...cleaned.filter((u) => u !== logoUrl)]
-      : cleaned;
-    return withLogo.slice(0, 4);
+    return cleaned.slice(0, 4);
   }
 
   private buildSystemPrompt(
@@ -622,17 +621,20 @@ ${SPANISH_ORTHOGRAPHY_RULE}
 - Si el pedido pide AUTO, detectá el estilo más fuerte para el negocio y el brief. Si pide uno fijo, respetalo.
 Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, no una foto suelta):
 - imagePrompt en inglés, estilo publicitario / social ad / flyer digital.
-- La composición DEBE incluir branding del negocio:
-  1) Logo del negocio si hay LOGO_URL (describí integrarlo limpio, esquina o barra de marca), O si no hay logo, el NOMBRE DEL NEGOCIO tipografiado de forma legible y profesional.
-  2) Espacio tipográfico limpio para un headline corto (pocas palabras, alto contraste).
-  3) Jerarquía visual clara: foto/hero + marca + mensaje.
-- Si Objective es OFFER: incluí un badge/sello visible tipo "OFERTA" / "PROMO" / "% OFF" (texto corto y legible, no garabatos).
-- Si Objective es SERVICE_PROMOTION: mostrá el servicio y la marca juntos (no solo el producto aislado).
-- Si Objective es SPECIAL_DATE: badge de la ocasión (ej. "Día de la Madre") además de la marca.
-- Evitá texto ilegible, Lorem Ipsum, letras inventadas o párrafos largos dentro de la imagen.
+- NUNCA le pidas al modelo que reproduzca, redibuje o incluya el logo. Frases prohibidas: "include the business logo", "recreate the logo", "add the logo", "place the logo in the image", "brand mark with logo".
+- El logo original se aplica DESPUÉS de forma programática vía BrandingRenderer (Sharp, resize proporcional, preserve alpha, posición bottom-right por defecto). Dejá margen seguro limpio pero NO dibujes el logo.
+- Diferenciá: GENERATIVE BRAND ELEMENTS (sí en prompt) = colores de marca, estilo visual, mood, composición, tipografía del headline (no del logo).
+- EXACT BRAND ASSETS (NO generar) = logo, QR, códigos — se componen después sin modificación.
+- Si no hay logo, podés incluir el nombre del negocio tipografiado de forma legible como marca genérica, manteniendo jerarquía limpia.
+- Espacio tipográfico limpio para un headline corto (pocas palabras, alto contraste).
+- Jerarquía: foto/hero + mensaje + colores de marca (sin logo).
+- Si Objective es OFFER: badge "OFERTA"/"PROMO"/"% OFF" legible (no garabatos) + colores de marca.
+- Si Objective es SERVICE_PROMOTION: hero del servicio + headline corto.
+- Si Objective es SPECIAL_DATE: badge de ocasión + estética de marca.
+- Evitá texto ilegible, Lorem Ipsum, letras inventadas o párrafos largos.
 - Preferí tipografía sans limpia, contraste alto, márgenes seguros para story/feed.
-- Si hay REFERENCE IMAGES, usalas como contexto (producto/local/estilo) dentro de la pieza de marketing, no como foto cruda sin marca.
-- Si hay LOGO_URL, el imagePrompt debe indicar explícitamente usar ese logo como brand mark.${videoBlock}`;
+- Si hay REFERENCE IMAGES, usalas como contexto (producto/local/estilo) dentro de la pieza, no como foto cruda.
+- NO menciones LOGO_URL ni pidas logo en imagePrompt.${videoBlock}`;
   }
 
   private buildUserPrompt(params: {
@@ -715,18 +717,22 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
       .join('\n');
 
     const brand = params.business.brandingConfig;
-    const brandBlock = brand
+      const hasLogo = Boolean(brand?.logoUrl?.trim());
+      const brandBlock = brand
       ? [
-          `Logo URL: ${brand.logoUrl || 'no hay logo — usar el nombre tipografiado'}`,
-          `Estilo visual: ${brand.visualStyle || '—'}`,
-          `Tono comercial: ${brand.commercialTone || '—'}`,
-          `Audiencia: ${brand.targetAudience || '—'}`,
-          `Colores: ${brand.primaryColor || '—'} / ${brand.secondaryColor || '—'}`,
+          `Has logo: ${hasLogo ? 'true — EL LOGO SE APLICA DESPUÉS PROGRAMÁTICAMENTE, NO LO INCLUYAS EN imagePrompt' : 'false — podés incluir el nombre tipografiado si aporta a la composición'}`,
+          `Brand colors (GENERATIVE, podés usarlos en la paleta): ${brand.primaryColor || '—'} / ${brand.secondaryColor || '—'}`,
+          `Visual style (GENERATIVE): ${brand.visualStyle || '—'}`,
+          `Commercial tone: ${brand.commercialTone || '—'}`,
+          `Audience: ${brand.targetAudience || '—'}`,
           `Preferir: ${brand.preferNotes || '—'}`,
           `Evitar: ${brand.avoidNotes || '—'}`,
           `Extra: ${brand.additionalInstructions || '—'}`,
+          hasLogo
+            ? 'BRANDING RENDERER: el logo original se compone después con Sharp (resize proporcional, posición bottom-right por defecto, transparencia preservada). NO pidas "include logo", "recreate logo", "add logo" en el prompt.'
+            : `Sin logo: podés incluir el nombre tipografiado "${params.business.name}" de forma legible si ayuda a la composición, manteniendo jerarquía limpia.`,
         ].join('\n')
-      : `Sin branding configurado. Usá el nombre tipografiado "${params.business.name}" como marca.`;
+      : `Sin branding configurado. Generá una pieza genérica limpia; si incluís texto de marca, usa solo "${params.business.name}" tipografiado.`;
 
     const recentBlock =
       params.recent
@@ -807,11 +813,11 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
       `Format hint: ${formatHint}`,
       `Reference images attached (user): ${params.referenceImageCount}`,
       params.referenceImageCount > 0
-        ? 'Las imágenes adjuntas del usuario son contexto visual (producto/local/estilo) para integrar en la pieza de marketing con marca.'
+        ? 'Las imágenes adjuntas del usuario son contexto visual (producto/local/estilo) para integrar en la pieza de marketing. El logo NO está entre ellas y NO debe ser recreado.'
         : '',
-      brand?.logoUrl
-        ? `LOGO_URL: ${brand.logoUrl} — si hay imágenes adjuntas, la primera puede ser el logo: usalo como brand mark en imagePrompt.`
-        : `Sin logo: el imagePrompt debe incluir el nombre tipografiado "${params.business.name}".`,
+      brand?.logoUrl?.trim()
+        ? 'LOGO: el logo original se aplicará después vía BrandingRenderer (Sharp). NO lo describas ni lo pidas en imagePrompt. Dejá margen seguro limpio en la composición (ej. esquina bottom-right) pero sin dibujar el logo.'
+        : `Sin logo: podés incluir el nombre tipografiado "${params.business.name}" solo si mejora la jerarquía, sin forzar recreación del logo.`,
     ]
       .filter(Boolean)
       .join('\n');

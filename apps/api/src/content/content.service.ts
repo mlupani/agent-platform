@@ -37,6 +37,7 @@ import { downloadBinary } from './video/video-http';
 import { VideoEditorService } from './video-editor/video-editor.service';
 import { normalizeVideoEditing } from './video-editor/normalize-editing';
 import { normalizeHashtags } from './video-editor/text-overlay';
+import { BrandingRenderer } from './branding/branding-renderer.service';
 import type {
   ContentAssetFormat,
   ContentChannel,
@@ -91,6 +92,7 @@ export class ContentService {
     private readonly notify: ContentNotifyService,
     private readonly videos: VideoRoutingService,
     private readonly videoEditor: VideoEditorService,
+    private readonly brandingRenderer: BrandingRenderer,
     private readonly config: ConfigService,
     @InjectQueue(CONTENT_VIDEO_QUEUE)
     private readonly videoQueue: Queue,
@@ -664,10 +666,9 @@ export class ContentService {
     const businessName = business?.name?.trim() || 'the business';
     const logoUrl = branding?.logoUrl?.trim() || null;
 
-    const imageRefUrls = this.normalizeReferenceUrls([
-      ...(logoUrl ? [logoUrl] : []),
-      ...referenceImageUrls,
-    ]);
+    // LOGO NO se envía como reference image al modelo — se aplica después vía BrandingRenderer (Sharp)
+    // HasLogo solo se usa como metadata para el prompt (sin pedir recreación)
+    const imageRefUrls = this.normalizeReferenceUrls(referenceImageUrls);
 
     if (mediaType === 'VIDEO') {
       await this.generateVideoAsset({
@@ -688,9 +689,6 @@ export class ContentService {
     } else {
       const referenceImages =
         await this.loadReferenceImageBuffers(imageRefUrls);
-      if (logoUrl && referenceImages[0]) {
-        referenceImages[0].filename = 'brand-logo.png';
-      }
 
       const marketingPrompt = this.enrichMarketingImagePrompt({
         basePrompt: strategyResult.strategy.imagePrompt,
@@ -710,6 +708,8 @@ export class ContentService {
           format,
           prompt: marketingPrompt,
           referenceImages,
+          logoUrl,
+          headline: strategyResult.strategy.headline,
         });
       }
     }
@@ -763,6 +763,8 @@ export class ContentService {
       mimeType: string;
       filename: string;
     }>;
+    logoUrl?: string | null;
+    headline?: string | null;
   }) {
     const size = this.sizeForFormat(input.format);
     const image = await this.images.generate({
@@ -773,9 +775,36 @@ export class ContentService {
         input.referenceImages.length > 0 ? input.referenceImages : undefined,
     });
 
+    this.logger.log('[IMAGE GENERATION] Generated image successfully');
+
+    let finalBuffer = image.buffer;
+    let finalMimeType = image.mimeType;
+    const hasLogo = Boolean(input.logoUrl?.trim());
+    const hasHeadline = Boolean(input.headline?.trim());
+    if (hasLogo || hasHeadline) {
+      try {
+        const branded = await this.brandingRenderer.apply({
+          imageBuffer: image.buffer,
+          logoUrl: input.logoUrl,
+          headline: input.headline,
+          mimeType: image.mimeType,
+        });
+        if (branded.applied) {
+          finalBuffer = branded.buffer;
+          finalMimeType = branded.mimeType;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `[BRANDING] Failed to apply branding, using original: ${error instanceof Error ? error.message : 'unknown'}`,
+        );
+      }
+    } else {
+      this.logger.log('[BRANDING] Logo found: false — skipping branding (no logo, no headline)');
+    }
+
     const uploaded = await this.storage.upload({
-      buffer: image.buffer,
-      mimeType: image.mimeType,
+      buffer: finalBuffer,
+      mimeType: finalMimeType,
       folder: `${this.cloudinaryRoot()}/${input.businessId}/content`,
       publicId: `${input.contentId}-${input.format}-${Date.now()}`,
     });
@@ -1244,16 +1273,8 @@ export class ContentService {
           throw new Error('No hay asset compatible para este canal');
         }
         const isVideo = (asset.type ?? 'IMAGE').toUpperCase() === 'VIDEO';
-        const storyImageUrl =
-          (channel === 'INSTAGRAM_STORY' || channel === 'FACEBOOK_STORY') &&
-          !isVideo
-            ? (this.storage.buildTextOverlayUrl?.({
-                publicId: asset.storagePublicId,
-                fallbackUrl: asset.storageUrl,
-                headline: content.headline,
-                caption: content.caption,
-              }) ?? asset.storageUrl)
-            : asset.storageUrl;
+        // Texto y logo ya están quemados vía BrandingRenderer (Sharp) antes del upload — no usar overlay Cloudinary para evitar doble
+        const storyImageUrl = asset.storageUrl;
 
         let externalId: string | undefined;
         if (channel === 'WHATSAPP_STATUS') {
@@ -1707,8 +1728,8 @@ export class ContentService {
     secondaryColor?: string | null;
   }): string {
     const brandMark = input.hasLogo
-      ? `Include the provided brand logo image as a clean brand mark (corner or top brand bar). Do not distort the logo.`
-      : `Include the business name "${input.businessName}" as clean, legible professional typography (brand lockup).`;
+      ? `The brand logo will be applied programmatically after generation (BrandingRenderer, Sharp). Do NOT render any logo in the image — leave a clean safe margin at the corner (bottom-right). Use brand colors/style only.`
+      : `Include the business name "${input.businessName}" as clean, legible professional typography (brand lockup) if it enhances hierarchy — keep it minimal.`;
 
     const offerBadge =
       input.objective === 'OFFER'
