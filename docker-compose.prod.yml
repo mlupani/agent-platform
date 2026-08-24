@@ -1,24 +1,24 @@
-# Producción detrás de Traefik con network_mode: host (Hostinger).
+# Producción Pilates Villa Crespo — convive con el stack de main en el mismo VPS.
 #
 # Traefik (traefik-traefik-1) escucha :80/:443 en el host.
-# api/admin se publican solo en 127.0.0.1 para que Traefik los alcance.
+# api/admin se publican solo en 127.0.0.1 (puertos 3111/3110, no 3001/3000 de main).
 #
 # Uso:
 #   1. DNS A: pilatesvillacrespo.admin.atenzia.tech
 #              pilatesvillacrespo.api.atenzia.tech
 #              → IP pública del VPS
-#   2. Completá .env.production
+#   2. Completá .env.production (NO reutilices el de main)
 #   3. docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
 # ARM (Ampere): WAHA_IMAGE=devlikeapro/waha:noweb-arm
 # x86:          WAHA_IMAGE=devlikeapro/waha:noweb
 
-name: agent-platform-prod
+name: pilates-villa-crespo-prod
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: agent-platform-postgres
+    container_name: pilatesvc-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agent}
@@ -48,7 +48,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: agent-platform-redis
+    container_name: pilatesvc-redis
     restart: unless-stopped
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '128mb', '--maxmemory-policy', 'allkeys-lru']
     volumes:
@@ -70,7 +70,7 @@ services:
 
   waha:
     image: ${WAHA_IMAGE:-devlikeapro/waha:noweb}
-    container_name: agent-platform-waha
+    container_name: pilatesvc-waha
     restart: unless-stopped
     environment:
       WHATSAPP_API_HOSTNAME: 0.0.0.0
@@ -107,7 +107,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: agent-platform-api
+    container_name: pilatesvc-api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -134,17 +134,17 @@ services:
       VIDEO_EDITOR_FFMPEG_PATH: ffmpeg
       VIDEO_EDITOR_FFPROBE_PATH: ffprobe
       VIDEO_EDITOR_FONT_FILE: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
-    # Solo localhost: Traefik (host network) proxya hacia acá
+    # 3111 = host; 3001 = puerto interno. Main usa 127.0.0.1:3001.
     ports:
-      - '127.0.0.1:3001:3001'
+      - '127.0.0.1:3111:3001'
     labels:
       - traefik.enable=true
-      - traefik.http.routers.agent-api.rule=Host(`${API_HOST:-pilatesvillacrespo.api.atenzia.tech}`)
-      - traefik.http.routers.agent-api.entrypoints=websecure
-      - traefik.http.routers.agent-api.tls=true
-      - traefik.http.routers.agent-api.tls.certresolver=letsencrypt
-      - traefik.http.routers.agent-api.service=agent-api
-      - traefik.http.services.agent-api.loadbalancer.server.port=3001
+      - traefik.http.routers.pilatesvc-api.rule=Host(`${API_HOST:-pilatesvillacrespo.api.atenzia.tech}`)
+      - traefik.http.routers.pilatesvc-api.entrypoints=websecure
+      - traefik.http.routers.pilatesvc-api.tls=true
+      - traefik.http.routers.pilatesvc-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.pilatesvc-api.service=pilatesvc-api
+      - traefik.http.services.pilatesvc-api.loadbalancer.server.port=3001
     healthcheck:
       test:
         [
@@ -174,7 +174,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://pilatesvillacrespo.api.atenzia.tech/api}
         NEXT_PUBLIC_ADMIN_EMAIL: ${NEXT_PUBLIC_ADMIN_EMAIL:-admin@negocio.local}
-    container_name: agent-platform-admin
+    container_name: pilatesvc-admin
     restart: unless-stopped
     depends_on:
       api:
@@ -184,15 +184,15 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3110:3000'
     labels:
       - traefik.enable=true
-      - traefik.http.routers.agent-admin.rule=Host(`${ADMIN_HOST:-pilatesvillacrespo.admin.atenzia.tech}`)
-      - traefik.http.routers.agent-admin.entrypoints=websecure
-      - traefik.http.routers.agent-admin.tls=true
-      - traefik.http.routers.agent-admin.tls.certresolver=letsencrypt
-      - traefik.http.routers.agent-admin.service=agent-admin
-      - traefik.http.services.agent-admin.loadbalancer.server.port=3000
+      - traefik.http.routers.pilatesvc-admin.rule=Host(`${ADMIN_HOST:-pilatesvillacrespo.admin.atenzia.tech}`)
+      - traefik.http.routers.pilatesvc-admin.entrypoints=websecure
+      - traefik.http.routers.pilatesvc-admin.tls=true
+      - traefik.http.routers.pilatesvc-admin.tls.certresolver=letsencrypt
+      - traefik.http.routers.pilatesvc-admin.service=pilatesvc-admin
+      - traefik.http.services.pilatesvc-admin.loadbalancer.server.port=3000
     deploy:
       resources:
         limits:
