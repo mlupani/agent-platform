@@ -103,6 +103,18 @@ export class ElevenLabsProvider implements VoiceProvider {
       previewUrl: v.preview_url ?? null,
       labels: v.labels,
     }));
+
+    // Debug: loguear labels reales para afinar filtro (no expone secrets)
+    for (const v of data.voices ?? []) {
+      this.logger.log(`[VOICE] ${v.name} (${v.voice_id}) labels=${JSON.stringify(v.labels)}`);
+    }
+
+    const filterMode = (this.config.get<string>('ELEVENLABS_VOICES_FILTER') ?? 'es').trim().toLowerCase();
+    if (filterMode === 'all' || filterMode === 'todos') {
+      this.logger.log(`[VOICE] Filtro desactivado (ELEVENLABS_VOICES_FILTER=all) — devolviendo ${allVoices.length} voces`);
+      return allVoices;
+    }
+
     const spanishVoices = (data.voices ?? []).filter(spanishFilter).map((v) => ({
       voiceId: v.voice_id,
       name: v.name,
@@ -117,8 +129,8 @@ export class ElevenLabsProvider implements VoiceProvider {
       this.logger.log(`[VOICE] Filtradas ${spanishVoices.length}/${allVoices.length} voces en español`);
       return spanishVoices;
     }
-    this.logger.warn(`[VOICE] Sin voces en español detectadas (${allVoices.length} totales), devolviendo todas`);
-    return allVoices;
+    this.logger.warn(`[VOICE] Sin voces en español detectadas (${allVoices.length} totales) — devolviendo solo españolas (0). Agregá voces en español desde https://elevenlabs.io/app/voice-library?language=es o poné ELEVENLABS_VOICES_FILTER=all para ver todas`);
+    return spanishVoices;
   }
 
   async generate(input: VoiceGenerateInput): Promise<GeneratedAudio> {
