@@ -24,8 +24,10 @@ export class VideoRoutingService {
     private readonly factory: VideoProviderFactory,
   ) {}
 
-  resolvePrimary(): ResolvedVideoTarget {
-    const name = this.readName('VIDEO_PROVIDER', 'kie');
+  resolvePrimary(overrideProvider?: string | null): ResolvedVideoTarget {
+    const name = overrideProvider
+      ? this.readNameFromValue(overrideProvider, 'kie')
+      : this.readName('VIDEO_PROVIDER', 'kie');
     return {
       providerName: name,
       provider: this.factory.get(name),
@@ -53,7 +55,7 @@ export class VideoRoutingService {
   }
 
   async generate(input: VideoGenerationInput): Promise<GeneratedVideo> {
-    let target = this.resolvePrimary();
+    let target = this.resolvePrimary(input.provider);
     if (!target.provider.isConfigured()) {
       const fallback = this.resolveFallback(target.providerName);
       if (!fallback) {
@@ -89,7 +91,15 @@ export class VideoRoutingService {
     key: string,
     fallback: VideoProviderName,
   ): VideoProviderName {
-    const raw = (this.env.get<string>(key) || fallback).trim().toLowerCase();
+    const raw = this.env.get<string>(key) || fallback;
+    return this.readNameFromValue(raw, fallback);
+  }
+
+  private readNameFromValue(
+    value: string,
+    fallback: VideoProviderName,
+  ): VideoProviderName {
+    const raw = (value || fallback).trim().toLowerCase();
     if (raw === 'kie' || raw === 'kie.ai') return 'kie';
     if (raw === 'fal' || raw === 'fal.ai') return 'fal';
     if (raw === 'veo' || raw === 'google' || raw === 'gemini') return 'veo';

@@ -791,6 +791,9 @@ model SocialContentConfig {
   notifyWhatsAppPhone    String?
   /// Aviso por email si WhatsApp no está conectado o falla el envío
   notifyEmail            String?
+  /// Video: provider y modelo por negocio (si vacío → env VIDEO_PROVIDER / KIE_VIDEO_MODEL)
+  preferredVideoProvider String?
+  preferredVideoModel    String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

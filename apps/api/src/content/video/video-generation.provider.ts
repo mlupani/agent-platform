@@ -11,6 +11,10 @@ export interface VideoGenerationInput {
   generateAudio?: boolean;
   /** Frames / refs públicas (producto, local, estilo) */
   referenceImageUrls?: string[];
+  /** Override por generación: provider kie|fal|veo */
+  provider?: VideoProviderName;
+  /** Override por generación: modelo específico (ej. bytedance/seedance-2, fal-ai/kling..., veo-3.1-...) */
+  model?: string;
 }
 
 export interface GeneratedVideo {

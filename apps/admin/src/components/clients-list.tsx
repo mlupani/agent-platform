@@ -141,7 +141,7 @@ export function ClientsList() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 w-full max-w-none">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Alumnos</h2>
@@ -152,7 +152,7 @@ export function ClientsList() {
         </div>
         <button
           type="button"
-          className="btn-primary min-h-11 px-4"
+          className="btn-primary min-h-11 px-4 shrink-0"
           onClick={() => {
             if (formOpen && !editing) {
               setFormOpen(false);
@@ -236,140 +236,307 @@ export function ClientsList() {
                 : 'No hay alumnos con este estado.'}
           </p>
         ) : (
-          <ul className="divide-y divide-line">
-            {data.map((client) => (
-              <li key={client.id} className="p-5 space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium">{displayName(client)}</p>
-                    <p className="text-xs text-muted mt-1">
-                      {new Date(client.createdAt).toLocaleString('es-AR')}
-                      {client.conversations > 0
-                        ? ` · ${client.conversations} conv.`
-                        : ''}
-                      {client.appointments > 0
-                        ? ` · ${client.appointments} turnos`
-                        : ''}
-                    </p>
+          <>
+            {/* Mobile: cards (actual, te gusta) */}
+            <ul className="divide-y divide-line lg:hidden">
+              {data.map((client) => (
+                <li key={client.id} className="p-5 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium">{displayName(client)}</p>
+                      <p className="text-xs text-muted mt-1">
+                        {new Date(client.createdAt).toLocaleString('es-AR')}
+                        {client.conversations > 0
+                          ? ` · ${client.conversations} conv.`
+                          : ''}
+                        {client.appointments > 0
+                          ? ` · ${client.appointments} turnos`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {waConnected && client.phone ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 disabled:opacity-50"
+                          aria-label="Abrir chat de WhatsApp"
+                          title="Abrir chat de WhatsApp"
+                          disabled={
+                            openWhatsApp.isPending &&
+                            openWhatsApp.variables === client.id
+                          }
+                          onClick={() => openWhatsApp.mutate(client.id)}
+                        >
+                          <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
+                        </button>
+                      ) : waMeUrl(client.phone ?? '') ? (
+                        <a
+                          href={waMeUrl(client.phone ?? '') ?? undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90"
+                          aria-label="Abrir WhatsApp Web"
+                          title="Abrir WhatsApp Web"
+                        >
+                          <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
+                        </a>
+                      ) : null}
+                      {client.email ? (
+                        <a
+                          href={mailtoHref(client.email)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white hover:opacity-90"
+                          aria-label={`Enviar email a ${client.email}`}
+                          title="Enviar email"
+                        >
+                          <MailIcon className="h-4 w-4" title="Email" />
+                        </a>
+                      ) : null}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                          client.status.slug,
+                        )}`}
+                      >
+                        {client.status.name}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {waConnected && client.phone ? (
-                      <button
-                        type="button"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 disabled:opacity-50"
-                        aria-label="Abrir chat de WhatsApp"
-                        title="Abrir chat de WhatsApp"
-                        disabled={
-                          openWhatsApp.isPending &&
-                          openWhatsApp.variables === client.id
-                        }
-                        onClick={() => openWhatsApp.mutate(client.id)}
-                      >
-                        <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
-                      </button>
-                    ) : waMeUrl(client.phone ?? '') ? (
-                      <a
-                        href={waMeUrl(client.phone ?? '') ?? undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90"
-                        aria-label="Abrir WhatsApp Web"
-                        title="Abrir WhatsApp Web"
-                      >
-                        <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
-                      </a>
+                  {openWhatsApp.isError &&
+                  openWhatsApp.variables === client.id ? (
+                    <p className="text-sm text-rose">
+                      {(openWhatsApp.error as Error).message ||
+                        'No se pudo abrir WhatsApp.'}
+                    </p>
+                  ) : null}
+                  <dl className="grid gap-1 text-sm sm:grid-cols-2">
+                    {client.phone ? (
+                      <div>
+                        <dt className="text-xs text-muted">Teléfono</dt>
+                        <dd>{client.phone}</dd>
+                      </div>
                     ) : null}
                     {client.email ? (
-                      <a
-                        href={mailtoHref(client.email)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white hover:opacity-90"
-                        aria-label={`Enviar email a ${client.email}`}
-                        title="Enviar email"
-                      >
-                        <MailIcon className="h-4 w-4" title="Email" />
-                      </a>
+                      <div>
+                        <dt className="text-xs text-muted">Email</dt>
+                        <dd className="break-all">{client.email}</dd>
+                      </div>
                     ) : null}
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
-                        client.status.slug,
-                      )}`}
-                    >
-                      {client.status.name}
-                    </span>
-                  </div>
-                </div>
-                {openWhatsApp.isError &&
-                openWhatsApp.variables === client.id ? (
-                  <p className="text-sm text-rose">
-                    {(openWhatsApp.error as Error).message ||
-                      'No se pudo abrir WhatsApp.'}
-                  </p>
-                ) : null}
-                <dl className="grid gap-1 text-sm sm:grid-cols-2">
-                  {client.phone ? (
-                    <div>
-                      <dt className="text-xs text-muted">Teléfono</dt>
-                      <dd>{client.phone}</dd>
-                    </div>
+                  </dl>
+                  {client.notes ? (
+                    <p className="text-sm text-muted whitespace-pre-wrap">
+                      {client.notes}
+                    </p>
                   ) : null}
-                  {client.email ? (
-                    <div>
-                      <dt className="text-xs text-muted">Email</dt>
-                      <dd className="break-all">{client.email}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-                {client.notes ? (
-                  <p className="text-sm text-muted whitespace-pre-wrap">
-                    {client.notes}
-                  </p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="btn-secondary min-h-10 px-3 text-sm"
-                    onClick={() => openEdit(client)}
-                  >
-                    Editar
-                  </button>
-                  {confirmId === client.id ? (
-                    <>
-                      <button
-                        type="button"
-                        className="min-h-10 px-3 text-sm rounded-lg bg-rose text-white disabled:opacity-50"
-                        disabled={remove.isPending}
-                        onClick={() => remove.mutate(client.id)}
-                      >
-                        {remove.isPending ? 'Eliminando…' : 'Confirmar'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary min-h-10 px-3 text-sm"
-                        onClick={() => setConfirmId(null)}
-                        disabled={remove.isPending}
-                      >
-                        Cancelar
-                      </button>
-                    </>
-                  ) : (
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="btn-secondary min-h-10 px-3 text-sm text-rose"
-                      onClick={() => setConfirmId(client.id)}
+                      className="btn-secondary min-h-10 px-3 text-sm"
+                      onClick={() => openEdit(client)}
                     >
-                      Eliminar
+                      Editar
                     </button>
-                  )}
-                </div>
-                {remove.isError && confirmId === client.id ? (
-                  <p className="text-sm text-rose">
-                    {(remove.error as Error).message ||
-                      'No se pudo eliminar el alumno.'}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                    {confirmId === client.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="min-h-10 px-3 text-sm rounded-lg bg-rose text-white disabled:opacity-50"
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(client.id)}
+                        >
+                          {remove.isPending ? 'Eliminando…' : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary min-h-10 px-3 text-sm"
+                          onClick={() => setConfirmId(null)}
+                          disabled={remove.isPending}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-secondary min-h-10 px-3 text-sm text-rose"
+                        onClick={() => setConfirmId(client.id)}
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+                  {remove.isError && confirmId === client.id ? (
+                    <p className="text-sm text-rose">
+                      {(remove.error as Error).message ||
+                        'No se pudo eliminar el alumno.'}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+
+            {/* Desktop: tabla full-width */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-panel-2/60 text-xs text-muted border-b border-line">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Alumno</th>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Contacto</th>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Estado</th>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Actividad</th>
+                    <th className="text-right font-medium px-4 py-3 whitespace-nowrap">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {data.map((client) => (
+                    <tr
+                      key={client.id}
+                      className="hover:bg-panel-2/40 transition group"
+                    >
+                      <td className="px-4 py-3 align-top min-w-[220px]">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate max-w-[280px]" title={displayName(client)}>
+                            {displayName(client)}
+                          </p>
+                          <p className="text-xs text-muted mt-0.5 whitespace-nowrap">
+                            {new Date(client.createdAt).toLocaleDateString('es-AR')}
+                          </p>
+                          {client.notes ? (
+                            <p className="text-xs text-muted truncate max-w-[280px] mt-1" title={client.notes}>
+                              {client.notes}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top min-w-[220px]">
+                        <div className="space-y-1">
+                          {client.phone ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted shrink-0">Tel</span>
+                              <span className="truncate max-w-[180px]" title={client.phone}>
+                                {client.phone}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted">—</span>
+                          )}
+                          {client.email ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted shrink-0">Mail</span>
+                              <span className="truncate max-w-[220px] break-all" title={client.email}>
+                                {client.email}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                            client.status.slug,
+                          )}`}
+                        >
+                          {client.status.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-muted">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-1">
+                            {client.conversations} conv.
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-1">
+                            {client.appointments} turnos
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {waConnected && client.phone ? (
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90 disabled:opacity-50"
+                              aria-label="WhatsApp"
+                              title="WhatsApp"
+                              disabled={
+                                openWhatsApp.isPending &&
+                                openWhatsApp.variables === client.id
+                              }
+                              onClick={() => openWhatsApp.mutate(client.id)}
+                            >
+                              <WhatsAppIcon className="h-3.5 w-3.5" title="WhatsApp" />
+                            </button>
+                          ) : waMeUrl(client.phone ?? '') ? (
+                            <a
+                              href={waMeUrl(client.phone ?? '') ?? undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white hover:opacity-90"
+                              title="WhatsApp Web"
+                            >
+                              <WhatsAppIcon className="h-3.5 w-3.5" title="WhatsApp" />
+                            </a>
+                          ) : null}
+                          {client.email ? (
+                            <a
+                              href={mailtoHref(client.email)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white hover:opacity-90"
+                              title="Email"
+                            >
+                              <MailIcon className="h-3.5 w-3.5" title="Email" />
+                            </a>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="inline-flex h-8 px-2.5 items-center justify-center rounded-full border border-line bg-panel hover:bg-panel-2 text-xs"
+                            onClick={() => openEdit(client)}
+                          >
+                            Editar
+                          </button>
+                          {confirmId === client.id ? (
+                            <>
+                              <button
+                                type="button"
+                                className="inline-flex h-8 px-2.5 items-center justify-center rounded-full bg-rose text-white text-xs disabled:opacity-50"
+                                disabled={remove.isPending}
+                                onClick={() => remove.mutate(client.id)}
+                              >
+                                {remove.isPending ? '…' : 'Sí'}
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex h-8 px-2.5 items-center justify-center rounded-full border border-line bg-panel text-xs"
+                                onClick={() => setConfirmId(null)}
+                              >
+                                No
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="inline-flex h-8 px-2.5 items-center justify-center rounded-full border border-line bg-panel text-rose hover:bg-rose/10 text-xs"
+                              onClick={() => setConfirmId(client.id)}
+                              title="Eliminar"
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                        {openWhatsApp.isError &&
+                        openWhatsApp.variables === client.id ? (
+                          <p className="text-xs text-rose mt-1 text-right">
+                            {(openWhatsApp.error as Error).message}
+                          </p>
+                        ) : null}
+                        {remove.isError && confirmId === client.id ? (
+                          <p className="text-xs text-rose mt-1 text-right">
+                            {(remove.error as Error).message}
+                          </p>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </div>

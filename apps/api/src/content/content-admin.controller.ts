@@ -46,6 +46,8 @@ const generateSchema = z.object({
     .union([z.literal(5), z.literal(10), z.literal(15)])
     .optional(),
   contentStyle: contentStyleSchema.optional(),
+  videoProvider: z.enum(['kie', 'fal', 'veo']).optional(),
+  videoModel: z.string().max(200).optional(),
 });
 
 const updateSchema = z.object({
@@ -97,6 +99,12 @@ const socialConfigSchema = z.object({
     .optional(),
   notifyEmail: z
     .union([z.string().email().max(200), z.literal(''), z.null()])
+    .optional(),
+  preferredVideoProvider: z
+    .union([z.enum(['kie', 'fal', 'veo']), z.literal(''), z.null()])
+    .optional(),
+  preferredVideoModel: z
+    .union([z.string().max(200), z.literal(''), z.null()])
     .optional(),
 });
 
@@ -165,6 +173,10 @@ export class ContentAdminController {
       notifyWhatsAppPhone:
         body.notifyWhatsAppPhone === '' ? null : body.notifyWhatsAppPhone,
       notifyEmail: body.notifyEmail === '' ? null : body.notifyEmail,
+      preferredVideoProvider:
+        body.preferredVideoProvider === '' ? null : body.preferredVideoProvider,
+      preferredVideoModel:
+        body.preferredVideoModel === '' ? null : body.preferredVideoModel,
     });
   }
 

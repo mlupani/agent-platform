@@ -76,19 +76,26 @@ export class KieVideoProvider implements VideoGenerationProvider {
     const started = Date.now();
     const prompt = input.prompt.slice(0, 2500);
     const aspectRatio = input.aspectRatio ?? '9:16';
+    const effectiveModel = input.model?.trim()
+      ? resolveKieVideoModel(input.model.trim())
+      : this.model;
+    if (input.model?.trim() && input.model.trim() !== effectiveModel) {
+      this.logger.log(`Kie model alias ${input.model.trim()} → ${effectiveModel}`);
+    }
     const durationSeconds = clampDurationForKie(
-      this.model,
+      effectiveModel,
       input.durationSeconds ?? 5,
     );
 
     try {
-      const taskId = this.isVeoModel(this.model)
-        ? await this.createVeoTask(prompt, aspectRatio)
+      const taskId = this.isVeoModel(effectiveModel)
+        ? await this.createVeoTask(prompt, aspectRatio, effectiveModel)
         : await this.createMarketTask(
             input,
             prompt,
             aspectRatio,
             durationSeconds,
+            effectiveModel,
           );
 
       const result = await this.pollTask(taskId);
@@ -110,7 +117,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
         height,
         durationSeconds,
         provider: this.name,
-        model: this.model,
+        model: effectiveModel,
         prompt: input.prompt,
         estimatedCost: this.estimatedCost,
         durationMs: Date.now() - started,
@@ -123,7 +130,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
         throw error;
       }
       const message = error instanceof Error ? error.message : 'Error Kie.ai';
-      this.logger.error(`Kie video failed (${this.model}): ${message}`);
+      this.logger.error(`Kie video failed (${effectiveModel}): ${message}`);
       throw new VideoProviderUnavailableError(this.name, message, error);
     }
   }
@@ -141,11 +148,13 @@ export class KieVideoProvider implements VideoGenerationProvider {
     prompt: string,
     aspectRatio: string,
     durationSeconds: number,
+    effectiveModel?: string,
   ): Promise<string> {
+    const model = effectiveModel || this.model;
     const payload = {
-      model: this.model,
+      model,
       input: buildKieMarketInput({
-        model: this.model,
+        model,
         prompt,
         aspectRatio,
         durationSeconds,
@@ -154,7 +163,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
         referenceImageUrls: input.referenceImageUrls,
       }),
     };
-    this.logger.log(`Kie createTask model=${this.model}`);
+    this.logger.log(`Kie createTask model=${model}`);
 
     const res = await requestJson<{
       code?: number;
@@ -187,7 +196,9 @@ export class KieVideoProvider implements VideoGenerationProvider {
   private async createVeoTask(
     prompt: string,
     aspectRatio: string,
+    effectiveModel?: string,
   ): Promise<string> {
+    const model = effectiveModel || this.model;
     const res = await requestJson<{
       code?: number;
       msg?: string;
@@ -198,7 +209,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
       headers: this.authHeaders(),
       body: {
         prompt,
-        model: this.model,
+        model,
         aspect_ratio: aspectRatio,
       },
       timeoutMs: 30_000,

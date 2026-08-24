@@ -69,6 +69,8 @@ interface SocialContentConfig {
   notifyEmail?: string | null;
   lastAutoGenerateAt?: string | null;
   defaultChannels: string[];
+  preferredVideoProvider?: string | null;
+  preferredVideoModel?: string | null;
 }
 
 interface WhatsAppStatus {
@@ -404,6 +406,10 @@ export function ContentCreator() {
   const [autoDirty, setAutoDirty] = useState(false);
   const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
   const [videoDuration, setVideoDuration] = useState<5 | 10 | 15>(5);
+  const [videoProvider, setVideoProvider] = useState('');
+  const [videoModel, setVideoModel] = useState('');
+  const [preferredVideoProvider, setPreferredVideoProvider] = useState('');
+  const [preferredVideoModel, setPreferredVideoModel] = useState('');
   const [lightbox, setLightbox] = useState<LightboxMedia | null>(null);
   const [workspace, setWorkspace] = useState<
     'create' | 'library' | 'schedule' | 'guidelines'
@@ -489,6 +495,8 @@ export function ContentCreator() {
     setAutoObjective(autoConfig.autoGenerateObjective || 'AUTOMATIC');
     setNotifyWhatsAppPhone(autoConfig.notifyWhatsAppPhone || '');
     setNotifyEmail(autoConfig.notifyEmail || '');
+    setPreferredVideoProvider(autoConfig.preferredVideoProvider || '');
+    setPreferredVideoModel(autoConfig.preferredVideoModel || '');
   }
 
   const selected = useQuery({
@@ -598,7 +606,13 @@ export function ContentCreator() {
           contentStyle: payload.contentStyle ?? contentStyle,
           referenceImageUrls,
           mediaType: mediaKind === 'video' ? 'VIDEO' : 'IMAGE',
-          ...(mediaKind === 'video' ? { durationSeconds: videoDuration } : {}),
+          ...(mediaKind === 'video'
+            ? {
+                durationSeconds: videoDuration,
+                ...(videoProvider ? { videoProvider } : {}),
+                ...(videoModel ? { videoModel } : {}),
+              }
+            : {}),
         }),
       });
     },
@@ -749,6 +763,8 @@ export function ContentCreator() {
           autoGenerateObjective: autoObjective,
           notifyWhatsAppPhone,
           notifyEmail,
+          preferredVideoProvider: preferredVideoProvider || null,
+          preferredVideoModel: preferredVideoModel || null,
         }),
       }),
     onSuccess: async () => {
@@ -1157,6 +1173,42 @@ export function ContentCreator() {
                   );
                 })}
               </div>
+            </div>
+          ) : null}
+
+          {mediaKind === 'video' ? (
+            <div className="space-y-3 text-sm rounded-xl border border-line/60 bg-panel-2/40 p-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-1">
+                  <span className="text-muted">Provider (opcional)</span>
+                  <select
+                    className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                    value={videoProvider}
+                    onChange={(e) => setVideoProvider(e.target.value)}
+                  >
+                    <option value="">Por defecto (negocio / env)</option>
+                    <option value="kie">kie.ai</option>
+                    <option value="fal">fal.ai</option>
+                    <option value="veo">Veo (Google)</option>
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-muted">Modelo (opcional)</span>
+                  <input
+                    className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                    value={videoModel}
+                    onChange={(e) => setVideoModel(e.target.value)}
+                    placeholder="bytedance/seedance-1.5-pro"
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted">
+                Escribí el modelo y cambialo al momento. Vacío usa el configurado por negocio o{' '}
+                <code className="mono text-[11px]">KIE_VIDEO_MODEL</code> del .env. Ej:{' '}
+                <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code>,{' '}
+                <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code>,{' '}
+                <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code>
+              </p>
             </div>
           ) : null}
 
@@ -1848,6 +1900,54 @@ export function ContentCreator() {
               );
             })}
           </div>
+        </div>
+
+        <div className="rounded-xl border border-line/80 bg-bg/40 p-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium">Video — modelo por defecto</p>
+            <p className="text-xs text-muted mt-1">
+              Se usa cuando generás VIDEO sin escribir modelo arriba. Vacío usa{' '}
+              <code className="mono text-[11px]">.env</code> (<code className="mono text-[11px]">KIE_VIDEO_MODEL</code> /{' '}
+              <code className="mono text-[11px]">FAL_VIDEO_MODEL</code> / <code className="mono text-[11px]">VEO_VIDEO_MODEL</code>).
+              Escribí y guardá para cambiarlo al momento sin redeploy.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Provider</span>
+              <select
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+                value={preferredVideoProvider}
+                onChange={(e) => {
+                  setAutoDirty(true);
+                  setPreferredVideoProvider(e.target.value);
+                }}
+              >
+                <option value="">Por defecto (env)</option>
+                <option value="kie">kie.ai</option>
+                <option value="fal">fal.ai</option>
+                <option value="veo">Veo (Google)</option>
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted">Modelo</span>
+              <input
+                type="text"
+                placeholder="bytedance/seedance-1.5-pro"
+                className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+                value={preferredVideoModel}
+                onChange={(e) => {
+                  setAutoDirty(true);
+                  setPreferredVideoModel(e.target.value);
+                }}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-muted">
+            Ej: <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code> (kie),{' '}
+            <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code> (fal),{' '}
+            <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code> (veo). Vacío = usa .env.
+          </p>
         </div>
 
         <div className="rounded-xl border border-line/80 bg-bg/40 p-4 space-y-3">

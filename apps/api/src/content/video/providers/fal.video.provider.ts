@@ -61,8 +61,9 @@ export class FalVideoProvider implements VideoGenerationProvider {
 
     const started = Date.now();
     const aspectRatio = input.aspectRatio ?? '9:16';
+    const effectiveModel = input.model?.trim() || this.model;
     const durationSeconds = clampDurationForFal(
-      this.model,
+      effectiveModel,
       input.durationSeconds ?? 5,
     );
     const prompt = input.prompt.slice(0, 2500);
@@ -73,6 +74,7 @@ export class FalVideoProvider implements VideoGenerationProvider {
         prompt,
         aspectRatio,
         durationSeconds,
+        effectiveModel,
       );
       const videoUrl = await this.pollResult(
         submitted.statusUrl,
@@ -89,7 +91,7 @@ export class FalVideoProvider implements VideoGenerationProvider {
         height,
         durationSeconds,
         provider: this.name,
-        model: this.model,
+        model: effectiveModel,
         prompt: input.prompt,
         estimatedCost: this.estimatedCost,
         durationMs: Date.now() - started,
@@ -102,7 +104,7 @@ export class FalVideoProvider implements VideoGenerationProvider {
         throw error;
       }
       const message = error instanceof Error ? error.message : 'Error fal.ai';
-      this.logger.error(`fal video failed (${this.model}): ${message}`);
+      this.logger.error(`fal video failed (${effectiveModel}): ${message}`);
       throw new VideoProviderUnavailableError(this.name, message, error);
     }
   }
@@ -116,6 +118,7 @@ export class FalVideoProvider implements VideoGenerationProvider {
     prompt: string,
     aspectRatio: string,
     durationSeconds: number,
+    effectiveModel?: string,
   ): Promise<{ statusUrl: string; responseUrl: string }> {
     const body: Record<string, unknown> = {
       prompt,
@@ -127,9 +130,10 @@ export class FalVideoProvider implements VideoGenerationProvider {
     const refs = (input.referenceImageUrls ?? []).filter(Boolean).slice(0, 1);
     if (refs[0]) body.image_url = refs[0];
 
+    const modelForUrl = effectiveModel || this.model;
     const res = await requestJson<Record<string, unknown>>({
       method: 'POST',
-      url: `https://queue.fal.run/${this.model}`,
+      url: `https://queue.fal.run/${modelForUrl}`,
       headers: this.authHeaders(),
       body,
       timeoutMs: 30_000,
@@ -163,7 +167,7 @@ export class FalVideoProvider implements VideoGenerationProvider {
       return { statusUrl, responseUrl };
     }
     if (requestId) {
-      const base = `https://queue.fal.run/${this.model}/requests/${requestId}`;
+      const base = `https://queue.fal.run/${modelForUrl}/requests/${requestId}`;
       return { statusUrl: `${base}/status`, responseUrl: base };
     }
     throw new VideoGenerationFailedError(

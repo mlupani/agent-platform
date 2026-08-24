@@ -67,11 +67,12 @@ export class VeoVideoProvider implements VideoGenerationProvider {
     const resolution = this.resolveResolution(input.resolution);
     const durationSeconds = clampDurationForVeo(input.durationSeconds ?? 5);
     const generateAudio = input.generateAudio !== false;
+    const effectiveModel = input.model?.trim() || this.model;
 
     try {
       const image = await this.firstFrame(input.referenceImageUrls);
       let operation = await this.client.models.generateVideos({
-        model: this.model,
+        model: effectiveModel,
         prompt,
         ...(image ? { image } : {}),
         config: {
@@ -93,12 +94,12 @@ export class VeoVideoProvider implements VideoGenerationProvider {
         mimeType: videoFile.mimeType?.includes('video')
           ? videoFile.mimeType
           : 'video/mp4',
-        sourceUrl: videoFile.uri || `veo://${this.model}`,
+        sourceUrl: videoFile.uri || `veo://${effectiveModel}`,
         width,
         height,
         durationSeconds,
         provider: this.name,
-        model: this.model,
+        model: effectiveModel,
         prompt: input.prompt,
         estimatedCost: this.estimatedCost || durationSeconds * 0.05,
         durationMs: Date.now() - started,
