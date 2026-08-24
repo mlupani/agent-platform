@@ -188,40 +188,57 @@ export class AgentService {
       strategy.recentMessages,
     );
     this.logger.log(`[AGENT 4/6a] memory.recent ${Date.now() - tMem}ms count=${recentMessages.length}`);
-    const tLong = Date.now();
-    const longTerm = await this.memory.getLongTermContext({
-      businessId: business.id,
-      query: message,
-      userId: conversation.userId ?? undefined,
-      topK: strategy.semanticTopK,
-    });
-    this.logger.log(`[AGENT 4/6b] memory.longTerm ${Date.now() - tLong}ms`);
 
-    const tRag = Date.now();
-    let ragChunks = [] as Awaited<ReturnType<RagService['search']>>;
-    if (agentConfig.knowledgeBaseId) {
-      ragChunks = await this.rag.search({
+    // Paralelizar longTerm (embeddings OpenAI), RAG y hours/services — antes eran secuenciales y sumaban ~2s
+    const tParallel = Date.now();
+    const longTermPromise = (async () => {
+      const s = Date.now();
+      const r = await this.memory.getLongTermContext({
+        businessId: business.id,
+        query: message,
+        userId: conversation.userId ?? undefined,
+        topK: strategy.semanticTopK,
+      });
+      this.logger.log(`[AGENT 4/6b] memory.longTerm ${Date.now() - s}ms`);
+      return r;
+    })();
+    const ragPromise = (async () => {
+      const s = Date.now();
+      if (!agentConfig.knowledgeBaseId) {
+        this.logger.log(`[AGENT 4/6c] rag.search 0ms chunks=0 kb=none (skip)`);
+        return [] as Awaited<ReturnType<RagService['search']>>;
+      }
+      const r = await this.rag.search({
         businessId: business.id,
         query: message,
         knowledgeBaseId: agentConfig.knowledgeBaseId,
         topK: 8,
       });
-    }
-    this.logger.log(`[AGENT 4/6c] rag.search ${Date.now() - tRag}ms chunks=${ragChunks.length} kb=${agentConfig.knowledgeBaseId ?? 'none'}`);
+      this.logger.log(`[AGENT 4/6c] rag.search ${Date.now() - s}ms chunks=${r.length} kb=${agentConfig.knowledgeBaseId}`);
+      return r;
+    })();
+    const hoursServicesPromise = (async () => {
+      const s = Date.now();
+      const res = await Promise.all([
+        this.prisma.businessHour.findMany({
+          where: { businessId: business.id },
+          orderBy: { dayOfWeek: 'asc' },
+        }),
+        this.prisma.service.findMany({
+          where: { businessId: business.id, enabled: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        }),
+      ]);
+      this.logger.log(`[AGENT 4/6d] hours+services ${Date.now() - s}ms hours=${res[0].length} services=${res[1].length}`);
+      return res;
+    })();
 
-    const tHs = Date.now();
-    const [hours, services] = await Promise.all([
-      this.prisma.businessHour.findMany({
-        where: { businessId: business.id },
-        orderBy: { dayOfWeek: 'asc' },
-      }),
-      this.prisma.service.findMany({
-        where: { businessId: business.id, enabled: true },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      }),
+    const [longTerm, ragChunks, [hours, services]] = await Promise.all([
+      longTermPromise,
+      ragPromise,
+      hoursServicesPromise,
     ]);
-    this.logger.log(`[AGENT 4/6d] hours+services ${Date.now() - tHs}ms hours=${hours.length} services=${services.length}`);
-    this.logger.log(`[AGENT 4/6] total pre-prompt ${Date.now() - t4}ms`);
+    this.logger.log(`[AGENT 4/6] total pre-prompt ${Date.now() - t4}ms parallel=${Date.now() - tParallel}ms`);
 
     const configuredMessages = this.parseConfiguredMessages(
       business.defaultMessages,
