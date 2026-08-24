@@ -769,7 +769,7 @@ export class ContentService {
           secondaryColor: branding?.secondaryColor,
           format,
         });
-        const isFeedSquare = format === 'FEED_SQUARE';
+        // Imágenes: sin overlay de texto — solo logo (el texto lo genera el modelo)
         await this.generateImageAsset({
           contentId,
           businessId,
@@ -777,8 +777,7 @@ export class ContentService {
           prompt: marketingPrompt,
           referenceImages,
           logoUrl,
-          // FEED_SQUARE: texto lo quemamos con Sharp arriba para evitar corte; resto: texto lo genera el modelo
-          headline: isFeedSquare ? strategyResult.strategy.headline : null,
+          headline: null,
         });
       }
     }
@@ -1833,13 +1832,13 @@ export class ContentService {
           : '';
 
     const isFeedSquare = input.format === 'FEED_SQUARE';
-    // FEED_SQUARE se corta arriba si el modelo lo genera: lo dejamos limpio y lo quemamos con Sharp
+    // Imágenes: sin overlay programático — el modelo genera el texto con margen seguro
     const headline = input.headline?.trim()
       ? isFeedSquare
-        ? `DO NOT render any text, letters or headline in the image. Leave a clean, unobstructed top area (at least 15% of image height) with solid background, no typography. The headline "${input.headline.trim()}" will be added programmatically later — do not draw any letters, do not leave placeholder text.`
+        ? `Render headline text EXACTLY as: "${input.headline.trim()}" — keep ALL letters fully visible inside image with at least 8% safe margin from top (min 80px on 1024) and 6% from left/right, centered top, high contrast, never cropped or cut off at top. For FEED_SQUARE 1:1, keep inside central 84% area. Short headline only, no extra words.`
         : `Render headline text EXACTLY as: "${input.headline.trim()}" — keep ALL letters fully visible inside image with at least 5% safe margin from top/left/right edges, centered top, high contrast, never cropped or cut off at top. Short headline only, no extra words.`
       : isFeedSquare
-        ? 'Leave a clean top area (15% height) with solid background, no text — headline will be added programmatically.'
+        ? 'Leave a clean area for a short headline (few words, high contrast) with 8% safe margin from top for FEED_SQUARE.'
         : 'Leave a clean area for a short headline (few words, high contrast) with 5% safe margin from edges if added later.';
 
     const colors = [
