@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AgentService } from '../ai/agents/agent.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WebChatConfigService } from './web-chat-config.service';
@@ -9,6 +9,7 @@ import type {
 
 @Injectable()
 export class WebChatService {
+  private readonly logger = new Logger(WebChatService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly agent: AgentService,
@@ -24,8 +25,10 @@ export class WebChatService {
     origin?: string;
   }): Promise<WebChatMessageResult> {
     const source = input.source?.trim() || 'website';
+    const resolveStart = Date.now();
     const conversationId = await this.resolveConversationId(input, source);
-
+    this.logger.log(`[WEBCHAT RESOLVE] ${Date.now() - resolveStart}ms conversationId=${conversationId} new=${!input.conversationId}`);
+    const agentStart = Date.now();
     const result = await this.agent.run({
       businessId: input.businessId,
       conversationId,
@@ -36,6 +39,7 @@ export class WebChatService {
         origin: input.origin,
       },
     });
+    this.logger.log(`[WEBCHAT AGENT] ${Date.now() - agentStart}ms`);
 
     await this.config.touchLastUsed(input.businessId);
 

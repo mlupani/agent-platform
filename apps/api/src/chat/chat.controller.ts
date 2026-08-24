@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Res, UseGuards, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { AgentService } from '../ai/agents/agent.service';
@@ -22,6 +22,8 @@ const chatSchema = z.object({
 @Controller('chat')
 @UseGuards(ApiKeyGuard)
 export class ChatController {
+  private readonly logger = new Logger(ChatController.name);
+
   constructor(
     private readonly agent: AgentService,
     private readonly businesses: BusinessesService,
@@ -32,13 +34,20 @@ export class ChatController {
     @Body(new ZodValidationPipe(chatSchema))
     body: z.infer<typeof chatSchema>,
   ) {
+    this.logger.log(`[REQUEST RECEIVED] ${new Date().toISOString()} POST /chat/messages channel=${body.channel ?? 'WEB'} debug=${Boolean(body.debug)}`);
+    const start = Date.now();
     const businessId =
       body.businessId ?? (await this.businesses.getCurrentId());
-    return this.agent.run({
+    this.logger.log(`[BUSINESS RESOLVED] ${Date.now() - start}ms businessId=${businessId}`);
+    const agentStart = Date.now();
+    const result = await this.agent.run({
       ...body,
       businessId,
       channel: body.channel ?? 'WEB',
     });
+    this.logger.log(`[AGENT FINISHED] ${Date.now() - agentStart}ms`);
+    this.logger.log(`[REQUEST TOTAL] ${Date.now() - start}ms conversationId=${result.conversationId} status=${result.status}`);
+    return result;
   }
 
   @Post('messages/stream')
@@ -47,14 +56,19 @@ export class ChatController {
     body: z.infer<typeof chatSchema>,
     @Res() res: Response,
   ) {
+    this.logger.log(`[REQUEST RECEIVED] ${new Date().toISOString()} POST /chat/messages/stream`);
+    const start = Date.now();
     const businessId =
       body.businessId ?? (await this.businesses.getCurrentId());
+    const agentStart = Date.now();
     const result = await this.agent.run({
       ...body,
       businessId,
       channel: body.channel ?? 'WEB',
       debug: true,
     });
+    this.logger.log(`[AGENT FINISHED] ${Date.now() - agentStart}ms (stream)`);
+    this.logger.log(`[REQUEST TOTAL] ${Date.now() - start}ms`);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

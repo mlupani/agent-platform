@@ -7,6 +7,7 @@ import {
   Post,
   Req,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -26,16 +27,20 @@ const messageSchema = z.object({
 @Controller('widget')
 @UseGuards(WebChatApiKeyGuard)
 export class WebChatController {
+  private readonly logger = new Logger(WebChatController.name);
   constructor(private readonly webChat: WebChatService) {}
 
   @Post('messages')
-  send(
+  async send(
     @Req() req: WidgetAuthedRequest,
     @Body(new ZodValidationPipe(messageSchema))
     body: z.infer<typeof messageSchema>,
   ) {
+    this.logger.log(`[REQUEST RECEIVED] ${new Date().toISOString()} POST /widget/messages origin=${req.headers.origin ?? '?'} hasConversation=${Boolean(body.conversationId)} len=${body.message.length}`);
+    const start = Date.now();
     const auth = req.webChatAuth!;
-    return this.webChat.handleMessage({
+    const agentStart = Date.now();
+    const result = await this.webChat.handleMessage({
       businessId: auth.businessId,
       message: body.message,
       conversationId: body.conversationId,
@@ -43,6 +48,9 @@ export class WebChatController {
       visitorName: body.visitorName,
       origin: req.headers.origin,
     });
+    this.logger.log(`[AGENT FINISHED] ${Date.now() - agentStart}ms (via WebChatService)`);
+    this.logger.log(`[REQUEST TOTAL] ${Date.now() - start}ms conversationId=${result.conversationId}`);
+    return result;
   }
 
   @Get('conversations/:id')

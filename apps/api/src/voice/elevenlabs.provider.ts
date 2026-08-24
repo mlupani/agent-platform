@@ -109,6 +109,49 @@ export class ElevenLabsProvider implements VoiceProvider {
       this.logger.log(`[VOICE] ${v.name} (${v.voice_id}) labels=${JSON.stringify(v.labels)}`);
     }
 
+    // Preset VOICE_IDS (si el usuario pasa lista de IDs, traemos esas voces directo sin filtrar)
+    const presetIdsRaw = this.config.get<string>('ELEVENLABS_VOICE_IDS')?.trim() || '';
+    if (presetIdsRaw) {
+      const presetIds = [...new Set(presetIdsRaw.split(/[\s,;\n]+/).map((s) => s.trim()).filter(Boolean))];
+      if (presetIds.length) {
+        this.logger.log(`[VOICE] ELEVENLABS_VOICE_IDS configurado (${presetIds.length} ids) — trayendo voces por ID`);
+        const presetVoices: typeof allVoices = [];
+        await Promise.all(
+          presetIds.map(async (vid) => {
+            try {
+              const r = await fetch(`${this.baseUrl}/v1/voices/${encodeURIComponent(vid)}`, {
+                headers: { 'xi-api-key': this.apiKey },
+              });
+              if (!r.ok) {
+                this.logger.warn(`[VOICE] Preset voice ${vid} no disponible (${r.status})`);
+                return;
+              }
+              const j = (await r.json()) as { voice_id?: string; name?: string; labels?: Record<string, string>; preview_url?: string | null };
+              const voiceId = j.voice_id || vid;
+              const name = j.name || vid;
+              presetVoices.push({
+                voiceId,
+                name,
+                provider: 'elevenlabs' as const,
+                language: j.labels?.language ?? j.labels?.accent ?? null,
+                accent: j.labels?.accent ?? null,
+                gender: j.labels?.gender ?? null,
+                previewUrl: j.preview_url ?? null,
+                labels: j.labels,
+              });
+            } catch (e) {
+              this.logger.warn(`[VOICE] Error trayendo preset ${vid}: ${e instanceof Error ? e.message : 'unknown'}`);
+            }
+          }),
+        );
+        if (presetVoices.length) {
+          this.logger.log(`[VOICE] Retornando ${presetVoices.length} voces preset`);
+          return presetVoices;
+        }
+        this.logger.warn(`[VOICE] Ninguna preset voice encontrada, cayendo a filtro normal`);
+      }
+    }
+
     const filterMode = (this.config.get<string>('ELEVENLABS_VOICES_FILTER') ?? 'es').trim().toLowerCase();
     if (filterMode === 'all' || filterMode === 'todos') {
       this.logger.log(`[VOICE] Filtro desactivado (ELEVENLABS_VOICES_FILTER=all) — devolviendo ${allVoices.length} voces`);

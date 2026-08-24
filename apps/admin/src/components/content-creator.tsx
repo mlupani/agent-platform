@@ -6,6 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api, apiForm } from '@/lib/api';
 import { ContentKnowledgePanel } from '@/components/content-knowledge-panel';
 
+// Feature flag — ocultar voces ElevenLabs hasta contratar plan pago (previews y más voces requieren plan)
+// Poné en true o NEXT_PUBLIC_ELEVENLABS_ENABLED=true para habilitar
+const ELEVENLABS_ENABLED =
+  (process.env.NEXT_PUBLIC_ELEVENLABS_ENABLED ?? '').trim().toLowerCase() === 'true';
+
 interface ContentAsset {
   id: string;
   type?: string;
@@ -1593,7 +1598,7 @@ export function ContentCreator() {
                 ) : null}
               </div>
 
-              {detail && isVideoContent(detail) ? (
+              {ELEVENLABS_ENABLED && detail && isVideoContent(detail) ? (
                 <VideoVoiceEditor contentId={detail.id} detail={detail} />
               ) : null}
 
