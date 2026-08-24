@@ -11,7 +11,9 @@ import type {
   ContentMediaType,
   ContentObjective,
   ContentStrategy,
+  ContentStyle,
 } from './content.types';
+import { CONTENT_STYLE_LABEL } from './content.types';
 import { normalizeHashtags } from './video-editor/text-overlay';
 import {
   buildBriefSystemPrompt,
@@ -23,6 +25,7 @@ import {
   restoreSpanishOrthography,
   SPANISH_ORTHOGRAPHY_RULE,
 } from './spanish-orthography';
+import { ContentKnowledgeService } from './content-knowledge.service';
 
 const strategySchema = z.object({
   topic: z.string().min(2).max(200),
@@ -53,6 +56,7 @@ const strategySchema = z.object({
   visualStyle: z.string().min(2).max(400),
   serviceId: z.string().uuid().nullable().optional(),
   audience: z.string().max(300).nullable().optional(),
+  contentStyle: z.enum(['EDUCATIONAL', 'COMEDY', 'SALES']).nullable().optional(),
   editing: z
     .object({
       add_hook: z.boolean().optional(),
@@ -85,6 +89,7 @@ export interface ContentAgentInput {
   referenceImageUrls?: string[];
   mediaType?: ContentMediaType;
   durationSeconds?: number;
+  contentStyle?: ContentStyle;
 }
 
 export interface ContentAgentResult {
@@ -118,6 +123,7 @@ export class ContentAgentService {
     private readonly llmRouting: LlmRoutingService,
     private readonly cost: CostService,
     private readonly config: ConfigService,
+    private readonly contentKnowledge: ContentKnowledgeService,
   ) {
     const apiKey = this.config.get<string>('OPENAI_API_KEY') || '';
     this.openai = apiKey ? new OpenAI({ apiKey }) : null;
@@ -171,6 +177,10 @@ export class ContentAgentService {
       input.durationSeconds ?? 5,
     );
     const logoUrl = business.brandingConfig?.logoUrl?.trim() || null;
+    const contentGuidelines = await this.contentKnowledge.getPromptContext(
+      input.businessId,
+    );
+    const contentStyle = input.contentStyle ?? 'AUTO';
     const userText = this.buildUserPrompt({
       business,
       selectedService,
@@ -181,6 +191,8 @@ export class ContentAgentService {
       referenceImageCount: input.referenceImageUrls?.length ?? 0,
       mediaType: input.mediaType ?? 'IMAGE',
       durationSeconds: input.durationSeconds ?? 5,
+      contentStyle,
+      contentGuidelines,
     });
 
     const referenceImageUrls = this.mergeLogoAndRefs(
@@ -288,6 +300,14 @@ export class ContentAgentService {
       objective:
         input.objective === 'AUTOMATIC' ? parsed.objective : input.objective,
       serviceId: input.serviceId ?? parsed.serviceId ?? null,
+      contentStyle:
+        contentStyle === 'AUTO'
+          ? parsed.contentStyle ?? null
+          : contentStyle === 'EDUCATIONAL' ||
+              contentStyle === 'COMEDY' ||
+              contentStyle === 'SALES'
+            ? contentStyle
+            : parsed.contentStyle ?? null,
       videoPrompt:
         mediaType === 'VIDEO'
           ? parsed.videoPrompt || parsed.imagePrompt
@@ -308,6 +328,7 @@ export class ContentAgentService {
           ? restoreQuotedSpanish(strategy.videoPrompt)
           : undefined,
         hashtags: normalizeHashtags(strategy.hashtags),
+        contentStyle: strategy.contentStyle ?? null,
       },
       provider: providerName,
       model,
@@ -326,6 +347,7 @@ export class ContentAgentService {
     durationSeconds?: number;
     serviceId?: string;
     hint?: string;
+    contentStyle?: ContentStyle;
   }): Promise<ContentBriefResult> {
     const started = Date.now();
     const durationSeconds = input.durationSeconds ?? 5;
@@ -397,10 +419,16 @@ export class ContentAgentService {
         ].join('\n')
       : 'Sin branding extra.';
 
+    const contentStyle = input.contentStyle ?? 'AUTO';
+    const contentGuidelines = await this.contentKnowledge.getPromptContext(
+      input.businessId,
+    );
+
     const system = buildBriefSystemPrompt({
       mediaType: input.mediaType,
       durationSeconds,
       objective: input.objective,
+      contentStyle,
     });
     const userText = buildBriefUserPrompt({
       businessName: business.name,
@@ -433,6 +461,8 @@ export class ContentAgentService {
           )
           .join('\n') || '—',
       hint: input.hint,
+      contentStyle,
+      contentGuidelines,
     });
 
     const { providerName, model, content, inputTokens, outputTokens } =
@@ -569,10 +599,10 @@ Reglas de overlay (editing) — la app las quema DESPUÉS, no FAL/Kling:
 - logo_position: top-right (el CTA vive abajo; no pongas el logo abajo).
 
 Respondé SOLO con un objeto JSON con las keys:
-  topic, objective, headline, caption, cta, hook, hashtags, imagePrompt, videoPrompt, visualStyle, serviceId, audience, editing`
+  topic, objective, headline, caption, cta, hook, hashtags, imagePrompt, videoPrompt, visualStyle, serviceId, audience, contentStyle, editing`
         : `
 Respondé SOLO con un objeto JSON con las keys:
-  topic, objective, headline, caption, cta, hashtags, imagePrompt, visualStyle, serviceId, audience`;
+  topic, objective, headline, caption, cta, hashtags, imagePrompt, visualStyle, serviceId, audience, contentStyle`;
 
     return `Sos un Content Agent de marketing visual para un negocio local.
 Tu trabajo es crear UNA estrategia de publicación en JSON (sin markdown extra).
@@ -584,7 +614,12 @@ Reglas de copy:
 ${SPANISH_ORTHOGRAPHY_RULE}
 - headline, caption, cta, hook y las frases habladas entre comillas del videoPrompt DEBEN llevar tildes correctas.
 - Si hay branding, respetá colores, estilo, audiencia y "evitar".
-
+- Si hay CONTENT GUIDELINES, son la fuente de verdad del enfoque del negocio (público, tono, qué publicar, qué evitar). Respetalas por encima del brief genérico.
+- contentStyle debe ser exactamente EDUCATIONAL, COMEDY o SALES:
+  EDUCATIONAL = enseña, explica, tip útil, desmitifica.
+  COMEDY = humor ligero, situación reconocible, sin ofender.
+  SALES = empuja a reservar / comprar / escribir, con beneficio claro.
+- Si el pedido pide AUTO, detectá el estilo más fuerte para el negocio y el brief. Si pide uno fijo, respetalo.
 Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, no una foto suelta):
 - imagePrompt en inglés, estilo publicitario / social ad / flyer digital.
 - La composición DEBE incluir branding del negocio:
@@ -641,6 +676,8 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
     referenceImageCount: number;
     mediaType: ContentMediaType;
     durationSeconds: number;
+    contentStyle: ContentStyle;
+    contentGuidelines?: string;
     recent: Array<{
       topic: string | null;
       headline: string | null;
@@ -723,6 +760,15 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
             ? 'VISUAL SPECIAL DATE: badge de la ocasión + nombre/logo del negocio.'
             : 'VISUAL BRAND: toda pieza debe llevar nombre o logo del negocio de forma clara.';
 
+    const styleGuide =
+      params.contentStyle === 'EDUCATIONAL'
+        ? 'CONTENT STYLE: EDUCATIONAL — enseñá algo útil del rubro; claridad > presión de venta.'
+        : params.contentStyle === 'COMEDY'
+          ? 'CONTENT STYLE: COMEDY — humor ligero y reconocible; nunca ofendas clientes ni el rubro.'
+          : params.contentStyle === 'SALES'
+            ? 'CONTENT STYLE: SALES — beneficio + CTA fuerte a reservar/escribir/comprar.'
+            : 'CONTENT STYLE: AUTO — detectá EDUCATIONAL, COMEDY o SALES según el brief, la audiencia y los lineamientos. Devolvé contentStyle en el JSON.';
+
     return [
       'BUSINESS',
       `Nombre: ${params.business.name}`,
@@ -738,11 +784,17 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
       'BRAND',
       brandBlock,
       '',
+      'CONTENT GUIDELINES (lineamientos del negocio; priorizá esto)',
+      params.contentGuidelines?.trim() ||
+        'Sin lineamientos cargados. Usá branding + brief.',
+      '',
       'RECENT CONTENT (evitar repetir)',
       recentBlock,
       '',
       'USER REQUEST',
       `Objective: ${params.objective}`,
+      styleGuide,
+      `Content style request: ${CONTENT_STYLE_LABEL[params.contentStyle]} (${params.contentStyle})`,
       objectiveVisual,
       `Media type: ${params.mediaType}`,
       `Channels: ${params.channels.join(', ')}`,

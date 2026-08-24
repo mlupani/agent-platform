@@ -20,6 +20,14 @@ interface WebChatPublicConfig {
   apiKey?: string;
 }
 
+interface AuthMe {
+  user: {
+    id: string;
+    username: string;
+    role: 'ADMIN' | 'USER';
+  };
+}
+
 const statusLabel: Record<string, string> = {
   connected: 'Conectado',
   disconnected: 'Desconectado',
@@ -48,6 +56,13 @@ export function WebChatConfigForm() {
   const [originsText, setOriginsText] = useState<string | null>(null);
   const [plainApiKey, setPlainApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<'key' | 'snippet' | null>(null);
+
+  const { data: me } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => api<AuthMe>('/auth/me'),
+    staleTime: 60_000,
+  });
+  const isAdmin = me?.user.role === 'ADMIN';
 
   const { data, isLoading } = useQuery({
     queryKey: ['web-chat-config'],
@@ -104,10 +119,11 @@ export function WebChatConfigForm() {
     .split('\n')
     .map((item) => item.trim())
     .filter(Boolean);
+  const busy = save.isPending || generateKey.isPending;
 
   return (
     <div className="space-y-6">
-      <div className="panel rounded-2xl p-5 space-y-3">
+      <div className="panel rounded-2xl p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent shrink-0">
@@ -116,9 +132,9 @@ export function WebChatConfigForm() {
             <div>
               <h3 className="font-medium">Web</h3>
               <p className="text-sm text-muted mt-1">
-                Conectá el chat en tu landing para que el asistente atienda a
-                quien entre a la web. Al activar este canal, el agente ya
-                responde: no hay un interruptor aparte.
+                {isAdmin
+                  ? 'Conectá el chat en tu landing para que el asistente atienda a quien entre a la web.'
+                  : 'Activá o desconectá el asistente en tu sitio web. La configuración técnica la hace el administrador.'}
               </p>
             </div>
           </div>
@@ -133,127 +149,166 @@ export function WebChatConfigForm() {
         {data.lastError ? (
           <p className="text-sm text-rose">{data.lastError}</p>
         ) : null}
-      </div>
 
-      <section className="panel rounded-xl p-5 space-y-4">
-        <div>
-          <h4 className="font-medium">API key</h4>
-          <p className="text-sm text-muted mt-1">
-            El widget la envía en <code className="text-xs">x-api-key</code>.
-            Guardamos solo el hash: copiá la clave ahora, no se vuelve a
-            mostrar.
-          </p>
-        </div>
-
-        {plainApiKey ? (
-          <div className="rounded-lg border border-line bg-panel-2 p-3 space-y-2">
-            <p className="text-xs uppercase tracking-wide text-muted">
-              Clave nueva (una sola vez)
-            </p>
-            <code className="block text-sm break-all">{plainApiKey}</code>
+        <div className="flex flex-wrap gap-2">
+          {connected ? (
             <button
               type="button"
-              className="text-xs rounded-lg border border-line px-2.5 py-1.5 hover:bg-panel"
-              onClick={() => void copy('key', plainApiKey)}
+              className="rounded-lg border border-rose/30 text-rose bg-panel px-4 py-2.5 text-sm min-h-10 disabled:opacity-60"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  confirm(
+                    '¿Desconectar el bot web? Dejará de responder en el sitio hasta que lo vuelvas a conectar.',
+                  )
+                ) {
+                  save.mutate({ enabled: false });
+                }
+              }}
             >
-              {copied === 'key' ? 'Copiada' : 'Copiar clave'}
+              {save.isPending ? 'Desconectando…' : 'Desconectar'}
             </button>
-          </div>
-        ) : data.hasApiKey ? (
+          ) : (
+            <button
+              type="button"
+              className="rounded-lg bg-accent text-white px-4 py-2.5 text-sm min-h-10 disabled:opacity-60"
+              disabled={busy || !data.hasApiKey}
+              onClick={() => save.mutate({ enabled: true })}
+              title={
+                !data.hasApiKey
+                  ? 'El administrador debe generar una API key primero'
+                  : undefined
+              }
+            >
+              {save.isPending ? 'Conectando…' : 'Conectar'}
+            </button>
+          )}
+        </div>
+        {!data.hasApiKey ? (
           <p className="text-sm text-muted">
-            Clave activa: <span className="font-mono">{data.apiKeyPrefix}…</span>
-          </p>
-        ) : (
-          <p className="text-sm text-muted">Todavía no hay una API key.</p>
-        )}
-
-        <button
-          type="button"
-          className="rounded-lg bg-accent text-white px-3 py-2 text-sm hover:opacity-90 disabled:opacity-50"
-          disabled={generateKey.isPending}
-          onClick={() => {
-            if (
-              data.hasApiKey &&
-              !confirm('Esto invalida la clave anterior. ¿Generar una nueva?')
-            ) {
-              return;
-            }
-            generateKey.mutate();
-          }}
-        >
-          {generateKey.isPending
-            ? 'Generando…'
-            : data.hasApiKey
-              ? 'Regenerar API key'
-              : 'Generar API key'}
-        </button>
-        {generateKey.error ? (
-          <p className="text-sm text-rose">
-            {(generateKey.error as Error).message}
+            {isAdmin
+              ? 'Generá una API key abajo para poder conectar el canal.'
+              : 'Todavía no está configurado. Pedile al administrador que genere la API key.'}
           </p>
         ) : null}
-      </section>
+        {save.error ? (
+          <p className="text-sm text-rose">{(save.error as Error).message}</p>
+        ) : null}
+      </div>
 
-      <section className="panel rounded-xl p-5 space-y-4">
-        <div>
-          <h4 className="font-medium">Orígenes permitidos</h4>
-          <p className="text-sm text-muted mt-1">
-            Un origen por línea, p.ej. <code>https://midominio.com</code>.
-            Vacío = cualquier origen (la API key sigue siendo obligatoria).
-          </p>
-        </div>
-        <textarea
-          value={originsValue}
-          onChange={(event) => setOriginsText(event.target.value)}
-          rows={4}
-          className="w-full min-h-24 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-mono"
-          placeholder={'https://midominio.com\nhttps://www.midominio.com'}
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={data.enabled}
-              disabled={!data.hasApiKey || save.isPending}
-              onChange={(event) =>
-                save.mutate({ enabled: event.target.checked })
-              }
-            />
-            Canal activo
-          </label>
+      {isAdmin ? (
+        <section className="panel rounded-xl p-5 space-y-4">
+          <div>
+            <h4 className="font-medium">API key</h4>
+            <p className="text-sm text-muted mt-1">
+              El widget la envía en <code className="text-xs">x-api-key</code>.
+              Guardamos solo el hash: copiá la clave ahora, no se vuelve a
+              mostrar.
+            </p>
+          </div>
+
+          {plainApiKey ? (
+            <div className="rounded-lg border border-line bg-panel-2 p-3 space-y-2">
+              <p className="text-xs uppercase tracking-wide text-muted">
+                Clave nueva (una sola vez)
+              </p>
+              <code className="block text-sm break-all">{plainApiKey}</code>
+              <button
+                type="button"
+                className="text-xs rounded-lg border border-line px-2.5 py-1.5 hover:bg-panel"
+                onClick={() => void copy('key', plainApiKey)}
+              >
+                {copied === 'key' ? 'Copiada' : 'Copiar clave'}
+              </button>
+            </div>
+          ) : data.hasApiKey ? (
+            <p className="text-sm text-muted">
+              Clave activa:{' '}
+              <span className="font-mono">{data.apiKeyPrefix}…</span>
+            </p>
+          ) : (
+            <p className="text-sm text-muted">Todavía no hay una API key.</p>
+          )}
+
           <button
             type="button"
-            className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-panel-2"
+            className="rounded-lg bg-accent text-white px-3 py-2 text-sm hover:opacity-90 disabled:opacity-50"
+            disabled={generateKey.isPending}
+            onClick={() => {
+              if (
+                data.hasApiKey &&
+                !confirm('Esto invalida la clave anterior. ¿Generar una nueva?')
+              ) {
+                return;
+              }
+              generateKey.mutate();
+            }}
+          >
+            {generateKey.isPending
+              ? 'Generando…'
+              : data.hasApiKey
+                ? 'Regenerar API key'
+                : 'Generar API key'}
+          </button>
+          {generateKey.error ? (
+            <p className="text-sm text-rose">
+              {(generateKey.error as Error).message}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {isAdmin ? (
+        <section className="panel rounded-xl p-5 space-y-4">
+          <div>
+            <h4 className="font-medium">Orígenes permitidos</h4>
+            <p className="text-sm text-muted mt-1">
+              Un origen por línea, p.ej. <code>https://midominio.com</code>.
+              Vacío = cualquier origen (la API key sigue siendo obligatoria).
+            </p>
+          </div>
+          <textarea
+            value={originsValue}
+            onChange={(event) => setOriginsText(event.target.value)}
+            rows={4}
+            className="w-full min-h-24 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-mono"
+            placeholder={'https://midominio.com\nhttps://www.midominio.com'}
+          />
+          <button
+            type="button"
+            className="rounded-lg border border-line px-3 py-2 text-sm hover:bg-panel-2 disabled:opacity-50"
             disabled={save.isPending}
             onClick={() => save.mutate({ allowedOrigins: parsedOrigins })}
           >
             {save.isPending ? 'Guardando…' : 'Guardar orígenes'}
           </button>
-        </div>
-        {save.error ? (
-          <p className="text-sm text-rose">{(save.error as Error).message}</p>
-        ) : null}
-      </section>
+          {save.error ? (
+            <p className="text-sm text-rose">{(save.error as Error).message}</p>
+          ) : null}
+        </section>
+      ) : null}
 
-      <section className="panel rounded-xl p-5 space-y-3">
-        <div>
-          <h4 className="font-medium">Cómo llamarlo</h4>
-          <p className="text-sm text-muted mt-1">
-            POST {data.widgetUrl}. Guardá <code>conversationId</code> para
-            continuar el mismo chat.
-          </p>
-        </div>
-        <pre className="overflow-x-auto rounded-lg border border-line bg-panel-2 p-3 text-xs leading-5">
-          {snippet}
-        </pre>
-        <button
-          type="button"
-          className="text-xs rounded-lg border border-line px-2.5 py-1.5 hover:bg-panel"
-          onClick={() => void copy('snippet', snippet)}
-        >
-          {copied === 'snippet' ? 'Copiado' : 'Copiar snippet'}
-        </button>
-      </section>
+      {isAdmin ? (
+        <section className="panel rounded-xl p-5 space-y-3">
+          <div>
+            <h4 className="font-medium">Cómo llamarlo</h4>
+            <p className="text-sm text-muted mt-1">
+              POST {data.widgetUrl}. Guardá <code>conversationId</code> para
+              continuar el mismo chat.
+            </p>
+          </div>
+          <pre className="overflow-x-auto rounded-lg border border-line bg-panel-2 p-3 text-xs leading-5">
+            {snippet}
+          </pre>
+          <button
+            type="button"
+            className="text-xs rounded-lg border border-line px-2.5 py-1.5 hover:bg-panel"
+            onClick={() => void copy('snippet', snippet)}
+          >
+            {copied === 'snippet' ? 'Copiado' : 'Copiar snippet'}
+          </button>
+        </section>
+      ) : null}
     </div>
   );
 }

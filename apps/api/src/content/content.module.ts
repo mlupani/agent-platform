@@ -4,6 +4,7 @@ import { AiModule } from '../ai/ai.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { EmailModule } from '../email/email.module';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
@@ -12,6 +13,7 @@ import { ContentAgentService } from './content-agent.service';
 import { ContentAutoGenerateProcessor } from './content-auto-generate.processor';
 import { CONTENT_AUTO_QUEUE } from './content-auto-generate.queue';
 import { ContentAutoGenerateScheduler } from './content-auto-generate.scheduler';
+import { ContentKnowledgeService } from './content-knowledge.service';
 import { ContentNotifyService } from './content-notify.service';
 import { ContentService } from './content.service';
 import { ContentVideoGenerateProcessor } from './content-video-generate.processor';
@@ -28,6 +30,7 @@ import { VideoEditorModule } from './video-editor/video-editor.module';
     BusinessesModule,
     AiModule,
     AnalyticsModule,
+    KnowledgeModule,
     RealtimeModule,
     WhatsAppModule,
     SocialModule,
@@ -41,6 +44,7 @@ import { VideoEditorModule } from './video-editor/video-editor.module';
   providers: [
     ContentService,
     ContentAgentService,
+    ContentKnowledgeService,
     ContentNotifyService,
     ContentAutoGenerateScheduler,
     ContentAutoGenerateProcessor,

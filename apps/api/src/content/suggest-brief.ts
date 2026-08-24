@@ -2,7 +2,9 @@ import type {
   ContentChannel,
   ContentMediaType,
   ContentObjective,
+  ContentStyle,
 } from './content.types';
+import { CONTENT_STYLE_LABEL } from './content.types';
 import {
   restoreSpanishOrthography,
   SPANISH_ORTHOGRAPHY_RULE,
@@ -19,6 +21,19 @@ export const OBJECTIVE_LABEL: Record<ContentObjective, string> = {
   SPECIAL_DATE: 'Fecha especial',
   CUSTOM: 'Personalizado',
 };
+
+function contentStyleBriefRule(style: ContentStyle): string {
+  if (style === 'EDUCATIONAL') {
+    return '- Enfoque EDUCATIONAL: enseñá / explicá / tip útil. Claridad y valor antes que presión de venta.';
+  }
+  if (style === 'COMEDY') {
+    return '- Enfoque COMEDY: humor ligero y reconocible. Nada ofensivo ni forzado.';
+  }
+  if (style === 'SALES') {
+    return '- Enfoque SALES: beneficio concreto + CTA fuerte a reservar, escribir o comprar.';
+  }
+  return '- Enfoque AUTO: elegí el más potente entre Educativo, Comedia o Venta según el negocio y los lineamientos. Anotá el tipo elegido en IDEA.';
+}
 
 export function sanitizeBrief(raw: string): string {
   let text = (raw ?? '').trim();
@@ -59,14 +74,18 @@ export function buildBriefSystemPrompt(input: {
   mediaType: ContentMediaType;
   durationSeconds: number;
   objective: ContentObjective;
+  contentStyle?: ContentStyle;
 }): string {
   const objective = OBJECTIVE_LABEL[input.objective];
+  const style = input.contentStyle ?? 'AUTO';
+  const styleRule = contentStyleBriefRule(style);
   if (input.mediaType === 'VIDEO') {
     return `Sos un director creativo de shorts para negocios locales de Argentina (Reels / TikTok / Status).
 Tu trabajo es armar UN guion listo para que otra IA genere el video. Español rioplatense, concreto, vendible.
 
 El video dura ${input.durationSeconds}s, vertical 9:16.
 Objetivo: ${objective}.
+Tipo de contenido: ${CONTENT_STYLE_LABEL[style]} (${style}).
 
 Devolvé SOLO el guion, con estos bloques (títulos en mayúsculas):
 IDEA
@@ -78,7 +97,7 @@ ON-SCREEN
 LOOK
 
 Reglas:
-- IDEA: 1 o 2 frases. Ángulo específico de ESTE negocio, no genérico.
+- IDEA: 1 o 2 frases. Ángulo específico de ESTE negocio, no genérico. Si el tipo es AUTO, indicá Educativo/Comedia/Venta.
 - HOOK: lo que se ve y se siente en el primer segundo. Pregunta, tensión o beneficio concreto.
 - VOZ (OBLIGATORIO): siempre hay alguien que HABLA. Preferí un protagonista a cámara (dueño, staff o cliente) mirando a cámara. Si el rubro no admite persona en frame, usá locución en off clara.
 - En VOZ escribí EXACTAMENTE las frases dichas, en español rioplatense, entre comillas, con tildes correctas. Deben entrar en ${input.durationSeconds}s (~2,5 palabras por segundo). 1 a 3 frases, naturales, vendibles.
@@ -86,6 +105,8 @@ Reglas:
 - CIERRE: CTA accionable (reservar, escribir, pasar, pedir turno). La voz también lo dice.
 - ON-SCREEN: dos líneas cortas (máx 8 palabras cada una): hook + CTA. Sin emojis.
 - LOOK: estilo visual, luz, paleta, tono. NO pidas texto, logo ni watermark quemados en el video (eso va después).
+${styleRule}
+- Si hay LINEAMIENTOS DE CONTENIDO en el pedido, respetalos (público, tono, qué sí / qué no).
 ${SPANISH_ORTHOGRAPHY_RULE}
 - NUNCA armes un video mudo ni solo de producto/local sin voz.
 - No inventes precios, % off ni fechas si el negocio no los dio.
@@ -97,6 +118,7 @@ ${SPANISH_ORTHOGRAPHY_RULE}
 Tu trabajo es armar UN brief listo para que otra IA genere la imagen. Español rioplatense, concreto.
 
 Objetivo: ${objective}.
+Tipo de contenido: ${CONTENT_STYLE_LABEL[style]} (${style}).
 
 Devolvé SOLO el brief, con estos bloques (títulos en mayúsculas):
 IDEA
@@ -106,11 +128,13 @@ CTA
 LOOK
 
 Reglas:
-- IDEA: ángulo específico de ESTE negocio.
+- IDEA: ángulo específico de ESTE negocio. Si el tipo es AUTO, indicá Educativo/Comedia/Venta.
 - HEADLINE: pocas palabras, alto contraste, para la pieza.
 - COMPOSICIÓN: qué se ve (hero, marca, jerarquía). Incluí logo o nombre del negocio.
 - CTA: frase accionable corta.
 - LOOK: estilo, luz, paleta, tono.
+${styleRule}
+- Si hay LINEAMIENTOS DE CONTENIDO en el pedido, respetalos (público, tono, qué sí / qué no).
 ${SPANISH_ORTHOGRAPHY_RULE}
 - No inventes precios ni % off si el negocio no los dio.
 - Máximo ${BRIEF_MAX_CHARS} caracteres. Sin markdown, sin JSON, sin preámbulo.`;
@@ -131,7 +155,10 @@ export function buildBriefUserPrompt(input: {
   brand: string;
   recent: string;
   hint?: string;
+  contentStyle?: ContentStyle;
+  contentGuidelines?: string;
 }): string {
+  const style = input.contentStyle ?? 'AUTO';
   return [
     'NEGOCIO',
     `Nombre: ${input.businessName}`,
@@ -141,6 +168,9 @@ export function buildBriefUserPrompt(input: {
     '',
     'MARCA',
     input.brand,
+    '',
+    'LINEAMIENTOS DE CONTENIDO (priorizá esto)',
+    input.contentGuidelines?.trim() || 'Sin lineamientos cargados.',
     '',
     'SERVICIOS',
     input.services || '—',
@@ -153,6 +183,7 @@ export function buildBriefUserPrompt(input: {
     '',
     'PEDIDO',
     `Objetivo: ${OBJECTIVE_LABEL[input.objective]} (${input.objective})`,
+    `Tipo de contenido: ${CONTENT_STYLE_LABEL[style]} (${style})`,
     `Formato: ${input.mediaType === 'VIDEO' ? `VIDEO ${input.durationSeconds}s 9:16` : 'IMAGEN'}`,
     `Canales: ${input.channels.join(', ') || '—'}`,
     `Servicio foco: ${

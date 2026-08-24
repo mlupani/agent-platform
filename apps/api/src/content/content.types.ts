@@ -7,6 +7,13 @@ export type ContentObjective =
   | 'SPECIAL_DATE'
   | 'CUSTOM';
 
+/** Enfoque creativo de la pieza (más allá del objetivo comercial). */
+export type ContentStyle =
+  | 'AUTO'
+  | 'EDUCATIONAL'
+  | 'COMEDY'
+  | 'SALES';
+
 export type ContentChannel =
   | 'WHATSAPP_STATUS'
   | 'INSTAGRAM_STORY'
@@ -71,5 +78,14 @@ export interface ContentStrategy {
   visualStyle: string;
   serviceId?: string | null;
   audience?: string | null;
+  /** EDUCATIONAL | COMEDY | SALES — el modelo lo elige si el pedido fue AUTO. */
+  contentStyle?: 'EDUCATIONAL' | 'COMEDY' | 'SALES' | null;
   editing?: VideoEditingPlan;
 }
+
+export const CONTENT_STYLE_LABEL: Record<ContentStyle, string> = {
+  AUTO: 'Detectar automáticamente (Educativo / Comedia / Venta)',
+  EDUCATIONAL: 'Educativo',
+  COMEDY: 'Comedia',
+  SALES: 'Venta',
+};

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { api, apiForm } from '@/lib/api';
+import { ContentKnowledgePanel } from '@/components/content-knowledge-panel';
 
 interface ContentAsset {
   id: string;
@@ -113,6 +114,13 @@ const OBJECTIVES = [
   { value: 'INFO', label: 'Informativo' },
   { value: 'SPECIAL_DATE', label: 'Fecha especial' },
   { value: 'CUSTOM', label: 'Personalizado' },
+] as const;
+
+const CONTENT_STYLES = [
+  { value: 'AUTO', label: 'Detectar (Educativo / Comedia / Venta)' },
+  { value: 'EDUCATIONAL', label: 'Educativo' },
+  { value: 'COMEDY', label: 'Comedia' },
+  { value: 'SALES', label: 'Venta' },
 ] as const;
 
 const CHANNELS = [
@@ -368,6 +376,7 @@ function MediaLightbox({
 export function ContentCreator() {
   const queryClient = useQueryClient();
   const [objective, setObjective] = useState<string>('AUTOMATIC');
+  const [contentStyle, setContentStyle] = useState<string>('AUTO');
   const [channels, setChannels] = useState<string[]>([
     'INSTAGRAM_FEED',
     'INSTAGRAM_STORY',
@@ -396,9 +405,9 @@ export function ContentCreator() {
   const [mediaKind, setMediaKind] = useState<'image' | 'video'>('image');
   const [videoDuration, setVideoDuration] = useState<5 | 10 | 15>(5);
   const [lightbox, setLightbox] = useState<LightboxMedia | null>(null);
-  const [workspace, setWorkspace] = useState<'create' | 'library' | 'schedule'>(
-    'create',
-  );
+  const [workspace, setWorkspace] = useState<
+    'create' | 'library' | 'schedule' | 'guidelines'
+  >('create');
   const [pieceTab, setPieceTab] = useState<'edit' | 'publish'>('edit');
 
   const summary = useQuery({
@@ -579,12 +588,14 @@ export function ContentCreator() {
       userInstructions?: string;
       serviceId?: string;
       contentId?: string;
+      contentStyle?: string;
     }) => {
       const referenceImageUrls = await resolveReferenceUrls();
       return api<GeneratedContent>('/admin/content/generate', {
         method: 'POST',
         body: JSON.stringify({
           ...payload,
+          contentStyle: payload.contentStyle ?? contentStyle,
           referenceImageUrls,
           mediaType: mediaKind === 'video' ? 'VIDEO' : 'IMAGE',
           ...(mediaKind === 'video' ? { durationSeconds: videoDuration } : {}),
@@ -618,6 +629,7 @@ export function ContentCreator() {
           channels,
           userInstructions: instructions.trim() || undefined,
           serviceId: serviceId || undefined,
+          contentStyle,
           mediaType: mediaKind === 'video' ? 'VIDEO' : 'IMAGE',
           ...(mediaKind === 'video' ? { durationSeconds: videoDuration } : {}),
         }),
@@ -999,6 +1011,7 @@ export function ContentCreator() {
           [
             ['create', 'Crear'],
             ['library', 'Piezas'],
+            ['guidelines', 'Lineamientos'],
             ['schedule', 'Programación'],
           ] as const
         ).map(([id, label]) => (
@@ -1049,6 +1062,25 @@ export function ContentCreator() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Tipo de contenido</span>
+            <select
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={contentStyle}
+              onChange={(e) => setContentStyle(e.target.value)}
+            >
+              {CONTENT_STYLES.map((style) => (
+                <option key={style.value} value={style.value}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs text-muted">
+              La IA usa este enfoque junto a los lineamientos del negocio. Con
+              “Detectar”, elige Educativo, Comedia o Venta según el brief.
+            </span>
           </label>
 
           <div className="space-y-2 text-sm">
@@ -1197,8 +1229,8 @@ export function ContentCreator() {
             />
             <p className="text-xs text-muted">
               {mediaKind === 'video'
-                ? 'La IA arma un guion con el negocio y el objetivo. Después podés editarlo y generar el video.'
-                : 'La IA propone un brief con el negocio y el objetivo. Después podés editarlo.'}
+                ? 'La IA arma un guion con el negocio, el tipo de contenido y tus lineamientos. Después podés editarlo y generar el video.'
+                : 'La IA propone un brief con el negocio, el tipo de contenido y tus lineamientos. Después podés editarlo.'}
             </p>
             {suggestBrief.isError ? (
               <p className="text-sm text-red-600">
@@ -1280,6 +1312,7 @@ export function ContentCreator() {
                 channels,
                 userInstructions: instructions.trim() || undefined,
                 serviceId: serviceId || undefined,
+                contentStyle,
               })
             }
             className="w-full rounded-lg bg-accent text-white px-3 py-2.5 text-sm font-medium disabled:opacity-60 min-h-10"
@@ -1299,6 +1332,8 @@ export function ContentCreator() {
         </section>
       </div>
       ) : null}
+
+      {workspace === 'guidelines' ? <ContentKnowledgePanel /> : null}
 
       {workspace === 'library' ? (
       <div className="space-y-6">

@@ -7,15 +7,19 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { z } from 'zod';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { ContentService } from './content.service';
+import { ContentKnowledgeService } from './content-knowledge.service';
+
+const contentStyleSchema = z.enum(['AUTO', 'EDUCATIONAL', 'COMEDY', 'SALES']);
 
 const suggestBriefSchema = z.object({
   objective: z.string().min(1),
@@ -26,6 +30,7 @@ const suggestBriefSchema = z.object({
   durationSeconds: z
     .union([z.literal(5), z.literal(10), z.literal(15)])
     .optional(),
+  contentStyle: contentStyleSchema.optional(),
 });
 
 const generateSchema = z.object({
@@ -39,6 +44,7 @@ const generateSchema = z.object({
   durationSeconds: z
     .union([z.literal(5), z.literal(10), z.literal(15)])
     .optional(),
+  contentStyle: contentStyleSchema.optional(),
 });
 
 const updateSchema = z.object({
@@ -97,10 +103,25 @@ const publishSchema = z.object({
   channels: z.array(z.string()).min(1).optional(),
 });
 
+const contentNoteSchema = z.object({
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(50_000),
+  category: z.string().max(80).optional(),
+});
+
+const updateContentNoteSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(50_000).optional(),
+  category: z.string().max(80).optional(),
+});
+
 @Controller('admin/content')
 @UseGuards(ApiKeyGuard)
 export class ContentAdminController {
-  constructor(private readonly content: ContentService) {}
+  constructor(
+    private readonly content: ContentService,
+    private readonly contentKnowledge: ContentKnowledgeService,
+  ) {}
 
   @Get('summary')
   summary() {
@@ -146,6 +167,52 @@ export class ContentAdminController {
     });
   }
 
+  /** Lineamientos de contenido (KB separada del chat del agente). */
+  @Get('knowledge')
+  knowledgeWorkspace() {
+    return this.contentKnowledge.getWorkspace();
+  }
+
+  @Post('knowledge/notes')
+  createKnowledgeNote(
+    @Body(new ZodValidationPipe(contentNoteSchema))
+    body: z.infer<typeof contentNoteSchema>,
+  ) {
+    return this.contentKnowledge.createNote(body);
+  }
+
+  @Patch('knowledge/documents/:id')
+  updateKnowledgeNote(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateContentNoteSchema))
+    body: z.infer<typeof updateContentNoteSchema>,
+  ) {
+    return this.contentKnowledge.updateNote(id, body);
+  }
+
+  @Delete('knowledge/documents/:id')
+  deleteKnowledgeDocument(@Param('id') id: string) {
+    return this.contentKnowledge.deleteDocument(id);
+  }
+
+  @Post('knowledge/documents/:id/reindex')
+  reindexKnowledgeDocument(@Param('id') id: string) {
+    return this.contentKnowledge.reindex(id);
+  }
+
+  @Post('knowledge/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 12 * 1024 * 1024 },
+    }),
+  )
+  uploadKnowledgeFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { title?: string },
+  ) {
+    return this.contentKnowledge.upload(file, body?.title);
+  }
+
   @Post('references')
   @UseInterceptors(
     FilesInterceptor('files', 4, {
@@ -164,17 +231,17 @@ export class ContentAdminController {
     return this.content.suggestBrief(body);
   }
 
-  @Get(':id')
-  get(@Param('id') id: string) {
-    return this.content.get(id);
-  }
-
   @Post('generate')
   generate(
     @Body(new ZodValidationPipe(generateSchema))
     body: z.infer<typeof generateSchema>,
   ) {
     return this.content.generate(body);
+  }
+
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.content.get(id);
   }
 
   @Post(':id/auto-edit')

@@ -44,6 +44,7 @@ import type {
   ContentObjective,
   ContentStatus,
   ContentStrategy,
+  ContentStyle,
   VideoEditingPlan,
 } from './content.types';
 
@@ -55,6 +56,13 @@ const OBJECTIVES = new Set([
   'INFO',
   'SPECIAL_DATE',
   'CUSTOM',
+]);
+
+const CONTENT_STYLES = new Set([
+  'AUTO',
+  'EDUCATIONAL',
+  'COMEDY',
+  'SALES',
 ]);
 
 const CHANNELS = new Set([
@@ -328,10 +336,12 @@ export class ContentService {
     serviceId?: string;
     mediaType?: ContentMediaType;
     durationSeconds?: number;
+    contentStyle?: string;
   }) {
     const businessId = await this.businesses.getCurrentId();
     const mediaType = this.parseMediaType(input.mediaType);
     const objective = this.parseObjective(input.objective);
+    const contentStyle = this.parseContentStyle(input.contentStyle);
     const channels = input.channels?.length
       ? this.parseChannels(input.channels)
       : [];
@@ -347,6 +357,7 @@ export class ContentService {
         durationSeconds,
         serviceId: input.serviceId,
         hint: input.userInstructions,
+        contentStyle,
       });
 
       await this.prisma.contentGenerationExecution.create({
@@ -363,6 +374,7 @@ export class ContentService {
           metadata: {
             objective,
             mediaType,
+            contentStyle,
             durationSeconds: mediaType === 'VIDEO' ? durationSeconds : null,
           },
         },
@@ -390,6 +402,7 @@ export class ContentService {
     generationMode?: 'MANUAL' | 'AUTOMATIC';
     mediaType?: ContentMediaType;
     durationSeconds?: number;
+    contentStyle?: string;
   }) {
     const businessId =
       input.businessId ?? (await this.businesses.getCurrentId());
@@ -406,6 +419,7 @@ export class ContentService {
           )
         : null;
     const objective = this.parseObjective(input.objective);
+    const contentStyle = this.parseContentStyle(input.contentStyle);
     const channels = this.parseChannels(input.channels);
     if (!channels.length) {
       throw new BadRequestException('Seleccioná al menos un canal');
@@ -429,6 +443,10 @@ export class ContentService {
         : (content?.referenceImageUrls ?? []),
     );
 
+    const strategySeed = {
+      contentStyleRequest: contentStyle,
+    } as Prisma.InputJsonValue;
+
     if (!content) {
       content = await this.prisma.generatedContent.create({
         data: {
@@ -442,6 +460,7 @@ export class ContentService {
           generationMode,
           mediaType,
           durationSeconds,
+          strategy: strategySeed,
         },
       });
     } else {
@@ -459,6 +478,7 @@ export class ContentService {
           generationMode,
           mediaType,
           durationSeconds,
+          strategy: strategySeed,
           error: null,
           autoEditStatus: null,
           autoEditError: null,
@@ -503,6 +523,7 @@ export class ContentService {
         referenceImageUrls,
         mediaType,
         durationSeconds: input.durationSeconds,
+        contentStyle,
       });
     } catch (error) {
       const message =
@@ -528,6 +549,7 @@ export class ContentService {
         referenceImageUrls: content.referenceImageUrls,
         mediaType: this.parseMediaType(content.mediaType),
         durationSeconds: content.durationSeconds,
+        contentStyle: this.contentStyleFromStrategy(content.strategy),
       });
       if (content.generationMode === 'AUTOMATIC' && ready) {
         await this.notify.notifyAutoGeneration({
@@ -565,9 +587,11 @@ export class ContentService {
     referenceImageUrls: string[];
     mediaType: ContentMediaType;
     durationSeconds?: number | null;
+    contentStyle?: ContentStyle;
   }) {
     const { contentId, businessId, objective, channels, mediaType } = input;
     const referenceImageUrls = input.referenceImageUrls;
+    const contentStyle = input.contentStyle ?? 'AUTO';
 
     const strategyResult = await this.contentAgent.buildStrategy({
       businessId,
@@ -578,6 +602,7 @@ export class ContentService {
       referenceImageUrls,
       mediaType,
       durationSeconds: parseVideoDuration(input.durationSeconds, 5),
+      contentStyle,
     });
 
     await this.prisma.contentGenerationExecution.create({
@@ -1731,6 +1756,37 @@ export class ContentService {
       throw new BadRequestException('Objetivo inválido');
     }
     return upper as ContentObjective;
+  }
+
+  private parseContentStyle(value?: string | null): ContentStyle {
+    if (!value?.trim()) return 'AUTO';
+    const upper = value.trim().toUpperCase();
+    if (!CONTENT_STYLES.has(upper)) {
+      throw new BadRequestException('Tipo de contenido inválido');
+    }
+    return upper as ContentStyle;
+  }
+
+  private contentStyleFromStrategy(strategy: unknown): ContentStyle {
+    if (!strategy || typeof strategy !== 'object') return 'AUTO';
+    const record = strategy as Record<string, unknown>;
+    const requested = record.contentStyleRequest;
+    if (typeof requested === 'string') {
+      try {
+        return this.parseContentStyle(requested);
+      } catch {
+        return 'AUTO';
+      }
+    }
+    const detected = record.contentStyle;
+    if (
+      detected === 'EDUCATIONAL' ||
+      detected === 'COMEDY' ||
+      detected === 'SALES'
+    ) {
+      return detected;
+    }
+    return 'AUTO';
   }
 
   private parseChannels(values: string[]): ContentChannel[] {
