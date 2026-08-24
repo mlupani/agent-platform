@@ -35,15 +35,24 @@ function logoOverlayXY(
   position: LogoCornerPosition,
   barH: number,
   safeSide: number,
+  hasBars: boolean,
 ): { x: string; y: string } {
   const left = `${safeSide}`;
   const right = `W-w-${safeSide}`;
-  const top = `max(10\\,(${barH}-h)/2)`;
-  const bottom = `H-${barH}+max(10\\,(${barH}-h)/2)`;
-  if (position === 'top-left') return { x: left, y: top };
-  if (position === 'bottom-left') return { x: left, y: bottom };
-  if (position === 'bottom-right') return { x: right, y: bottom };
-  return { x: right, y: top };
+  // Si hay barras arriba/abajo (hook/CTA), el logo va FUERA de las barras para no taparlas:
+  // top = debajo de la barra superior, bottom = encima de la barra inferior
+  const top = hasBars ? `${barH}+${safeSide}` : `${safeSide}`;
+  const bottom = hasBars ? `H-h-${barH}-${safeSide}` : `H-h-${safeSide}`;
+  // Fallback para cuando no hay barras: mantener centrado dentro de margen pero con safe
+  const topInside = `max(10\\,(${barH}-h)/2)`;
+  const bottomInside = `H-${barH}+max(10\\,(${barH}-h)/2)`;
+  // Si hay barras, usar fuera; si no, dentro (no hay hook/CTA que tapar)
+  const yTop = hasBars ? top : topInside;
+  const yBottom = hasBars ? bottom : bottomInside;
+  if (position === 'top-left') return { x: left, y: yTop };
+  if (position === 'bottom-left') return { x: left, y: yBottom };
+  if (position === 'bottom-right') return { x: right, y: yBottom };
+  return { x: right, y: yTop };
 }
 
 function fadeTiming(durationSeconds: number): {
@@ -270,7 +279,7 @@ export function buildFilterGraph(input: {
     const logoLabel = 'logo';
     const out = nextLabel();
     const opacity = Math.min(1, Math.max(0.15, logo.opacity));
-    const { x, y } = logoOverlayXY(logo.position, barH, safeSide);
+    const { x, y } = logoOverlayXY(logo.position, barH, safeSide, hasBars);
     const logoMaxH = Math.round(barH * 0.72);
     filters.push(
       `[1:v]scale=${logo.width}:${logoMaxH}:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${opacity.toFixed(2)}[${logoLabel}]`,

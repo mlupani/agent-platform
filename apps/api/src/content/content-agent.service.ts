@@ -611,7 +611,8 @@ Reglas de copy:
 - Evitá repetir temas/headlines/CTA de RECENT CONTENT.
 - CTA claro y accionable.
 ${SPANISH_ORTHOGRAPHY_RULE}
-- headline, caption, cta, hook y las frases habladas entre comillas del videoPrompt DEBEN llevar tildes correctas.
+ - headline, caption, cta, hook y las frases habladas entre comillas del videoPrompt DEBEN llevar tildes correctas y estar en el idioma del negocio.
+- Todo texto visible en la imagen (headline, badge) DEBE estar en el idioma del negocio — si business.language=es, español rioplatense con tildes; nunca en inglés, Lorem Ipsum u otro idioma.
 - Si hay branding, respetá colores, estilo, audiencia y "evitar".
 - Si hay CONTENT GUIDELINES, son la fuente de verdad del enfoque del negocio (público, tono, qué publicar, qué evitar). Respetalas por encima del brief genérico.
 - contentStyle debe ser exactamente EDUCATIONAL, COMEDY o SALES:
@@ -632,7 +633,8 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
 - Si Objective es OFFER: badge "OFERTA"/"PROMO"/"% OFF" legible (no garabatos) + colores de marca.
 - Si Objective es SERVICE_PROMOTION: hero del servicio + headline corto.
 - Si Objective es SPECIAL_DATE: badge de ocasión + estética de marca.
-- Evitá texto ilegible, Lorem Ipsum, letras inventadas o párrafos largos.
+- Evitá texto ilegible, letras inventadas o párrafos largos. Nunca uses Lorem Ipsum.
+- Todo texto en la imagen debe estar en el idioma del negocio (actualmente español si language=es). Nunca generes texto en inglés u otro idioma aunque el imagePrompt esté en inglés.
 - Preferí tipografía sans limpia, contraste alto, márgenes seguros para story/feed.
 - Si hay REFERENCE IMAGES, usalas como contexto (producto/local/estilo) dentro de la pieza, no como foto cruda.
 - NO menciones LOGO_URL ni pidas logo en imagePrompt.${videoBlock}`;

@@ -1762,6 +1762,7 @@ export class ContentService {
       .join(', ');
 
     const colorHint = colors ? `Prefer brand colors: ${colors}.` : '';
+    const languageHint = `All rendered text must be in business language (Spanish rioplatense, correct tildes) — never English, Lorem Ipsum or other language, even though prompt is English.`;
 
     return [
       input.basePrompt.trim(),
@@ -1772,6 +1773,7 @@ export class ContentService {
       offerBadge,
       headline,
       colorHint,
+      languageHint,
       'Clear visual hierarchy: hero visual + brand + message. Safe margins for feed/story.',
       'No illegible text, no lorem ipsum, no fake letters, no long paragraphs on the image.',
     ]
