@@ -329,6 +329,39 @@ export class ContentService {
     return { urls };
   }
 
+  async uploadBrandingLogo(file: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  }) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Subí un archivo de logo');
+    }
+    if (!file.mimetype?.startsWith('image/')) {
+      throw new BadRequestException('El logo debe ser una imagen (PNG, JPG, SVG, WEBP)');
+    }
+    if (file.buffer.length > 8 * 1024 * 1024) {
+      throw new BadRequestException('El logo debe pesar menos de 8MB');
+    }
+
+    const businessId = await this.businesses.getCurrentId();
+    const folder = `${this.cloudinaryRoot()}/${businessId}/branding`;
+    const uploaded = await this.storage.upload({
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      folder,
+      publicId: `logo-${Date.now()}`,
+    });
+
+    const branding = await this.prisma.brandingConfig.upsert({
+      where: { businessId },
+      create: { businessId, logoUrl: uploaded.url },
+      update: { logoUrl: uploaded.url },
+    });
+
+    return branding;
+  }
+
   async suggestBrief(input: {
     objective: string;
     channels?: string[];

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -211,6 +212,19 @@ export class ContentAdminController {
     @Body() body: { title?: string },
   ) {
     return this.contentKnowledge.upload(file, body?.title);
+  }
+
+  @Post('branding/logo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 8 * 1024 * 1024 },
+    }),
+  )
+  uploadBrandingLogo(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Subí un archivo de logo');
+    }
+    return this.content.uploadBrandingLogo(file);
   }
 
   @Post('references')
