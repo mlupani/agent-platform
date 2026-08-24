@@ -53,7 +53,8 @@ export class AgentService {
     if (!message) {
       throw new HttpException('Message is required', HttpStatus.BAD_REQUEST);
     }
-
+    this.logger.log(`[AGENT 1/6] start channel=${input.channel} businessId=${input.businessId} len=${message.length} conv=${input.conversationId ?? 'new'}`);
+    const t1 = Date.now();
     const business = await this.prisma.business.findUnique({
       where: { id: input.businessId },
     });
@@ -68,9 +69,12 @@ export class AgentService {
 
     let llmTarget = this.llmRouting.resolvePrimary(agentConfig);
     await this.costControl.assertWithinLimits(business.id, llmTarget.model);
+    this.logger.log(`[AGENT 1/6] business+agent ${Date.now() - t1}ms model=${agentConfig.model} provider=${llmTarget.providerName}`);
 
+    const t2 = Date.now();
     const conversation = await this.resolveConversation(input, agentConfig.id);
     const confirmed = await this.resolveConfirmed(input, conversation.id);
+    this.logger.log(`[AGENT 2/6] conversation ${Date.now() - t2}ms conv=${conversation.id} status=${conversation.status} confirmed=${confirmed}`);
 
     const inboundExternalId = input.metadata?.wamid
       ? String(input.metadata.wamid)
@@ -158,6 +162,7 @@ export class AgentService {
         },
       });
     }
+    const t3 = Date.now();
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
@@ -172,20 +177,27 @@ export class AgentService {
       },
     });
     await this.leads.recordInbound(business.id, conversation.id);
+    this.logger.log(`[AGENT 3/6] persist inbound ${Date.now() - t3}ms`);
 
+    const t4 = Date.now();
     const strategy = this.memory.parseStrategy(agentConfig.memoryStrategy);
+    const tMem = Date.now();
     const recentMessages = await this.memory.getRecentMessages(
       conversation.id,
       business.id,
       strategy.recentMessages,
     );
+    this.logger.log(`[AGENT 4/6a] memory.recent ${Date.now() - tMem}ms count=${recentMessages.length}`);
+    const tLong = Date.now();
     const longTerm = await this.memory.getLongTermContext({
       businessId: business.id,
       query: message,
       userId: conversation.userId ?? undefined,
       topK: strategy.semanticTopK,
     });
+    this.logger.log(`[AGENT 4/6b] memory.longTerm ${Date.now() - tLong}ms`);
 
+    const tRag = Date.now();
     let ragChunks = [] as Awaited<ReturnType<RagService['search']>>;
     if (agentConfig.knowledgeBaseId) {
       ragChunks = await this.rag.search({
@@ -195,7 +207,9 @@ export class AgentService {
         topK: 8,
       });
     }
+    this.logger.log(`[AGENT 4/6c] rag.search ${Date.now() - tRag}ms chunks=${ragChunks.length} kb=${agentConfig.knowledgeBaseId ?? 'none'}`);
 
+    const tHs = Date.now();
     const [hours, services] = await Promise.all([
       this.prisma.businessHour.findMany({
         where: { businessId: business.id },
@@ -206,11 +220,14 @@ export class AgentService {
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
     ]);
+    this.logger.log(`[AGENT 4/6d] hours+services ${Date.now() - tHs}ms hours=${hours.length} services=${services.length}`);
+    this.logger.log(`[AGENT 4/6] total pre-prompt ${Date.now() - t4}ms`);
 
     const configuredMessages = this.parseConfiguredMessages(
       business.defaultMessages,
     );
 
+    const tPrompt = Date.now();
     const currentDateTime = this.promptBuilder.buildCurrentDateTime(
       business.timezone,
     );
@@ -255,11 +272,13 @@ export class AgentService {
           await this.leadContext.snapshot(business.id, conversation.id)
         )?.text ?? null,
     });
+    this.logger.log(`[AGENT 5/6] prompt.build ${Date.now() - tPrompt}ms system=${systemPrompt.length} chars llmMessages=${1 + recentMessages.length}`);
 
     const llmMessages: LlmMessage[] = [
       { role: 'system', content: systemPrompt },
       ...recentMessages.filter((item) => item.role !== 'system'),
     ];
+    this.logger.log(`[AGENT 5/6] llmMessages ready totalPrompt=${systemPrompt.length + recentMessages.reduce((a, m) => a + (m.content?.length ?? 0), 0)} chars tools=${agentConfig.enabledTools.length}`);
 
     const toolDefs = this.registry
       .getAvailableTools(agentConfig.enabledTools)
@@ -293,10 +312,13 @@ export class AgentService {
 
     const seenSuccessfulToolCalls = new Set<string>();
     let forceFinalAnswer = false;
+    const tLlmLoop = Date.now();
+    this.logger.log(`[AGENT 6/6] llm loop start maxSteps=${agentConfig.maxSteps} model=${llmTarget.model} temp=${agentConfig.temperature}`);
 
     try {
       while (steps < agentConfig.maxSteps) {
         steps += 1;
+        const tStep = Date.now();
         const response = await this.chatWithFallback(llmTarget, {
           model: llmTarget.model,
           temperature: agentConfig.temperature,
@@ -309,6 +331,7 @@ export class AgentService {
           usedModel = result.target.model;
           return result.response;
         });
+        this.logger.log(`[AGENT 6/6] step ${steps} llm.chat ${Date.now() - tStep}ms provider=${usedProvider} in=${response.usage.inputTokens} out=${response.usage.outputTokens} toolCalls=${response.toolCalls.length} finish=${response.finishReason}`);
 
         inputTokens += response.usage.inputTokens;
         outputTokens += response.usage.outputTokens;
@@ -359,6 +382,7 @@ export class AgentService {
               continue;
             }
 
+            const tTool = Date.now();
             let result = await this.tools.execute(call.name, parsedArgs, {
               businessId: business.id,
               conversationId: conversation.id,
@@ -371,6 +395,7 @@ export class AgentService {
                 confirmed,
               },
             });
+            this.logger.log(`[AGENT 6/6] tool ${call.name} ${Date.now() - tTool}ms success=${result.success}`);
 
             // sendEmail / sendWhatsAppMessage: no hay UI de confirmación en chat.
             if (
@@ -417,6 +442,7 @@ export class AgentService {
           if (repeatedSuccessfulCall) {
             forceFinalAnswer = true;
           }
+          this.logger.log(`[AGENT 6/6] step ${steps} tools done ${Date.now() - tStep}ms`);
           continue;
         }
 
@@ -424,6 +450,7 @@ export class AgentService {
           response.content?.trim() ||
           this.fallbackFromToolResults(executedTools) ||
           'No pude generar una respuesta.';
+        this.logger.log(`[AGENT 6/6] loop exit after ${steps} steps total ${Date.now() - tLlmLoop}ms finalLen=${finalContent.length}`);
         break;
       }
 
