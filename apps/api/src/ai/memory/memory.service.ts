@@ -51,6 +51,14 @@ export class MemoryService {
     }));
   }
 
+  private isTrivialQuery(query: string): boolean {
+    const s = query.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+    if (s.length < 4) return true;
+    if (s.length <= 14 && /^(hola|buenas|buen dia|buenas tardes|buenas noches|chau|gracias|ok|dale|buen dia!?)[!?.\s]*$/.test(s)) return true;
+    if (/^(hola|gracias|chau|ok|dale)[!?.\s]*$/i.test(s)) return true;
+    return false;
+  }
+
   async getLongTermContext(params: {
     businessId: string;
     query: string;
@@ -58,6 +66,7 @@ export class MemoryService {
     topK: number;
   }): Promise<string> {
     if (params.topK <= 0) return '';
+    if (this.isTrivialQuery(params.query)) return '';
     try {
       const [embedding] = await this.embeddings.embed(params.query);
       if (!embedding?.length) return '';

@@ -174,6 +174,13 @@ export class RagService {
     });
   }
 
+  private isTrivialQuery(query: string): boolean {
+    const s = query.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+    if (s.length < 4) return true;
+    if (s.length <= 14 && /^(hola|buenas|buen dia|buenas tardes|buenas noches|chau|gracias|ok|dale|buen dia!?)[!?.\s]*$/.test(s)) return true;
+    return false;
+  }
+
   async search(params: {
     businessId: string;
     query: string;
@@ -182,6 +189,10 @@ export class RagService {
     category?: string;
     knowledgeBaseId?: string;
   }): Promise<VectorMatch[]> {
+    if (this.isTrivialQuery(params.query)) {
+      // Saludo corto → no vale embedding; cae a keywords (que será 0)
+      return this.searchByKeywords(params);
+    }
     try {
       const [embedding] = await this.embeddings.embed(params.query);
       const vectorMatches =
