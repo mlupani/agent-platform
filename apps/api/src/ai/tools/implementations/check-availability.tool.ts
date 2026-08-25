@@ -24,13 +24,26 @@ const schema = z.object({
       'UUID del servicio (preferido) o nombre exacto, p.ej. "Consulta inicial".',
     ),
   durationMinutes: z.number().int().min(1).max(480).optional(),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Usá hora HH:mm')
+    .optional()
+    .describe(
+      'Hora solicitada por el cliente en HH:mm (ej. "18:00"). Si el cliente pidió un horario, mandalo.',
+    ),
+  // alias para compatibilidad con prompts viejos que puedan mandar startTime
+  startTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Usá hora HH:mm')
+    .optional()
+    .describe('Alias de time'),
 });
 
 @Injectable()
 export class CheckAvailabilityTool implements AgentTool {
   readonly name = 'checkAvailability';
   readonly description =
-    'Consulta turnos y cupos de clase para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Devuelve remaining/capacity. Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
+    'Consulta turnos y cupos de clase para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Si el cliente pidió una hora (ej. "18:00"), incluye time=HH:mm para chequear ese horario puntual con remaining/capacity; si no, devuelve todos los horarios del día. Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 
@@ -58,6 +71,8 @@ export class CheckAvailabilityTool implements AgentTool {
       serviceId = resolved.id;
     }
 
+    const requestedTime = (data.time ?? data.startTime)?.trim() || undefined;
+
     const result = await this.appointments.checkAvailability({
       businessId: context.businessId,
       date: data.date,
@@ -76,6 +91,35 @@ export class CheckAvailabilityTool implements AgentTool {
           dayLabel: result.dayLabel,
           today: result.today,
           timezone: result.timezone,
+        },
+      };
+    }
+
+    // Si el cliente pidió hora puntual, filtrar y responder específico
+    if (requestedTime) {
+      const slot = result.slots.find((s) => s.start === requestedTime);
+      if (slot) {
+        return {
+          success: true,
+          data: {
+            ...result,
+            requestedTime,
+            requestedSlot: slot,
+            hint: `El horario ${requestedTime} del ${result.dayLabel || result.date} tiene ${slot.remaining}/${slot.capacity} lugares libres (servicio ${result.serviceName ?? result.serviceId ?? 'general'}). Confirmá que el cliente quiere ESE horario y si dice que sí, llamá createAppointment con startsAt=${slot.startIso}. Si no, ofrecé 2–3 alternativas del mismo día.`,
+          },
+        };
+      }
+      // hora pedida no es un inicio habitual → informar y ofrecer alternativas sin inventar
+      return {
+        success: true,
+        data: {
+          ...result,
+          requestedTime,
+          requestedSlot: null,
+          hint:
+            result.slots.length === 0
+              ? `El horario ${requestedTime} no es un inicio habitual ese día y no hay otros turnos libres. Probá otra fecha o derivá a un humano.`
+              : `El horario ${requestedTime} no es un inicio habitual ese día. Ofrecé 2–4 alternativas reales de ${result.dayLabel || result.date} de esta lista (con remaining/capacity): ${result.slots.map((s) => `${s.start} · ${s.remaining}/${s.capacity}`).join(', ')}. No inventes ${requestedTime} como disponible y no llames de nuevo checkAvailability para la misma fecha.`,
         },
       };
     }

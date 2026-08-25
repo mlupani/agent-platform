@@ -181,7 +181,7 @@ export class PromptBuilderService {
     return [
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
-      `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `Para turnos: checkAvailability (con date YYYY-MM-DD; si el cliente pidió hora ej. "a las 18:00", agregá time="HH:mm") → respondé al usuario con 2–4 horarios (o confirmá el horario pedido si tiene remaining>0) → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
       `Si el usuario deja datos de contacto y NO reserva, usá createLead. Si ya hay un lead, createLead actualiza el mismo (no dupliques).`,
       `Si hay interés real, llamá updateLeadStatus con interested. Si pide que lo contacten más adelante, usá scheduleFollowUp.`,
