@@ -44,30 +44,31 @@ export class AvailabilityService {
       },
     });
 
-    if (!hours || hours.isClosed) return [];
+    if (!hours) return [];
 
-    const ranges = this.parseRanges(hours.ranges);
-    if (!ranges.length) return [];
+    const ranges = hours.isClosed ? [] : this.parseRanges(hours.ranges);
 
-    const openIntervals = ranges
-      .map((range) => {
-        const [sh, sm] = range.start.split(':').map(Number);
-        const [eh, em] = range.end.split(':').map(Number);
-        const start = day.set({
-          hour: sh,
-          minute: sm,
-          second: 0,
-          millisecond: 0,
-        });
-        const end = day.set({
-          hour: eh,
-          minute: em,
-          second: 0,
-          millisecond: 0,
-        });
-        return Interval.fromDateTimes(start, end);
-      })
-      .filter((interval) => interval.isValid);
+    const openIntervals = ranges.length
+      ? ranges
+          .map((range) => {
+            const [sh, sm] = range.start.split(':').map(Number);
+            const [eh, em] = range.end.split(':').map(Number);
+            const start = day.set({
+              hour: sh,
+              minute: sm,
+              second: 0,
+              millisecond: 0,
+            });
+            const end = day.set({
+              hour: eh,
+              minute: em,
+              second: 0,
+              millisecond: 0,
+            });
+            return Interval.fromDateTimes(start, end);
+          })
+          .filter((interval) => interval.isValid)
+      : [];
 
     const dayStart = day.toUTC().toJSDate();
     const dayEnd = day.endOf('day').toUTC().toJSDate();
@@ -150,7 +151,9 @@ export class AvailabilityService {
         continue;
       }
       if (session.startsAt.plus(duration) <= now) continue;
-      if (!this.containedInOpen(session.startsAt, openIntervals)) continue;
+      // No filtrar por horario de atención si es una clase programada (template) → las clases mandan sobre el horario general
+      // Si es una sesión con cupo (clase), permitir aunque esté fuera del rango abierto (ej. clase 08:00 con horario 12-20 mal configurado)
+      // Solo filtrar horarios "libres" generados por duración, no clases con plantilla
       starts.set(session.startsAt.toMillis(), session.startsAt);
     }
 
@@ -186,7 +189,12 @@ export class AvailabilityService {
     const { start, end, occupancies, requestedServiceId, requestedCapacity } =
       params;
     if (end <= params.now) return null;
-    if (!this.containedInOpen(start, params.openIntervals)) return null;
+    if (!this.containedInOpen(start, params.openIntervals)) {
+      const isClassStart = occupancies.some(
+        (s) => s.startsAt.toMillis() === start.toMillis() && s.remaining > 0,
+      );
+      if (!isClassStart) return null;
+    }
 
     const overlapping = occupancies.filter(
       (session) => session.startsAt < end && session.endsAt > start,
