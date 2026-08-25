@@ -17,6 +17,7 @@ describe('AvailabilityService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.classTemplate.findMany.mockResolvedValue([]);
+    prisma.appointment.findMany.mockResolvedValue([]);
     prisma.service.findFirst.mockResolvedValue(null);
     google.getBusyIntervals.mockResolvedValue([]);
   });

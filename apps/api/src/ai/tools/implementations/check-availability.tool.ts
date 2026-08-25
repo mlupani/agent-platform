@@ -43,7 +43,7 @@ const schema = z.object({
 export class CheckAvailabilityTool implements AgentTool {
   readonly name = 'checkAvailability';
   readonly description =
-    'Consulta turnos y cupos de clase para una fecha YYYY-MM-DD (derivada de hoy/mañana según la fecha actual del prompt). Si el cliente pidió una hora (ej. "18:00"), incluye time=HH:mm para chequear ese horario puntual con remaining/capacity; si no, devuelve todos los horarios del día. Cruza horarios del negocio con Google Calendar si está conectado. serviceId puede ser UUID o nombre.';
+    'Consulta turnos y cupos de clase para una fecha YYYY-MM-DD. Si el cliente pidió hora (ej. "18:00") incluye time=HH:mm. serviceId es OPCIONAL: solo mandalo si el cliente mencionó el servicio por nombre o si el leadContext indica que es alumna con servicio contratado (ej. Pack 4). Para clase de prueba / primera visita / visita sin servicio conocido, NO mandes serviceId para ver disponibilidad general. Devuelve remaining/capacity.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 

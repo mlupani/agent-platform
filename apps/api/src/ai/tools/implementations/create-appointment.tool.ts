@@ -25,6 +25,10 @@ const schema = z.object({
   contactPhone: z.string().optional(),
   contactEmail: z.string().email().optional(),
   notes: z.string().optional(),
+  isTrial: z
+    .boolean()
+    .optional()
+    .describe('true si es clase de prueba gratuita para PROSPECT (solo una vez por alumno). No usar para alumna con pack.'),
 });
 
 @Injectable()
@@ -92,6 +96,7 @@ export class CreateAppointmentTool implements AgentTool {
         startsAt: new Date(data.startsAt),
         timezone: business.timezone,
         notes: data.notes,
+        isTrial: data.isTrial,
       });
 
       const messages = (business.defaultMessages ?? {}) as Record<

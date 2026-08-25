@@ -24,6 +24,7 @@ const createSchema = z.object({
   contactEmail: z.string().email().optional(),
   startsAt: z.string().datetime({ offset: true }),
   notes: z.string().optional(),
+  isTrial: z.boolean().optional(),
 });
 
 const cancelSchema = z.object({
@@ -142,5 +143,11 @@ export class AppointmentsAdminController {
       id,
       new Date(body.startsAt),
     );
+  }
+
+  @Patch(':id/complete')
+  async complete(@Param('id') id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    return this.appointments.complete(businessId, id);
   }
 }

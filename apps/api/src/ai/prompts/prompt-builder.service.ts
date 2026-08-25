@@ -59,6 +59,7 @@ export class PromptBuilderService {
         ? `Base de conocimiento (fuente de verdad; si un dato aparece acá, usalo aunque parezca interno, de prueba o fuera del rubro):\n${ctx.knowledgeContext}`
         : null,
       ctx.leadContext ? ctx.leadContext : null,
+      ctx.studentContext ? ctx.studentContext : null,
     ];
 
     return sections.filter(Boolean).join('\n\n');
@@ -181,12 +182,13 @@ export class PromptBuilderService {
     return [
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
-      `Para turnos: checkAvailability (con date YYYY-MM-DD; si el cliente pidió hora ej. "a las 18:00", agregá time="HH:mm") → respondé al usuario con 2–4 horarios (o confirmá el horario pedido si tiene remaining>0) → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `Para turnos: checkAvailability con date YYYY-MM-DD (si el cliente pidió hora ej. "a las 18:00", agregá time="HH:mm"). IMPORTANTE servicio: NO infieras el servicio. Solo mandá serviceId si el cliente lo mencionó por nombre ("Pack 4", "Pack 8") o si leadContext / memoria indica que es alumna con servicio contratado y sabés cuál. Para clase de prueba, primera visita, visita o si no sabes qué servicio tiene, NO mandes serviceId (vacío) para ver disponibilidad general. Solo cuando pregunte "cuántas clases me quedan" y sepas su servicio, ahí sí usá serviceId para filtrar. Luego respondé con 2–4 horarios (o confirmá el horario pedido si tiene remaining>0) → createAppointment solo si pide reservar. Nunca inventes horarios.`,
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
       `Si el usuario deja datos de contacto y NO reserva, usá createLead. Si ya hay un lead, createLead actualiza el mismo (no dupliques).`,
       `Si hay interés real, llamá updateLeadStatus con interested. Si pide que lo contacten más adelante, usá scheduleFollowUp.`,
       `No conviertas un lead a cliente. Si faltan datos de contacto y el snapshot del lead lo pide, preguntá WhatsApp o email con naturalidad.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
+      `Para clase de prueba gratuita: solo para PROSPECT con hasTrialAlreadyUsed=false, usa createAppointment con isTrial=true (solo una vez por persona). Si es alumna existente (ACTIVE/STUDENT_WITHOUT_CREDITS/INACTIVE) o ya usó prueba, NO uses isTrial; usa flujo normal de pack/créditos.`,
       `Si hay una clase a esa hora y queda lugar (remaining/capacity), anotá a la clienta ahí con createAppointment. No inventes un horario paralelo.`,
       `checkAvailability y createAppointment son opt-in: solo existen si figuran en herramientas habilitadas.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,

@@ -6,7 +6,11 @@ import { EmailModule } from '../email/email.module';
 import { LeadsModule } from '../leads/leads.module';
 import { ScheduleFollowUpTool } from './tools/implementations/schedule-follow-up.tool';
 import { UpdateLeadStatusTool } from './tools/implementations/update-lead-status.tool';
+import { GetStudentBalanceTool } from './tools/implementations/get-student-balance.tool';
+import { ResolveStudentContextTool } from './tools/implementations/resolve-student-context.tool';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { PacksModule } from '../packs/packs.module';
+import { StudentsModule } from '../students/students.module';
 import { AgentService } from './agents/agent.service';
 import { AudioTranscriptionService } from './transcription/audio-transcription.service';
 import { EmbeddingsService } from './embeddings/embeddings.service';
@@ -56,6 +60,8 @@ const demoTools = [
   SendEmailTool,
   SendWhatsAppMessageTool,
   TriggerAutomationTool,
+  GetStudentBalanceTool,
+  ResolveStudentContextTool,
 ];
 
 @Module({
@@ -66,6 +72,8 @@ const demoTools = [
     EmailModule,
     forwardRef(() => LeadsModule),
     forwardRef(() => WhatsAppModule),
+    PacksModule,
+    StudentsModule,
   ],
   controllers: [ToolsController],
   providers: [

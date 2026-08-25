@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { SecretsService } from '../common/crypto/secrets.service';
+import { PacksModule } from '../packs/packs.module';
 import { EmailModule } from '../email/email.module';
 import { LeadsModule } from '../leads/leads.module';
 import { SocialModule } from '../social/social.module';
@@ -30,6 +31,7 @@ import { GoogleCalendarService } from './google-calendar.service';
     LeadsModule,
     forwardRef(() => WhatsAppModule),
     forwardRef(() => SocialModule),
+    PacksModule,
     BullModule.registerQueue({ name: APPOINTMENT_REMINDER_QUEUE }),
   ],
   controllers: [

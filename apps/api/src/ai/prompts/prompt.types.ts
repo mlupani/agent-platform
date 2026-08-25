@@ -51,6 +51,7 @@ export interface AgentPromptContext {
   knowledgeContext?: string;
   enabledTools: string[];
   leadContext?: string | null;
+  studentContext?: string | null;
 }
 
 /** @deprecated Prefer AgentPromptContext + buildFromContext */

@@ -71,6 +71,7 @@ model Business {
   zernioProfileId      String?
   socialConnections    SocialConnection[]
   audioAssets          AudioAsset[]
+  creditMovements      ClassCreditMovement[]
 
   @@map("businesses")
 }
@@ -125,6 +126,27 @@ model BusinessHour {
   @@map("business_hours")
 }
 
+model ClassCreditMovement {
+  id            String       @id @default(uuid())
+  businessId    String
+  business      Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  servicePassId String?
+  servicePass   ServicePass? @relation(fields: [servicePassId], references: [id], onDelete: SetNull)
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  type          String // PURCHASE|CONSUMPTION|MANUAL_ADJUSTMENT|REFUND|EXPIRATION
+  amount        Int
+  reason        String?
+  createdAt     DateTime     @default(now())
+
+  @@index([businessId, userId])
+  @@index([servicePassId])
+  @@index([appointmentId])
+  @@map("class_credit_movements")
+}
+
 model Service {
   id                  String   @id @default(uuid())
   businessId          String
@@ -177,19 +199,20 @@ model ClassTemplate {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  externalId String?
-  name       String?
-  email      String?
-  phone      String?
-  notes      String?
-  statusId   String   @default("status-activo")
-  status     ClientStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  metadata   Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  externalId   String?
+  name         String?
+  email        String?
+  phone        String?
+  notes        String?
+  statusId     String   @default("status-activo")
+  status       ClientStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  hasUsedTrial Boolean  @default(false)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   conversations Conversation[]
   memories      Memory[]
@@ -197,9 +220,11 @@ model User {
   appointments  Appointment[]
   payments      Payment[]
   passes        ServicePass[]
+  movements     ClassCreditMovement[]
 
   @@index([businessId])
   @@index([businessId, email])
+  @@index([businessId, phone])
   @@index([businessId, statusId])
   @@map("users")
 }
@@ -250,10 +275,15 @@ model ServicePass {
   sessionCount  Int
   sessionsPaid  Int      @default(0)
   sessionsUsed  Int      @default(0)
+  status        String   @default("ACTIVE") // ACTIVE|COMPLETED|CANCELLED
+  expiresAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   payments      Payment[]
+  movements     ClassCreditMovement[]
+  appointments  Appointment[]
 
+  @@index([businessId, userId])
   @@index([businessId, userId, serviceId])
   @@map("service_passes")
 }
@@ -408,6 +438,8 @@ model Appointment {
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   userId         String?
   user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  servicePassId  String?
+  servicePass    ServicePass?  @relation(fields: [servicePassId], references: [id], onDelete: SetNull)
   contactName    String?
   contactPhone   String?
   contactEmail   String?
@@ -416,16 +448,19 @@ model Appointment {
   timezone       String
   /// pending | confirmed | cancelled | completed
   status         String        @default("confirmed")
+  isTrial        Boolean       @default(false)
   googleEventId  String?
   notes          String?
   metadata       Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   reminderLogs   AppointmentReminderLog[]
+  movements      ClassCreditMovement[]
 
   @@index([businessId, startsAt])
   @@index([businessId, status])
   @@index([businessId, contactPhone])
+  @@index([businessId, userId])
   @@map("appointments")
 }
 

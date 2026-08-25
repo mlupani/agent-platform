@@ -11,8 +11,10 @@ describe('AppointmentsService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
     },
     appointmentReminderLog: { deleteMany: jest.fn() },
+    classTemplate: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const availability = { getAvailableSlots: jest.fn() };
   const google = {
@@ -21,11 +23,18 @@ describe('AppointmentsService', () => {
     updateEvent: jest.fn().mockResolvedValue(true),
     deleteEvent: jest.fn().mockResolvedValue(true),
   };
+  const conversions = { maybeConvertFromSignal: jest.fn().mockResolvedValue(undefined) };
+  const packs = {
+    getBalance: jest.fn().mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5 }),
+    consumeCredit: jest.fn(),
+  };
 
   const service = new AppointmentsService(
     prisma as never,
     availability as never,
     google as never,
+    conversions as never,
+    packs as never,
   );
 
   beforeEach(() => {
@@ -34,6 +43,10 @@ describe('AppointmentsService', () => {
       id: 'biz-1',
       timezone: 'America/Argentina/Buenos_Aires',
     });
+    prisma.classTemplate.findFirst.mockResolvedValue(null);
+    prisma.appointment.findMany.mockResolvedValue([]);
+    packs.getBalance.mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5, activePacks: [], allPacks: [] });
+    conversions.maybeConvertFromSignal.mockResolvedValue(undefined);
   });
 
   it('checkAvailability uses service duration', async () => {

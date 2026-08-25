@@ -8,6 +8,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { LeadConversionService } from '../leads/lead-conversion.service';
 import { AvailabilityService } from './availability.service';
 import { GoogleCalendarService } from './google-calendar.service';
+import { PackBalanceService } from '../packs/pack-balance.service';
 import type { CreateAppointmentInput } from './calendar.types';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class AppointmentsService {
     private readonly availability: AvailabilityService,
     private readonly google: GoogleCalendarService,
     private readonly conversions: LeadConversionService,
+    private readonly packs: PackBalanceService,
   ) {}
 
   async list(
@@ -437,6 +439,63 @@ export class AppointmentsService {
       if (!service) throw new NotFoundException('Servicio no encontrado');
     }
 
+    // Validación de saldo / trial antes de crear
+    if (input.isTrial) {
+      // Verificar que no haya usado prueba ya
+      let trialUser: any = null;
+      if (input.userId) {
+        trialUser = await this.prisma.user.findFirst({
+          where: { id: input.userId, businessId: input.businessId },
+          select: { hasUsedTrial: true },
+        });
+      } else if (input.contactPhone) {
+        const phoneDigits = input.contactPhone.replace(/\D/g, '').slice(-8);
+        trialUser = await this.prisma.user.findFirst({
+          where: { businessId: input.businessId, phone: { contains: phoneDigits } },
+          select: { hasUsedTrial: true, id: true },
+        });
+        // también chequear appointments isTrial previos por teléfono
+        if (!trialUser) {
+          const prevTrial = await this.prisma.appointment.findFirst({
+            where: { businessId: input.businessId, contactPhone: { contains: phoneDigits }, isTrial: true },
+          });
+          if (prevTrial) throw new BadRequestException('Ya utilizaste tu clase de prueba. Para continuar necesitás contratar un pack.');
+        }
+      }
+      if (trialUser?.hasUsedTrial) {
+        throw new BadRequestException('Ya utilizaste tu clase de prueba. Para continuar necesitás contratar un pack.');
+      }
+      const prevTrialByUser = input.userId
+        ? await this.prisma.appointment.findFirst({ where: { businessId: input.businessId, userId: input.userId, isTrial: true } })
+        : null;
+      if (prevTrialByUser) throw new BadRequestException('Ya utilizaste tu clase de prueba.');
+    } else {
+      // Validar saldo si es alumno identificado
+      let balanceUserId: string | null = input.userId || null;
+      if (!balanceUserId && input.contactPhone) {
+        const phoneDigits = input.contactPhone.replace(/\D/g, '').slice(-8);
+        const u = await this.prisma.user.findFirst({
+          where: { businessId: input.businessId, phone: { contains: phoneDigits } },
+          select: { id: true },
+        });
+        if (u) balanceUserId = u.id;
+      }
+      if (balanceUserId) {
+        try {
+          const balance = await this.packs.getBalance(input.businessId, balanceUserId);
+          if (!balance.hasAvailableClasses) {
+            throw new BadRequestException(
+              'No tenés clases disponibles en tu pack. Renovás tu pack para poder reservar. Consultá a la profesora.',
+            );
+          }
+        } catch (e: any) {
+          if (e.message?.includes('No tenés clases disponibles')) throw e;
+          // si alumno no tiene packs pero es INACTIVE, también bloquear con mensaje
+          // si es error "Alumno no encontrado", ignorar (prospect)
+        }
+      }
+    }
+
     const timezone = input.timezone || business.timezone;
     const startsAt = DateTime.fromJSDate(input.startsAt).setZone(timezone);
     if (!startsAt.isValid) {
@@ -500,12 +559,16 @@ export class AppointmentsService {
       attendeeEmail: contactEmail,
     });
 
+    const resolvedUserId = input.userId || (await this.resolveUserIdForContact(input));
+
     const created = await this.prisma.appointment.create({
       data: {
         businessId: input.businessId,
         serviceId: service?.id,
         conversationId: input.conversationId,
-        userId: input.userId,
+        userId: resolvedUserId || input.userId,
+        servicePassId: null,
+        isTrial: input.isTrial ?? false,
         contactName,
         contactPhone,
         contactEmail,
@@ -705,6 +768,8 @@ export class AppointmentsService {
       }),
     ]);
 
+    if (!template) return false;
+
     const otherClass = overlapping.some(
       (row) => row.serviceId && row.serviceId !== params.serviceId,
     );
@@ -768,5 +833,73 @@ export class AppointmentsService {
         undefined,
       email: conversation?.user?.email || user?.email || undefined,
     };
+  }
+
+  private async resolveUserIdForContact(input: CreateAppointmentInput): Promise<string | null> {
+    if (input.userId) return input.userId;
+    const phone = input.contactPhone?.replace(/\D/g, '').slice(-8);
+    if (phone) {
+      const u = await this.prisma.user.findFirst({
+        where: { businessId: input.businessId, phone: { contains: phone } },
+        select: { id: true },
+      });
+      if (u) return u.id;
+    }
+    if (input.contactEmail) {
+      const u = await this.prisma.user.findFirst({
+        where: { businessId: input.businessId, email: input.contactEmail.trim().toLowerCase() },
+        select: { id: true },
+      });
+      if (u) return u.id;
+    }
+    if (input.conversationId) {
+      const conv = await this.prisma.conversation.findFirst({
+        where: { id: input.conversationId, businessId: input.businessId },
+        select: { userId: true },
+      });
+      if (conv?.userId) return conv.userId;
+    }
+    return null;
+  }
+
+  async complete(businessId: string, appointmentId: string) {
+    const appointment = await this.get(businessId, appointmentId);
+    if (appointment.status === 'completed') return appointment;
+    if (appointment.status === 'cancelled') throw new BadRequestException('Cita cancelada no se puede completar');
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'completed' },
+      include: { service: { select: { id: true, name: true, durationMinutes: true, capacity: true } } },
+    });
+
+    const userId = updated.userId || (await this.resolveUserIdForContact({ businessId, contactPhone: updated.contactPhone ?? undefined, contactEmail: updated.contactEmail ?? undefined } as CreateAppointmentInput));
+
+    if (updated.isTrial) {
+      if (userId) {
+        await this.prisma.user.update({ where: { id: userId }, data: { hasUsedTrial: true } });
+      }
+      // trial no consume pack
+      return updated;
+    }
+
+    if (userId) {
+      try {
+        await this.packs.consumeCredit({ businessId, userId, appointmentId: updated.id });
+      } catch (e: any) {
+        // si no tiene saldo, no fallar el completado pero loggear
+        // lanzamos para que admin vea error, pero no revertimos status
+        throw new BadRequestException(e.message || 'No se pudo consumir crédito');
+      }
+    }
+
+    return this.prisma.appointment.findFirstOrThrow({
+      where: { id: appointmentId },
+      include: { service: { select: { id: true, name: true, durationMinutes: true, capacity: true } } },
+    });
+  }
+
+  async completeById(businessId: string, id: string) {
+    return this.complete(businessId, id);
   }
 }

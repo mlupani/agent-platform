@@ -38,4 +38,5 @@ export interface CreateAppointmentInput {
   timezone: string;
   notes?: string;
   status?: string;
+  isTrial?: boolean;
 }

@@ -136,6 +136,18 @@ describe('AgentService', () => {
     incrementUsage: jest.fn(),
   };
   const cost = { estimate: jest.fn(() => 0.001) };
+  const leadContext = { snapshot: jest.fn(async () => null) };
+  const leads = { recordInbound: jest.fn(async () => {} ) };
+  const studentContext = {
+    resolveStudentContext: jest.fn(async () => ({
+      relationshipStatus: 'PROSPECT',
+      availableClasses: null,
+      hasTrialAlreadyUsed: false,
+      found: false,
+      student: null,
+      contact: {},
+    })),
+  };
 
   const service = new AgentService(
     prisma as never,
@@ -148,6 +160,9 @@ describe('AgentService', () => {
     guardrails,
     costControl as never,
     cost,
+    leadContext as never,
+    leads as never,
+    studentContext as never,
   );
 
   beforeEach(() => {

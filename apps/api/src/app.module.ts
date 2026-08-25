@@ -30,6 +30,8 @@ import { ContentModule } from './content/content.module';
 import { SocialModule } from './social/social.module';
 import { VoiceModule } from './voice/voice.module';
 import { CompositionModule } from './composition/composition.module';
+import { PacksModule } from './packs/packs.module';
+import { StudentsModule } from './students/students.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -78,6 +80,8 @@ import { AppService } from './app.service';
     SocialModule,
     VoiceModule,
     CompositionModule,
+    PacksModule,
+    StudentsModule,
   ],
   controllers: [AppController],
   providers: [

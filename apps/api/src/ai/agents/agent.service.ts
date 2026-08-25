@@ -27,6 +27,7 @@ import type { ConfiguredMessagesPrompt } from '../prompts/prompt.types';
 import { DEFAULT_CONFIGURED_MESSAGES } from '../../common/constants';
 import { LeadContextService } from '../../leads/lead-context.service';
 import { LeadsService } from '../../leads/leads.service';
+import { StudentContextService } from '../../students/student-context.service';
 
 @Injectable()
 export class AgentService {
@@ -45,6 +46,7 @@ export class AgentService {
     private readonly cost: CostService,
     private readonly leadContext: LeadContextService,
     private readonly leads: LeadsService,
+    private readonly studentContext: StudentContextService,
   ) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
@@ -249,6 +251,20 @@ export class AgentService {
       business.timezone,
     );
 
+    // Resolver contexto del alumno antes de armar el prompt (fuente de verdad para trial/saldo)
+    let studentContextText: string | null = null;
+    try {
+      const sc = await this.studentContext.resolveStudentContext({
+        businessId: business.id,
+        phone: conversation.contactPhone,
+        conversationId: conversation.id,
+      });
+      studentContextText = this.formatStudentContext(sc);
+      this.logger.log(`[AGENT 5/6a] studentContext ${sc.relationshipStatus} available=${sc.availableClasses} trialUsed=${sc.hasTrialAlreadyUsed}`);
+    } catch {
+      // no bloquear si falla
+    }
+
     const systemPrompt = this.promptBuilder.buildFromContext({
       assistantName: agentConfig.name,
       tone: agentConfig.tone ?? 'professional_warm',
@@ -288,6 +304,7 @@ export class AgentService {
         (
           await this.leadContext.snapshot(business.id, conversation.id)
         )?.text ?? null,
+      studentContext: studentContextText,
     });
     this.logger.log(`[AGENT 5/6] prompt.build ${Date.now() - tPrompt}ms system=${systemPrompt.length} chars llmMessages=${1 + recentMessages.length}`);
 
@@ -858,5 +875,29 @@ export class AgentService {
     const base = { ...DEFAULT_CONFIGURED_MESSAGES };
     if (!raw || typeof raw !== 'object') return base;
     return { ...base, ...(raw as ConfiguredMessagesPrompt) };
+  }
+
+  private formatStudentContext(sc: {
+    relationshipStatus: string;
+    student?: { name: string | null } | null;
+    availableClasses?: number | null;
+    hasTrialAlreadyUsed?: boolean;
+    found?: boolean;
+  }): string {
+    const name = sc.student?.name || 'sin nombre';
+    const avail = sc.availableClasses ?? 'null';
+    const trial = sc.hasTrialAlreadyUsed ? 'sí' : 'no';
+    switch (sc.relationshipStatus) {
+      case 'PROSPECT':
+        return `Contexto del alumno (fuente de verdad): PROSPECT (persona nueva, no existe como alumna). No tiene saldo ni pack. Si pide clase, ofrecer prueba solo si hasTrialAlreadyUsed=no (${trial}). No asumir servicio. Usá consultar_contexto_alumno si necesitas confirmar.`;
+      case 'ACTIVE_STUDENT':
+        return `Contexto del alumno: ACTIVE_STUDENT ${name} con ${avail} clases disponibles (hasTrialAlreadyUsed=${trial}). Tiene pack activo. Antes de reservar, verifica saldo con consultar_saldo_clases y disponibilidad. No ofrecer prueba gratuita.`;
+      case 'STUDENT_WITHOUT_CREDITS':
+        return `Contexto del alumno: STUDENT_WITHOUT_CREDITS ${name} con 0 clases disponibles (hasTrialAlreadyUsed=${trial}). Es alumna existente sin saldo. NO ofrecer prueba gratuita ni tratarla como prospect. Informar que debe renovar pack y ofrecer renovación. Si pregunta cuántas le quedan, usa consultar_saldo_clases.`;
+      case 'INACTIVE_STUDENT':
+        return `Contexto del alumno: INACTIVE_STUDENT ${name} (fue alumna, sin pack activo, 0 clases, trial=${trial}). No ofrecer prueba automática como si fuera nueva. Reconocer historial y ofrecer retomar.`;
+      default:
+        return `Contexto del alumno: ${sc.relationshipStatus} ${name} available=${avail} trial=${trial}`;
+    }
   }
 }
