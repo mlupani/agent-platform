@@ -458,15 +458,83 @@ export class SocialPublishingService {
       }
     }
 
-    const created = await provider.createProfile({
-      name: `novalup-${business.slug}`.slice(0, 80),
-      description: business.name,
-    });
-    await this.prisma.business.update({
-      where: { id: businessId },
-      data: { zernioProfileId: created.id },
-    });
-    return created.id;
+    const baseName = `novalup-${business.slug}`.slice(0, 80);
+    try {
+      const created = await provider.createProfile({
+        name: baseName,
+        description: business.name,
+      });
+      await this.prisma.business.update({
+        where: { id: businessId },
+        data: { zernioProfileId: created.id },
+      });
+      return created.id;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error ?? '');
+      const status =
+        (error as { statusCode?: number; status?: number })?.statusCode ??
+        (error as { status?: number })?.status;
+      const isDuplicate =
+        /already exists/i.test(msg) || status === 502 || status === 409 || status === 400;
+
+      if (!isDuplicate) throw error;
+
+      this.logger.warn(`Profile name collision "${baseName}": ${msg} — intentando reutilizar o generar nombre único`);
+
+      // 1) intentar reutilizar perfil existente con mismo nombre (caso local/prod comparten ZERNIO_API_KEY)
+      if (provider.listProfiles) {
+        try {
+          const profiles = await provider.listProfiles();
+          const existing = profiles.find((p) => p.name === baseName);
+          if (existing) {
+            await this.prisma.business.update({
+              where: { id: businessId },
+              data: { zernioProfileId: existing.id },
+            });
+            this.logger.log(`Reutilizando profile existente "${baseName}" -> ${existing.id}`);
+            return existing.id;
+          }
+        } catch (listError) {
+          this.logger.warn(`listProfiles falló: ${listError instanceof Error ? listError.message : 'error'}`);
+        }
+      }
+
+      // 2) fallback: nombre único con sufijo businessId (evita colisión entre entornos)
+      const uniqueName = `novalup-${business.slug}-${businessId.slice(0, 8)}`.slice(0, 80);
+      if (uniqueName !== baseName) {
+        try {
+          const created = await provider.createProfile({
+            name: uniqueName,
+            description: business.name,
+          });
+          await this.prisma.business.update({
+            where: { id: businessId },
+            data: { zernioProfileId: created.id },
+          });
+          this.logger.log(`Profile creado con nombre único "${uniqueName}" -> ${created.id}`);
+          return created.id;
+        } catch (retryError) {
+          const retryMsg = retryError instanceof Error ? retryError.message : String(retryError ?? '');
+          // si incluso el nombre único colisiona, intentar reutilizar ese también
+          if (/already exists/i.test(retryMsg) && provider.listProfiles) {
+            try {
+              const profiles = await provider.listProfiles();
+              const existing = profiles.find((p) => p.name === uniqueName);
+              if (existing) {
+                await this.prisma.business.update({
+                  where: { id: businessId },
+                  data: { zernioProfileId: existing.id },
+                });
+                return existing.id;
+              }
+            } catch {}
+          }
+          throw retryError;
+        }
+      }
+
+      throw error;
+    }
   }
 
   private toPublicConnection(row: {

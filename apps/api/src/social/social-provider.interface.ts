@@ -20,6 +20,7 @@ export interface SocialProvider {
   isConfigured(): boolean;
   createProfile(input: SocialCreateProfileInput): Promise<{ id: string }>;
   getProfile(profileId: string): Promise<{ id: string; name?: string }>;
+  listProfiles?(): Promise<Array<{ id: string; name?: string }>>;
   getConnectUrl(input: SocialConnectUrlInput): Promise<SocialConnectUrlResult>;
   listAccounts(
     profileId: string,

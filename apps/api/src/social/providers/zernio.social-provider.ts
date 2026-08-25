@@ -85,6 +85,15 @@ export class ZernioSocialProvider implements SocialProvider {
     return { id, name: data.profile?.name };
   }
 
+  async listProfiles(): Promise<Array<{ id: string; name?: string }>> {
+    const data = await this.call<{ profiles?: Array<{ _id?: string; name?: string }> }>(
+      this.sdk().profiles.listProfiles(),
+    );
+    return (data.profiles ?? [])
+      .map((p) => ({ id: p._id ?? '', name: p.name }))
+      .filter((p) => Boolean(p.id));
+  }
+
   async getConnectUrl(
     input: SocialConnectUrlInput,
   ): Promise<SocialConnectUrlResult> {
