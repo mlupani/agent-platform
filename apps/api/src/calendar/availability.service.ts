@@ -143,17 +143,8 @@ export class AvailabilityService {
 
     for (const session of occupancies) {
       if (session.remaining <= 0) continue;
-      if (
-        params.serviceId &&
-        session.serviceId &&
-        session.serviceId !== params.serviceId
-      ) {
-        continue;
-      }
       if (session.startsAt.plus(duration) <= now) continue;
-      // No filtrar por horario de atención si es una clase programada (template) → las clases mandan sobre el horario general
-      // Si es una sesión con cupo (clase), permitir aunque esté fuera del rango abierto (ej. clase 08:00 con horario 12-20 mal configurado)
-      // Solo filtrar horarios "libres" generados por duración, no clases con plantilla
+      // Spots son por horario, no filtrar por pack/servicio: pack 4 y pack 8 comparten cupo
       starts.set(session.startsAt.toMillis(), session.startsAt);
     }
 
@@ -201,50 +192,24 @@ export class AvailabilityService {
     );
 
     if (!overlapping.length) {
-      return this.toSlot(start, end, requestedCapacity, requestedCapacity, requestedServiceId);
+      return this.toSlot(start, end, requestedCapacity, requestedCapacity, null);
     }
-
-    const otherClass = overlapping.find(
-      (session) =>
-        session.serviceId &&
-        requestedServiceId &&
-        session.serviceId !== requestedServiceId,
-    );
-    if (otherClass) return null;
-
-    const foreign = overlapping.find(
-      (session) =>
-        session.serviceId &&
-        !requestedServiceId &&
-        session.startsAt.toMillis() !== start.toMillis(),
-    );
-    if (foreign) return null;
 
     const sameStart = overlapping.filter(
       (session) => session.startsAt.toMillis() === start.toMillis(),
     );
     if (!sameStart.length) return null;
 
-    const session = requestedServiceId
-      ? sameStart.find((item) => item.serviceId === requestedServiceId) ??
-        sameStart[0]
-      : sameStart[0];
-
+    // Spots por horario: si hay clase a esa hora, usar su cupo (independiente del pack)
+    const session = sameStart[0];
     if (session.remaining <= 0) return null;
-    if (
-      requestedServiceId &&
-      session.serviceId &&
-      session.serviceId !== requestedServiceId
-    ) {
-      return null;
-    }
 
     return this.toSlot(
       start,
       end,
       session.remaining,
       session.capacity,
-      session.serviceId ?? requestedServiceId,
+      null,
     );
   }
 
@@ -311,6 +276,7 @@ export class AvailabilityService {
       }),
     ]);
 
+    // Spots son por horario, no por servicio: pack 4 y pack 8 comparten el mismo cupo
     const grouped = new Map<string, Occupancy>();
     for (const row of appointments) {
       const startsAt = DateTime.fromJSDate(row.startsAt, {
@@ -319,18 +285,16 @@ export class AvailabilityService {
       const endsAt = DateTime.fromJSDate(row.endsAt, { zone: 'utc' }).setZone(
         zone,
       );
-      const key = `${row.serviceId ?? 'none'}|${startsAt.toUTC().toISO()}`;
+      const key = startsAt.toUTC().toISO()!;
       const existing = grouped.get(key);
       if (existing) {
         existing.count += 1;
         existing.remaining = Math.max(0, existing.capacity - existing.count);
         continue;
       }
-      const capacity = row.serviceId
-        ? Math.max(1, row.service?.capacity ?? 1)
-        : 1;
+      const capacity = Math.max(1, row.service?.capacity ?? 1);
       grouped.set(key, {
-        serviceId: row.serviceId,
+        serviceId: null,
         startsAt,
         endsAt,
         count: 1,
@@ -353,15 +317,16 @@ export class AvailabilityService {
         1,
         template.capacity ?? template.service.capacity ?? 1,
       );
-      const key = `${template.serviceId}|${startsAt.toUTC().toISO()}`;
+      const key = startsAt.toUTC().toISO()!;
       if (grouped.has(key)) {
         const session = grouped.get(key)!;
-        session.capacity = capacity;
-        session.remaining = Math.max(0, capacity - session.count);
+        // el cupo del spot es el máximo entre templates solapados (normalmente 1 template por horario)
+        session.capacity = Math.max(session.capacity, capacity);
+        session.remaining = Math.max(0, session.capacity - session.count);
         continue;
       }
       grouped.set(key, {
-        serviceId: template.serviceId,
+        serviceId: null,
         startsAt,
         endsAt,
         count: 0,

@@ -210,8 +210,7 @@ export class AppointmentsService {
       }
     >();
 
-    const keyOf = (serviceId: string | null, startsAt: DateTime) =>
-      `${serviceId ?? 'none'}|${startsAt.toUTC().toISO()}`;
+    const keyOf = (startsAt: DateTime) => startsAt.toUTC().toISO()!;
 
     for (const row of appointments) {
       const startsAt = DateTime.fromJSDate(row.startsAt, {
@@ -220,7 +219,7 @@ export class AppointmentsService {
       const endsAt = DateTime.fromJSDate(row.endsAt, { zone: 'utc' }).setZone(
         zone,
       );
-      const key = keyOf(row.serviceId, startsAt);
+      const key = keyOf(startsAt);
       const existing = sessions.get(key);
       const attendee = {
         id: row.id,
@@ -245,14 +244,7 @@ export class AppointmentsService {
         startsAt: startsAt.toISO()!,
         endsAt: endsAt.toISO()!,
         dayOfWeek: startsAt.weekday - 1,
-        service: row.service
-          ? {
-              id: row.service.id,
-              name: row.service.name,
-              durationMinutes: row.service.durationMinutes,
-              capacity: row.service.capacity,
-            }
-          : null,
+        service: null,
         capacity,
         booked: 1,
         remaining: Math.max(0, capacity - 1),
@@ -284,12 +276,12 @@ export class AppointmentsService {
           1,
           template.capacity ?? template.service.capacity ?? 1,
         );
-        const key = keyOf(template.serviceId, startsAt);
+        const key = keyOf(startsAt);
         const existing = sessions.get(key);
         if (existing) {
           existing.templateId = template.id;
-          existing.capacity = capacity;
-          existing.remaining = Math.max(0, capacity - existing.booked);
+          existing.capacity = Math.max(existing.capacity, capacity);
+          existing.remaining = Math.max(0, existing.capacity - existing.booked);
           continue;
         }
         sessions.set(key, {
@@ -299,12 +291,7 @@ export class AppointmentsService {
           startsAt: startsAt.toISO()!,
           endsAt: endsAt.toISO()!,
           dayOfWeek,
-          service: {
-            id: template.service.id,
-            name: template.service.name,
-            durationMinutes: template.service.durationMinutes,
-            capacity: template.service.capacity,
-          },
+          service: null,
           capacity,
           booked: 0,
           remaining: capacity,
@@ -501,6 +488,9 @@ export class AppointmentsService {
     if (!startsAt.isValid) {
       throw new BadRequestException('startsAt inválido');
     }
+
+    // Spots son por horario, no por servicio: para prueba sin servicio no hace falta buscar servicio específico
+    // La disponibilidad y el cupo se chequean por horario, packs 4 y 8 comparten el mismo spot
 
     const durationMinutes = service?.durationMinutes ?? 30;
     const endsAt = input.endsAt
@@ -738,13 +728,12 @@ export class AppointmentsService {
     endsAt: DateTime;
     timezone: string;
   }): Promise<boolean> {
-    if (!params.serviceId) return false;
     const dayOfWeek = params.startsAt.weekday - 1;
     const startTime = params.startsAt.toFormat('HH:mm');
     const from = params.startsAt.toUTC().toJSDate();
     const to = params.endsAt.toUTC().toJSDate();
 
-    const [overlapping, template, service] = await Promise.all([
+    const [overlapping, template] = await Promise.all([
       this.prisma.appointment.findMany({
         where: {
           businessId: params.businessId,
@@ -757,23 +746,13 @@ export class AppointmentsService {
       this.prisma.classTemplate.findFirst({
         where: {
           businessId: params.businessId,
-          serviceId: params.serviceId,
           dayOfWeek,
           startTime,
         },
       }),
-      this.prisma.service.findFirst({
-        where: { id: params.serviceId, businessId: params.businessId },
-        select: { capacity: true },
-      }),
     ]);
 
     if (!template) return false;
-
-    const otherClass = overlapping.some(
-      (row) => row.serviceId && row.serviceId !== params.serviceId,
-    );
-    if (otherClass) return false;
 
     const sameStart = overlapping.filter(
       (row) =>
@@ -789,10 +768,7 @@ export class AppointmentsService {
       return false;
     }
 
-    const capacity = Math.max(
-      1,
-      template?.capacity ?? service?.capacity ?? 1,
-    );
+    const capacity = Math.max(1, template.capacity ?? 1);
     return sameStart.length < capacity;
   }
 
