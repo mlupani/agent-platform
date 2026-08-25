@@ -42,7 +42,7 @@ export function PersonSheet({
     enabled: open && !!target?.userId,
   });
 
-  // 2) lookup por teléfono/email si no hay userId
+  // 2) lookup por teléfono/email si no hay userId (client) y siempre para lead (para badge combinado)
   const clientsByPhone = useQuery({
     queryKey: ['person-clients-search', phoneDigits, target?.contactEmail],
     queryFn: () => {
@@ -58,7 +58,7 @@ export function PersonSheet({
       const q = target!.contactPhone || target!.contactEmail || '';
       return api<LeadRow[]>(`/admin/leads?search=${encodeURIComponent(q)}`);
     },
-    enabled: open && !target?.userId && hasContactQuery,
+    enabled: open && hasContactQuery,
   });
 
   // también buscar lead por userId == lead.user.id? si alumno no encontrado pero userId existe, buscar lead por user
@@ -90,32 +90,45 @@ export function PersonSheet({
   if (target.userId && clientById.data) {
     resolvedType = 'alumno';
     resolvedClient = clientById.data;
+    // si además existe lead vinculado al mismo user, lo resolvemos para mostrar badge combinado
+    if (leadsByPhone.data?.length) {
+      const extraLead =
+        (hasPhone && leadsByPhone.data.find((l) => normalizePhone(l.phone) === phoneDigits)) ||
+        (target.contactEmail && leadsByPhone.data.find((l) => l.email?.toLowerCase() === target.contactEmail!.toLowerCase())) ||
+        null;
+      if (extraLead) {
+        resolvedLead = extraLead;
+        // mantener alumno como principal pero guardar lead para UI "both"
+        // usaremos tipo alumno con lead secundario; el header mostrará ambos badges
+      }
+    }
   } else if (target.userId && clientById.isError) {
-    // si no es alumno, ver si hay lead con ese user
     if (leadByUser.data && leadByUser.data.length) {
       resolvedType = 'lead';
       resolvedLead = leadByUser.data[0];
     }
   } else if (!target.userId && hasContactQuery) {
     const clients = clientsByPhone.data ?? [];
-    // priorizar match exacto por teléfono, fallback email, fallback primer resultado
-    const exact =
+    const leads = leadsByPhone.data ?? [];
+    const clientExact =
       (hasPhone && clients.find((c) => normalizePhone(c.phone) === phoneDigits)) ||
       (target.contactEmail && clients.find((c) => c.email?.toLowerCase() === target.contactEmail!.toLowerCase())) ||
-      clients[0];
-    if (exact) {
+      null;
+    const leadExact =
+      (hasPhone && leads.find((l) => normalizePhone(l.phone) === phoneDigits)) ||
+      (target.contactEmail && leads.find((l) => l.email?.toLowerCase() === target.contactEmail!.toLowerCase())) ||
+      null;
+    if (clientExact && leadExact) {
+      // es ambas: existe como alumna y como lead (caso conversión o import). Mostrar ficha alumna pero indicar lead
       resolvedType = 'alumno';
-      resolvedClient = exact;
-    } else {
-      const leads = leadsByPhone.data ?? [];
-      const leadExact =
-        (hasPhone && leads.find((l) => normalizePhone(l.phone) === phoneDigits)) ||
-        (target.contactEmail && leads.find((l) => l.email?.toLowerCase() === target.contactEmail!.toLowerCase())) ||
-        leads[0];
-      if (leadExact) {
-        resolvedType = 'lead';
-        resolvedLead = leadExact;
-      }
+      resolvedClient = clientExact;
+      resolvedLead = leadExact;
+    } else if (clientExact) {
+      resolvedType = 'alumno';
+      resolvedClient = clientExact;
+    } else if (leadExact) {
+      resolvedType = 'lead';
+      resolvedLead = leadExact;
     }
   }
 
@@ -150,14 +163,21 @@ export function PersonSheet({
                           : 'bg-panel-2 text-muted border border-line'
                     }`}
                   >
-                    {resolvedType === 'alumno' ? 'Alumna' : resolvedType === 'lead' ? 'Lead' : 'Contacto'}
+                    {resolvedType === 'alumno'
+                      ? resolvedLead
+                        ? 'Alumna · Lead'
+                        : 'Alumna'
+                      : resolvedType === 'lead'
+                        ? 'Lead'
+                        : 'Contacto'}
                   </span>
                   {resolvedClient ? (
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-panel-2 border border-line text-muted">
                       {resolvedClient.status.name}
                     </span>
-                  ) : resolvedLead ? (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-panel-2 border border-line text-muted">
+                  ) : null}
+                  {resolvedLead ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 border border-amber-500/20">
                       {resolvedLead.status}
                     </span>
                   ) : null}
@@ -188,7 +208,20 @@ export function PersonSheet({
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
           {resolvedType === 'alumno' && resolvedClient ? (
-            <AlumnoFicha client={resolvedClient} onClose={onClose} />
+            <>
+              <AlumnoFicha client={resolvedClient} onClose={onClose} />
+              {resolvedLead ? (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted">También es lead</p>
+                    <p className="text-sm font-medium">Estado: {resolvedLead.status}</p>
+                  </div>
+                  <Link href={`/leads/${resolvedLead.id}`} className="text-sm text-accent hover:underline" onClick={onClose}>
+                    Ver lead →
+                  </Link>
+                </div>
+              ) : null}
+            </>
           ) : resolvedType === 'lead' && resolvedLead ? (
             <LeadFicha lead={resolvedLead} onClose={onClose} />
           ) : (
@@ -196,23 +229,26 @@ export function PersonSheet({
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-line bg-panel-2/40 flex justify-between items-center shrink-0">
+        <div className="px-5 py-3 border-t border-line bg-panel-2/40 flex flex-wrap justify-between items-center gap-2 shrink-0">
           <button type="button" className="text-sm text-muted hover:text-text" onClick={onClose}>
             Cerrar
           </button>
-          {resolvedClient ? (
-            <Link
-              href={`/clientes?search=${encodeURIComponent(resolvedClient.phone || resolvedClient.id)}`}
-              className="text-sm text-accent hover:underline"
-              onClick={onClose}
-            >
-              Abrir en listado →
-            </Link>
-          ) : resolvedLead ? (
-            <Link href={`/leads/${resolvedLead.id}`} className="text-sm text-accent hover:underline" onClick={onClose}>
-              Abrir lead completo →
-            </Link>
-          ) : null}
+          <div className="flex flex-wrap gap-3">
+            {resolvedClient ? (
+              <Link
+                href={`/clientes?search=${encodeURIComponent(resolvedClient.phone || resolvedClient.id)}`}
+                className="text-sm text-accent hover:underline"
+                onClick={onClose}
+              >
+                Alumna →
+              </Link>
+            ) : null}
+            {resolvedLead ? (
+              <Link href={`/leads/${resolvedLead.id}`} className="text-sm text-accent hover:underline" onClick={onClose}>
+                Lead →
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
