@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { MailIcon, WhatsAppIcon } from '@/components/channel-icons';
+import { PersonSheet } from '@/components/person-sheet';
 import type { ClientRow, ClientStatus } from '@/lib/types';
 
 type StatusSlug = 'activo' | 'inactivo' | 'visita';
@@ -58,6 +59,7 @@ export function ClientsList() {
   const [editing, setEditing] = useState<ClientRow | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ClientRow | null>(null);
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Deep-link desde calendario: /clientes?search=phone|name
@@ -250,7 +252,11 @@ export function ClientsList() {
             {/* Mobile: cards (actual, te gusta) */}
             <ul className="divide-y divide-line lg:hidden">
               {data.map((client) => (
-                <li key={client.id} className="p-5 space-y-3">
+                <li
+                  key={client.id}
+                  className="p-5 space-y-3 cursor-pointer hover:bg-panel-2/30"
+                  onClick={() => setSelected(client)}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium">{displayName(client)}</p>
@@ -275,7 +281,10 @@ export function ClientsList() {
                             openWhatsApp.isPending &&
                             openWhatsApp.variables === client.id
                           }
-                          onClick={() => openWhatsApp.mutate(client.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openWhatsApp.mutate(client.id);
+                          }}
                         >
                           <WhatsAppIcon className="h-4 w-4" title="WhatsApp" />
                         </button>
@@ -336,11 +345,14 @@ export function ClientsList() {
                       {client.notes}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       className="btn-secondary min-h-10 px-3 text-sm"
-                      onClick={() => openEdit(client)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(client);
+                      }}
                     >
                       Editar
                     </button>
@@ -399,7 +411,8 @@ export function ClientsList() {
                   {data.map((client) => (
                     <tr
                       key={client.id}
-                      className="hover:bg-panel-2/40 transition group"
+                      className="hover:bg-panel-2/40 transition group cursor-pointer"
+                      onClick={() => setSelected(client)}
                     >
                       <td className="px-4 py-3 align-top min-w-[220px]">
                         <div className="min-w-0">
@@ -458,7 +471,7 @@ export function ClientsList() {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-top whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                           {waConnected && client.phone ? (
                             <button
                               type="button"
@@ -549,6 +562,21 @@ export function ClientsList() {
           </>
         )}
       </section>
+
+      <PersonSheet
+        target={
+          selected
+            ? {
+                userId: selected.id,
+                contactName: selected.name,
+                contactPhone: selected.phone,
+                contactEmail: selected.email,
+              }
+            : null
+        }
+        open={!!selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

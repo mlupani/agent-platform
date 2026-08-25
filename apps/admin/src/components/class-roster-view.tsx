@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import type { ClientRow } from '@/lib/types';
+import type { PersonTarget } from '@/components/person-sheet';
 
 export interface ClassAttendee {
   id: string;
@@ -111,6 +112,7 @@ export function ClassRosterView({
   isLoading,
   onSelect,
   onOpenDay,
+  onOpenPerson,
 }: {
   days: Date[];
   sessions: ClassSession[];
@@ -119,6 +121,7 @@ export function ClassRosterView({
   isLoading: boolean;
   onSelect: (item: CalendarFeedItem) => void;
   onOpenDay?: (day: Date) => void;
+  onOpenPerson?: (target: PersonTarget) => void;
 }) {
   const [adding, setAdding] = useState<ClassSession | null>(null);
   const [editingCapacity, setEditingCapacity] = useState<ClassSession | null>(null);
@@ -228,11 +231,12 @@ export function ClassRosterView({
                         {session.attendees.map((attendee) => {
                           const label =
                             attendee.contactName || attendee.contactPhone || 'Alumna';
-                          const href = attendee.userId
-                            ? `/clientes?search=${encodeURIComponent(attendee.userId)}`
-                            : attendee.contactPhone
-                              ? `/clientes?search=${encodeURIComponent(attendee.contactPhone)}`
-                              : null;
+                          const personTarget: PersonTarget = {
+                            userId: attendee.userId,
+                            contactName: attendee.contactName,
+                            contactPhone: attendee.contactPhone,
+                            contactEmail: attendee.contactEmail,
+                          };
                           return (
                             <li key={attendee.id} className="flex items-center gap-1">
                               <button
@@ -243,17 +247,19 @@ export function ClassRosterView({
                               >
                                 {label}
                               </button>
-                              {href ? (
-                                <a
-                                  href={href}
-                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-panel text-[10px] hover:bg-panel-2"
-                                  title="Ver alumna"
-                                  aria-label={`Ver ${label}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  ↗
-                                </a>
-                              ) : null}
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-panel text-[10px] hover:bg-panel-2"
+                                title="Ver ficha"
+                                aria-label={`Ver ficha de ${label}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onOpenPerson) onOpenPerson(personTarget);
+                                  else onSelect(attendeeToItem(session, attendee));
+                                }}
+                              >
+                                ↗
+                              </button>
                             </li>
                           );
                         })}

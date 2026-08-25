@@ -7,6 +7,7 @@ import {
   ClassRosterView,
   type ClassSession,
 } from '@/components/class-roster-view';
+import { PersonSheet, type PersonTarget } from '@/components/person-sheet';
 
 interface CalendarFeedItem {
   id: string;
@@ -227,6 +228,7 @@ export function AppointmentsCalendar() {
   const [view, setView] = useState<CalendarView>('month');
   const [viewReady, setViewReady] = useState(false);
   const [selected, setSelected] = useState<CalendarFeedItem | null>(null);
+  const [person, setPerson] = useState<PersonTarget | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
@@ -424,6 +426,7 @@ export function AppointmentsCalendar() {
           isLoading={isLoading || classesQuery.isLoading}
           onSelect={setSelected}
           onOpenDay={view === 'week' ? goToDay : undefined}
+          onOpenPerson={setPerson}
         />
       )}
 
@@ -444,6 +447,10 @@ export function AppointmentsCalendar() {
           removing={remove.isPending}
           error={remove.error as Error | null}
           onClose={() => setSelected(null)}
+          onOpenPerson={(t) => {
+            setSelected(null);
+            setPerson(t);
+          }}
           onRemove={() => {
             if (
               confirm(
@@ -457,6 +464,7 @@ export function AppointmentsCalendar() {
           }}
         />
       ) : null}
+      <PersonSheet target={person} open={!!person} onClose={() => setPerson(null)} />
     </div>
   );
 }
@@ -861,12 +869,14 @@ function EventModal({
   removing,
   error,
   onClose,
+  onOpenPerson,
   onRemove,
 }: {
   selected: CalendarFeedItem;
   removing: boolean;
   error: Error | null;
   onClose: () => void;
+  onOpenPerson: (t: PersonTarget) => void;
   onRemove: () => void;
 }) {
   const hasIdentity = Boolean(selected.userId || selected.contactPhone || selected.contactEmail);
@@ -914,42 +924,24 @@ function EventModal({
         ) : null}
         {hasIdentity ? (
           <div className="flex flex-wrap gap-2 py-2 border-y border-line/50">
-            {selected.userId ? (
-              <a
-                href={`/clientes?search=${encodeURIComponent(selected.contactPhone || selected.userId)}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-xs font-medium hover:bg-panel"
-                onClick={onClose}
-                title={selected.contactName || selected.userId}
-              >
-                Ver alumna
-              </a>
-            ) : selected.contactPhone ? (
-              <a
-                href={`/clientes?search=${encodeURIComponent(selected.contactPhone)}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-xs font-medium hover:bg-panel"
-                onClick={onClose}
-              >
-                Buscar alumna
-              </a>
-            ) : null}
-            {(selected.contactPhone || selected.contactEmail) && (
-              <a
-                href={`/leads?search=${encodeURIComponent(selected.contactPhone || selected.contactEmail || '')}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-1.5 text-xs font-medium hover:bg-panel-2"
-                onClick={onClose}
-              >
-                Ver lead
-              </a>
-            )}
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-xs font-medium hover:bg-panel"
+              onClick={() =>
+                onOpenPerson({
+                  userId: selected.userId,
+                  contactName: selected.contactName,
+                  contactPhone: selected.contactPhone,
+                  contactEmail: selected.contactEmail,
+                })
+              }
+            >
+              Ver ficha
+            </button>
             {selected.userId && (
-              <a
-                href={`/clientes?search=${encodeURIComponent(selected.userId)}`}
-                className="text-xs text-muted hover:text-text underline-offset-2 hover:underline px-1 py-1"
-                onClick={onClose}
-                title="Copiar ID"
-              >
+              <span className="text-xs text-muted inline-flex items-center px-1 py-1" title={selected.userId}>
                 ID: {selected.userId.slice(0, 8)}…
-              </a>
+              </span>
             )}
           </div>
         ) : null}
