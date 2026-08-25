@@ -131,11 +131,14 @@ export class LeadsAdminController {
   list(
     @Query('status') status?: string,
     @Query('contactable') contactable?: string,
+    @Query('search') search?: string,
+    @Query('name') name?: string,
   ) {
     return this.leads.list({
       status: status || undefined,
       contactable:
         contactable === 'true' ? true : contactable === 'false' ? false : undefined,
+      search: search || name || undefined,
     });
   }
 

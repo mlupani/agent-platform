@@ -34,13 +34,22 @@ export class ClientsService {
       ? await this.resolveStatus(statusSlug)
       : undefined;
     const nameQuery = name?.trim().slice(0, 120) || '';
+    const isPhoneLike = nameQuery.replace(/\D/g, '').length >= 6;
 
     const rows = await this.prisma.user.findMany({
       where: {
         businessId,
         ...(status ? { statusId: status.id } : {}),
         ...(nameQuery
-          ? { name: { contains: nameQuery, mode: 'insensitive' } }
+          ? isPhoneLike
+            ? {
+                OR: [
+                  { name: { contains: nameQuery, mode: 'insensitive' } },
+                  { phone: { contains: nameQuery } },
+                  { email: { contains: nameQuery, mode: 'insensitive' } },
+                ],
+              }
+            : { name: { contains: nameQuery, mode: 'insensitive' } }
           : {}),
       },
       include: {
@@ -124,6 +133,19 @@ export class ClientsService {
       },
     });
     return this.toClient(updated);
+  }
+
+  async get(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const row = await this.prisma.user.findFirst({
+      where: { id, businessId },
+      include: {
+        status: true,
+        _count: { select: { appointments: true, conversations: true } },
+      },
+    });
+    if (!row) throw new NotFoundException('Cliente no encontrado');
+    return this.toClient(row);
   }
 
   async remove(id: string) {

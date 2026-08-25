@@ -93,6 +93,8 @@ export class AppointmentsService {
         htmlLink: null as string | null,
         canCancel: true,
         service: item.service,
+        userId: (item as any).userId as string | null,
+        isTrial: (item as any).isTrial as boolean | undefined,
       }));
 
     const googleItems = googleEvents

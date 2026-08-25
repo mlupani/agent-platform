@@ -24,6 +24,8 @@ interface CalendarFeedItem {
   htmlLink: string | null;
   canCancel: boolean;
   service: { id: string; name: string; durationMinutes?: number } | null;
+  userId?: string | null;
+  isTrial?: boolean | null;
 }
 
 interface CalendarFeed {
@@ -867,6 +869,7 @@ function EventModal({
   onClose: () => void;
   onRemove: () => void;
 }) {
+  const hasIdentity = Boolean(selected.userId || selected.contactPhone || selected.contactEmail);
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -908,6 +911,47 @@ function EventModal({
         ) : null}
         {selected.notes ? (
           <p className="text-sm text-muted whitespace-pre-wrap">{selected.notes}</p>
+        ) : null}
+        {hasIdentity ? (
+          <div className="flex flex-wrap gap-2 py-2 border-y border-line/50">
+            {selected.userId ? (
+              <a
+                href={`/clientes?search=${encodeURIComponent(selected.contactPhone || selected.userId)}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-xs font-medium hover:bg-panel"
+                onClick={onClose}
+                title={selected.contactName || selected.userId}
+              >
+                Ver alumna
+              </a>
+            ) : selected.contactPhone ? (
+              <a
+                href={`/clientes?search=${encodeURIComponent(selected.contactPhone)}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-xs font-medium hover:bg-panel"
+                onClick={onClose}
+              >
+                Buscar alumna
+              </a>
+            ) : null}
+            {(selected.contactPhone || selected.contactEmail) && (
+              <a
+                href={`/leads?search=${encodeURIComponent(selected.contactPhone || selected.contactEmail || '')}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-1.5 text-xs font-medium hover:bg-panel-2"
+                onClick={onClose}
+              >
+                Ver lead
+              </a>
+            )}
+            {selected.userId && (
+              <a
+                href={`/clientes?search=${encodeURIComponent(selected.userId)}`}
+                className="text-xs text-muted hover:text-text underline-offset-2 hover:underline px-1 py-1"
+                onClick={onClose}
+                title="Copiar ID"
+              >
+                ID: {selected.userId.slice(0, 8)}…
+              </a>
+            )}
+          </div>
         ) : null}
         {selected.htmlLink ? (
           <a

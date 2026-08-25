@@ -51,6 +51,8 @@ export interface CalendarFeedItem {
   htmlLink: string | null;
   canCancel: boolean;
   service: { id: string; name: string; durationMinutes?: number } | null;
+  userId?: string | null;
+  isTrial?: boolean | null;
 }
 
 function toIsoDate(date: Date) {
@@ -96,6 +98,8 @@ export function attendeeToItem(
     htmlLink: null,
     canCancel: true,
     service: session.service,
+    userId: attendee.userId,
+    isTrial: null,
   };
 }
 
@@ -221,21 +225,38 @@ export function ClassRosterView({
                         {session.service?.name ?? 'Clase'}
                       </p>
                       <ul className="px-2 py-1.5 space-y-0.5">
-                        {session.attendees.map((attendee) => (
-                          <li key={attendee.id}>
-                            <button
-                              type="button"
-                              className="w-full text-left rounded-lg px-2 py-1.5 text-sm hover:bg-panel-2 min-h-10"
-                              onClick={() =>
-                                onSelect(attendeeToItem(session, attendee))
-                              }
-                            >
-                              {attendee.contactName ||
-                                attendee.contactPhone ||
-                                'Alumna'}
-                            </button>
-                          </li>
-                        ))}
+                        {session.attendees.map((attendee) => {
+                          const label =
+                            attendee.contactName || attendee.contactPhone || 'Alumna';
+                          const href = attendee.userId
+                            ? `/clientes?search=${encodeURIComponent(attendee.userId)}`
+                            : attendee.contactPhone
+                              ? `/clientes?search=${encodeURIComponent(attendee.contactPhone)}`
+                              : null;
+                          return (
+                            <li key={attendee.id} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="flex-1 text-left rounded-lg px-2 py-1.5 text-sm hover:bg-panel-2 min-h-10 truncate"
+                                onClick={() => onSelect(attendeeToItem(session, attendee))}
+                                title={label}
+                              >
+                                {label}
+                              </button>
+                              {href ? (
+                                <a
+                                  href={href}
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-panel text-[10px] hover:bg-panel-2"
+                                  title="Ver alumna"
+                                  aria-label={`Ver ${label}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  ↗
+                                </a>
+                              ) : null}
+                            </li>
+                          );
+                        })}
                         {!session.attendees.length ? (
                           <li className="px-2 py-2 text-xs text-muted">
                             Nadie anotada

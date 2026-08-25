@@ -232,14 +232,28 @@ export class LeadsService {
   async list(filters?: {
     status?: string;
     contactable?: boolean;
+    search?: string;
   }): Promise<LeadListItem[]> {
     const businessId = await this.businesses.getCurrentId();
+    const search = filters?.search?.trim().slice(0, 120) || '';
+    const isPhoneLike = search.replace(/\D/g, '').length >= 6;
     const rows = await this.prisma.lead.findMany({
       where: {
         businessId,
         ...(filters?.status ? { status: filters.status } : {}),
         ...(filters?.contactable !== undefined
           ? { isContactable: filters.contactable }
+          : {}),
+        ...(search
+          ? isPhoneLike
+            ? {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { phone: { contains: search } },
+                  { email: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : { name: { contains: search, mode: 'insensitive' } }
           : {}),
       },
       include: {

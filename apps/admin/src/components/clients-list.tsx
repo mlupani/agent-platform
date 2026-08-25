@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { MailIcon, WhatsAppIcon } from '@/components/channel-icons';
@@ -50,6 +50,7 @@ function clientsQueryPath(filter: FilterSlug, name: string) {
 
 export function ClientsList() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterSlug>('todos');
   const [nameInput, setNameInput] = useState('');
@@ -58,6 +59,15 @@ export function ClientsList() {
   const [formOpen, setFormOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Deep-link desde calendario: /clientes?search=phone|name
+  useEffect(() => {
+    const raw = (searchParams.get('search') || searchParams.get('name') || '').trim().slice(0, 120);
+    if (raw) {
+      setNameInput(raw);
+      setNameQuery(raw);
+    }
+  }, [searchParams]);
 
   const { data: statuses = FALLBACK_STATUSES } = useQuery({
     queryKey: ['client-statuses'],
@@ -172,7 +182,7 @@ export function ClientsList() {
             id="client-search"
             type="search"
             className="input w-full"
-            placeholder="Buscar por nombre"
+            placeholder="Buscar por nombre o teléfono"
             value={nameInput}
             onChange={(event) => onNameChange(event.target.value)}
             autoComplete="off"

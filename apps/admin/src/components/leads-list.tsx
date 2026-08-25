@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ChannelBadge } from '@/components/channel-icons';
 import type { LeadRow } from '@/lib/types';
@@ -70,23 +71,49 @@ function formatWhen(value: string | null) {
   });
 }
 
-function leadsPath(status: StatusFilter, contactable: ContactableFilter) {
+function leadsPath(status: StatusFilter, contactable: ContactableFilter, search: string) {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
   if (contactable === 'yes') params.set('contactable', 'true');
   if (contactable === 'no') params.set('contactable', 'false');
+  if (search) params.set('search', search);
   const query = params.toString();
   return `/admin/leads${query ? `?${query}` : ''}`;
 }
 
 export function LeadsList() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [formOpen, setFormOpen] = useState(false);
   const [status, setStatus] = useState<StatusFilter>('all');
   const [contactable, setContactable] = useState<ContactableFilter>('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const raw = (searchParams.get('search') || '').trim().slice(0, 120);
+    if (raw) {
+      setSearchInput(raw);
+      setSearchQuery(raw);
+    }
+  }, [searchParams]);
+
+  function onSearchChange(value: string) {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setSearchQuery('');
+      return;
+    }
+    searchDebounce.current = setTimeout(() => setSearchQuery(trimmed), 250);
+  }
+
   const { data = [], isLoading, error } = useQuery({
-    queryKey: ['leads', status, contactable],
-    queryFn: () => api<LeadRow[]>(leadsPath(status, contactable)),
+    queryKey: ['leads', status, contactable, searchQuery],
+    queryFn: () => api<LeadRow[]>(leadsPath(status, contactable, searchQuery)),
+    placeholderData: keepPreviousData,
   });
 
   return (
@@ -118,44 +145,58 @@ export function LeadsList() {
         />
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-1">
-          {STATUS_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setStatus(option.value)}
-              className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
-                status === option.value
-                  ? 'border-accent bg-accent text-white'
-                  : 'border-line text-muted'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {(
-            [
-              ['all', 'Contactabilidad'],
-              ['yes', 'Contactable'],
-              ['no', 'Sin canal'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setContactable(value)}
-              className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
-                contactable === value
-                  ? 'border-accent bg-accent text-white'
-                  : 'border-line text-muted'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="space-y-3">
+        <label className="block">
+          <span className="sr-only">Buscar lead</span>
+          <input
+            type="search"
+            className="input w-full"
+            placeholder="Buscar por nombre o teléfono"
+            value={searchInput}
+            onChange={(event) => onSearchChange(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1">
+            {STATUS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatus(option.value)}
+                className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
+                  status === option.value
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-line text-muted'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ['all', 'Contactabilidad'],
+                ['yes', 'Contactable'],
+                ['no', 'Sin canal'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setContactable(value)}
+                className={`rounded-lg border px-3 py-2 text-sm min-h-10 ${
+                  contactable === value
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-line text-muted'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

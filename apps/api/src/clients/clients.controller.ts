@@ -51,8 +51,12 @@ export class ClientsController {
   }
 
   @Get()
-  list(@Query('status') status?: string, @Query('name') name?: string) {
-    return this.clients.list(status, name);
+  list(
+    @Query('status') status?: string,
+    @Query('name') name?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.clients.list(status, name ?? search);
   }
 
   @Post()
@@ -61,6 +65,11 @@ export class ClientsController {
     body: z.infer<typeof clientSchema>,
   ) {
     return this.clients.create(body);
+  }
+
+  @Get(':id')
+  get(@Param('id') id: string) {
+    return this.clients.get(id);
   }
 
   @Post(':id/whatsapp')
