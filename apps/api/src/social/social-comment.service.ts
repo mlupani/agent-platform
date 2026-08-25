@@ -166,7 +166,7 @@ export class SocialCommentService {
         const replyText = this.buildReply(data.text, classification, data.authorUsername);
         this.logger.log(`Intentando reply a ${data.commentId} (post ${data.postId || 'sin postId'})`);
         if (!data.postId) {
-          this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId (Zernio requiere postId para private-reply)`);
+          this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId (Zernio requiere postId para private-reply) raw=${JSON.stringify(data.raw).slice(0, 800)}`);
         } else {
           try {
             const provider = this.factory.get();
@@ -286,10 +286,6 @@ export class SocialCommentService {
       '';
 
     if (!commentId || !text) {
-      // intentar fallback: si payload es directamente el comment
-      // si no hay commentId pero hay id + text, usarlo
-      if (commentId && text) return null; // ya retornado
-      // si no pudimos extraer, log y salir
       return null;
     }
 
@@ -317,14 +313,26 @@ export class SocialCommentService {
 
     const postId =
       stringOf(commentObj.postId) ??
+      stringOf(commentObj.post_id) ??
+      stringOf(commentObj.mediaId) ??
+      stringOf(commentObj.media_id) ??
+      stringOf(commentObj.objectId) ??
+      stringOf(commentObj.igPostId) ??
       stringOf(data.postId) ??
+      stringOf(data.post_id) ??
+      stringOf(data.mediaId) ??
       stringOf(asRecord(data.post)?.id) ??
+      stringOf(asRecord(data.post)?.postId) ??
+      stringOf(asRecord(data.media)?.id) ??
       stringOf(root.postId) ??
+      stringOf(root.mediaId) ??
       null;
 
     const postCaption =
       stringOf(asRecord(data.post)?.caption) ??
+      stringOf(asRecord(data.media)?.caption) ??
       stringOf(commentObj.postCaption) ??
+      stringOf(commentObj.caption) ??
       null;
 
     const accountId =
