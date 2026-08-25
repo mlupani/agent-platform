@@ -117,6 +117,7 @@ export class SocialCommentService {
 
     // Crear/actualizar lead: username como nombre, comment como mensaje, interest derivado
     const leadName = data.authorDisplayName || data.authorUsername || 'Seguidor IG';
+    let capturedLeadId: string | null = null;
     try {
       const captured = await this.leads.capture({
         businessId,
@@ -125,7 +126,7 @@ export class SocialCommentService {
         email: null,
         message: data.text,
         interest: classification.interest,
-        source: 'instagram_comment',
+        source: 'instagram',
         status: classification.isLead ? 'interested' : 'new',
         metadata: {
           origin: 'instagram_comment',
@@ -133,38 +134,71 @@ export class SocialCommentService {
           postId: data.postId,
           authorUsername: data.authorUsername,
           authorId: data.authorId,
-          platform,
+          platform: 'instagram',
           isGreeting: classification.isGreeting,
           isQuestion: classification.isQuestion,
           intent: classification.intent,
           raw: data.raw as Record<string, unknown>,
         },
       });
-      this.logger.log(`Lead desde comentario IG ${data.commentId} -> ${captured?.id || 'sin lead (sin datos)'}`);
+      capturedLeadId = captured?.id || null;
+      this.logger.log(`Lead desde comentario IG ${data.commentId} -> ${capturedLeadId || 'sin lead (sin datos)'}`);
+      // Instagram comment es contactable vía IG aunque no tenga teléfono: forzar canal
+      if (capturedLeadId) {
+        await this.prisma.lead.update({
+          where: { id: capturedLeadId },
+          data: {
+            source: 'instagram',
+            preferredChannel: 'INSTAGRAM',
+            isContactable: true,
+          },
+        });
+      }
     } catch (error) {
       this.logger.error(`Error capturando lead desde comentario ${data.commentId}: ${error instanceof Error ? error.message : 'unknown'}`);
     }
 
     // Auto-respuesta: si es saludo o pregunta, enviar reply privado o público según config
-    // Por ahora solo si es lead potencial y el agente está habilitado para IG
     if (classification.isLead) {
       const shouldReply = await this.shouldAutoReply(businessId, platform);
+      this.logger.log(`IG comment ${data.commentId} shouldAutoReply=${shouldReply} (platform=${platform} business=${businessId.slice(0,8)})`);
       if (shouldReply) {
         const replyText = this.buildReply(data.text, classification, data.authorUsername);
-        try {
-          const provider = this.factory.get();
-          // Preferir private reply (DM) para no spamear público y poder pedir datos
-          if (provider.sendPrivateReplyToComment) {
-            await provider.sendPrivateReplyToComment({ commentId: data.commentId, message: replyText });
-            this.logger.log(`Private reply enviado a comentario ${data.commentId}`);
-          } else if (provider.replyToComment) {
-            await provider.replyToComment({ commentId: data.commentId, message: replyText });
-            this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
+        this.logger.log(`Intentando reply a ${data.commentId} (post ${data.postId || 'sin postId'})`);
+        if (!data.postId) {
+          this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId (Zernio requiere postId para private-reply)`);
+        } else {
+          try {
+            const provider = this.factory.get();
+            let replied = false;
+            if (provider.sendPrivateReplyToComment) {
+              try {
+                await provider.sendPrivateReplyToComment({ postId: data.postId, commentId: data.commentId, message: replyText });
+                this.logger.log(`Private reply enviado a comentario ${data.commentId}: "${replyText.slice(0, 60)}"`);
+                replied = true;
+              } catch (e) {
+                this.logger.warn(`Private reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)} — probando reply público`);
+              }
+            }
+            if (!replied && provider.replyToComment) {
+              try {
+                await provider.replyToComment({ postId: data.postId, commentId: data.commentId, message: replyText });
+                this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
+                replied = true;
+              } catch (e) {
+                this.logger.warn(`Public reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }
+            if (!replied) this.logger.warn(`No hay método de reply disponible en provider para ${data.commentId}`);
+          } catch (error) {
+            this.logger.warn(`No se pudo responder comentario ${data.commentId}: ${error instanceof Error ? error.message : 'error'} | ${JSON.stringify((error as { statusCode?: number })?.statusCode)}`);
           }
-        } catch (error) {
-          this.logger.warn(`No se pudo responder comentario ${data.commentId}: ${error instanceof Error ? error.message : 'error'}`);
         }
+      } else {
+        this.logger.warn(`Auto-reply deshabilitado para IG: verifica /integrations → Instagram → "Agente habilitado" (business ${businessId.slice(0,8)})`);
       }
+    } else {
+      this.logger.debug(`IG comment ${data.commentId} no es lead (intent=${classification.intent}), no se responde`);
     }
 
     return true;
