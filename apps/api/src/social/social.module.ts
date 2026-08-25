@@ -4,6 +4,7 @@ import { BusinessesModule } from '../businesses/businesses.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ZernioSocialProvider } from './providers/zernio.social-provider';
 import { SocialAdminController } from './social-admin.controller';
+import { SocialCommentService } from './social-comment.service';
 import { SocialInboxService } from './social-inbox.service';
 import { SocialOAuthController } from './social-oauth.controller';
 import { SocialProviderFactory } from './social-provider.factory';
@@ -13,7 +14,12 @@ import { SocialWebhookController } from './social-webhook.controller';
 import { SocialWebhookService } from './social-webhook.service';
 
 @Module({
-  imports: [BusinessesModule, RealtimeModule, forwardRef(() => AiModule)],
+  imports: [
+    BusinessesModule,
+    RealtimeModule,
+    forwardRef(() => AiModule),
+    forwardRef(() => require('../leads/leads.module').LeadsModule),
+  ],
   controllers: [
     SocialAdminController,
     SocialOAuthController,
@@ -29,8 +35,14 @@ import { SocialWebhookService } from './social-webhook.service';
     SocialProviderFactory,
     SocialPublishingService,
     SocialInboxService,
+    SocialCommentService,
     SocialWebhookService,
   ],
-  exports: [SocialPublishingService, SocialProviderFactory, SocialInboxService],
+  exports: [
+    SocialPublishingService,
+    SocialProviderFactory,
+    SocialInboxService,
+    SocialCommentService,
+  ],
 })
 export class SocialModule {}

@@ -3,6 +3,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../common/redis/redis.service';
 import { SocialError, SocialWebhookSignatureError } from './social.errors';
+import { SocialCommentService } from './social-comment.service';
 import { SocialInboxService } from './social-inbox.service';
 import { SocialPublishingService } from './social-publishing.service';
 
@@ -24,6 +25,7 @@ export class SocialWebhookService {
     private readonly redis: RedisService,
     private readonly publishing: SocialPublishingService,
     private readonly inbox: SocialInboxService,
+    private readonly comments: SocialCommentService,
   ) {}
 
   async handle(input: SocialWebhookHandleInput): Promise<{
@@ -127,6 +129,16 @@ export class SocialWebhookService {
 
     if (type === 'message.received' || type === 'message.sent') {
       return this.inbox.handleMessageEvent(payload);
+    }
+
+    if (
+      type === 'comment.received' ||
+      type === 'comment.created' ||
+      type === 'inbox.comment' ||
+      type === 'comments.received' ||
+      (type && type.includes('comment'))
+    ) {
+      return this.comments.handleRaw(payload);
     }
 
     this.logger.debug(`Webhook Zernio ignorado: ${type ?? 'unknown'}`);

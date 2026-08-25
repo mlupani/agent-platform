@@ -278,6 +278,28 @@ export class ZernioSocialProvider implements SocialProvider {
     return { externalId: data.data?.messageId };
   }
 
+  async replyToComment(input: { commentId: string; message: string }): Promise<void> {
+    await this.call(
+      (this.sdk() as unknown as { comments: { replyToInboxPost: (opts: unknown) => Promise<unknown> } }).comments.replyToInboxPost({
+        body: {
+          commentId: input.commentId,
+          message: input.message,
+        },
+      } as never),
+    );
+  }
+
+  async sendPrivateReplyToComment(input: { commentId: string; message: string }): Promise<void> {
+    await this.call(
+      this.sdk().comments.sendPrivateReplyToComment({
+        body: {
+          commentId: input.commentId,
+          message: input.message,
+        },
+      } as never),
+    );
+  }
+
   async listInboxThreads(input: {
     accountId: string;
     profileId?: string;

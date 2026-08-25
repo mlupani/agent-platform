@@ -42,4 +42,6 @@ export interface SocialProvider {
     accountId: string;
     conversationId: string;
   }): Promise<SocialInboxMessage[]>;
+  replyToComment?(input: { commentId: string; message: string }): Promise<void>;
+  sendPrivateReplyToComment?(input: { commentId: string; message: string }): Promise<void>;
 }
