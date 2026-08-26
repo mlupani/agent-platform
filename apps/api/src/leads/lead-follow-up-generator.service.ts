@@ -60,6 +60,7 @@ export class LeadFollowUpGeneratorService {
       previous[0]?.sentMessage
         ? `No repitas este mensaje anterior:\n${previous[0].sentMessage}`
         : null,
+      `PROHIBIDO inventar que se reservó un turno/clase, fecha, hora, dirección o que está confirmado. Si no hay appointment real en el historial, no lo menciones. No inventes datos. Si el objetivo es retomar, solo preguntá si quiere avanzar.`,
       `No uses plantillas genéricas tipo "¿seguís interesado?". No inventes promociones ni precios.`,
       `Devolvé SOLO el texto del mensaje, sin comillas ni explicación.`,
     ]
