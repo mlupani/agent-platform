@@ -108,7 +108,7 @@ export function DashboardHome() {
   ];
 
   return (
-    <div className="space-y-7 max-w-6xl">
+    <div className="space-y-7 max-w-6xl w-full min-w-0">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Dashboard</h2>
@@ -206,13 +206,13 @@ export function DashboardHome() {
             </article>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[1fr_0.72fr]">
-            <article className="panel rounded-2xl p-5">
+          <section className="grid gap-4 lg:grid-cols-5">
+            <article className="panel rounded-2xl p-5 lg:col-span-3 min-w-0 overflow-hidden">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-medium">Últimas conversaciones</h3>
                 <Link
                   href="/conversations"
-                  className="text-sm text-accent hover:underline"
+                  className="text-sm text-accent hover:underline shrink-0"
                 >
                   Ver todas
                 </Link>
@@ -222,11 +222,11 @@ export function DashboardHome() {
                   <li key={conversation.id}>
                     <Link
                       href={`/conversations?c=${conversation.id}`}
-                      className="flex items-center justify-between gap-4 py-3 hover:bg-panel-2 -mx-2 px-2 rounded-lg"
+                      className="flex items-center justify-between gap-3 py-3 hover:bg-panel-2 -mx-2 px-2 rounded-lg min-w-0"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <ChannelBadge channel={conversation.channel} />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm truncate">
                             {conversation.contactName ||
                               conversation.contactPhone ||
@@ -237,7 +237,7 @@ export function DashboardHome() {
                           </p>
                         </div>
                       </div>
-                      <span className="text-xs text-muted shrink-0">
+                      <span className="text-xs text-muted shrink-0 tabular-nums">
                         {relativeTime(conversation.lastMessageAt)}
                       </span>
                     </Link>
@@ -251,12 +251,12 @@ export function DashboardHome() {
               </ul>
             </article>
 
-            <article className="panel rounded-2xl p-5">
-              <h3 className="font-medium">Operación de hoy</h3>
+            <article className="panel rounded-2xl p-5 lg:col-span-2 min-w-0">
+              <h3 className="font-medium leading-tight">Operación de hoy</h3>
               <p className="text-xs text-muted mt-1">
                 Independiente del mes seleccionado.
               </p>
-              <dl className="mt-5 grid grid-cols-2 gap-3">
+              <dl className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3">
                 <StatChip
                   label="Citas hoy"
                   value={m?.appointmentsToday ?? 0}
@@ -278,7 +278,7 @@ export function DashboardHome() {
                   href="/conversations"
                 />
               </dl>
-              <p className="mt-5 text-xs text-muted">
+              <p className="mt-5 text-xs text-muted leading-relaxed">
                 Contenido generado este mes: {m?.contentGeneratedMonth ?? 0}
                 {photos || videos
                   ? ` · ${photos} foto${photos === 1 ? '' : 's'} · ${videos} video${videos === 1 ? '' : 's'}`
@@ -305,10 +305,12 @@ function StatChip({
   return (
     <Link
       href={href}
-      className="rounded-xl bg-panel-2 px-3.5 py-3 hover:bg-accent-soft transition-colors"
+      className="rounded-xl bg-panel-2 px-3 py-3 sm:px-3.5 sm:py-3.5 hover:bg-accent-soft transition-colors flex flex-col justify-center min-h-[72px]"
     >
-      <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tracking-tight">{value}</dd>
+      <dt className="text-[10px] leading-none uppercase tracking-[0.06em] text-muted whitespace-nowrap truncate">
+        {label}
+      </dt>
+      <dd className="mt-1.5 text-2xl font-semibold tracking-tight leading-none">{value}</dd>
     </Link>
   );
 }
