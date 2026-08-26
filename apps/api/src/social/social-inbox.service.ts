@@ -564,22 +564,24 @@ export class SocialInboxService {
 
     try {
       await this.hydrateVoiceText(businessId, inbound);
-      // No auto-crear alumno: solo vincular si ya existe. Si no, crear Lead.
+      // No auto-crear alumno: solo vincular si ya existe.
       const existingUser = await this.findExistingSocialUser(businessId, inbound);
+      let conversation = await this.upsertConversation(businessId, inbound, {
+        userId: existingUser?.id,
+        zernioAccountId: opts.zernioAccountId,
+      });
+      // Si no es alumno, asegurar Lead vinculado a la conversación (para que sea contactable por IG)
       if (!existingUser && inbound.participantName) {
         try {
           await this.leads.capture({
             businessId,
+            conversationId: conversation.id,
             name: inbound.participantName ?? inbound.participantUsername ?? null,
             source: inbound.channel,
             message: inbound.text?.slice(0, 500) || null,
           });
         } catch {}
       }
-      let conversation = await this.upsertConversation(businessId, inbound, {
-        userId: existingUser?.id,
-        zernioAccountId: opts.zernioAccountId,
-      });
 
       if (conversation.hiddenAt) {
         if (inbound.fromMe) return false;
