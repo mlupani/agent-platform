@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { LeadsService } from '../leads/leads.service';
 import { SocialProviderFactory } from './social-provider.factory';
+import { LlmRoutingService } from '../ai/providers/llm-routing.service';
 
 interface CommentPayload {
   commentId: string;
@@ -28,6 +29,7 @@ export class SocialCommentService {
     @Inject(forwardRef(() => LeadsService))
     private readonly leads: LeadsService,
     private readonly factory: SocialProviderFactory,
+    private readonly llmRouting: LlmRoutingService,
   ) {}
 
   async handleRaw(payload: unknown): Promise<boolean> {
@@ -163,12 +165,13 @@ export class SocialCommentService {
       const shouldReply = await this.shouldAutoReply(businessId, platform);
       this.logger.log(`IG comment ${data.commentId} shouldAutoReply=${shouldReply} (platform=${platform} business=${businessId.slice(0,8)})`);
       if (shouldReply) {
-        const replyText = this.buildReply(data.text, classification, data.authorUsername);
+        // Generar respuestas inteligentes con LLM (usa contexto del negocio: precios, horarios)
+        const { privateReply, publicReply } = await this.generateReplies(businessId, data.text, classification, data.authorUsername);
+        this.logger.log(`Replies generadas private="${privateReply.slice(0, 60)}" public="${publicReply.slice(0, 60)}"`);
         this.logger.log(`Intentando reply a ${data.commentId} (post ${data.postId || 'sin postId'} account ${data.accountId || 'sin accountId'})`);
         if (!data.postId) {
-          this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId (Zernio requiere postId para private-reply) raw=${JSON.stringify(data.raw).slice(0, 800)}`);
+          this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId raw=${JSON.stringify(data.raw).slice(0, 800)}`);
         } else {
-          // resolver accountId para reply (puede no venir en webhook, buscar por business)
           let replyAccountId = data.accountId;
           if (!replyAccountId) {
             const conn = await this.prisma.socialConnection.findFirst({
@@ -179,32 +182,28 @@ export class SocialCommentService {
             if (replyAccountId) this.logger.log(`AccountId resuelto por business ${businessId.slice(0,8)} -> ${replyAccountId.slice(0,8)}`);
           }
           if (!replyAccountId) {
-            this.logger.warn(`No se puede responder comentario ${data.commentId}: falta accountId y no se encontró conexión IG para business ${businessId.slice(0,8)}`);
+            this.logger.warn(`No se puede responder comentario ${data.commentId}: falta accountId`);
           } else {
+            const provider = this.factory.get();
+            // 1) DM privado (siempre)
             try {
-              const provider = this.factory.get();
-              let replied = false;
               if (provider.sendPrivateReplyToComment) {
-                try {
-                  await provider.sendPrivateReplyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: replyText });
-                  this.logger.log(`Private reply enviado a comentario ${data.commentId}: "${replyText.slice(0, 60)}"`);
-                  replied = true;
-                } catch (e) {
-                  this.logger.warn(`Private reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)} — probando reply público`);
-                }
+                await provider.sendPrivateReplyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: privateReply });
+                this.logger.log(`Private reply enviado a comentario ${data.commentId}`);
               }
-              if (!replied && provider.replyToComment) {
-                try {
-                  await provider.replyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: replyText });
-                  this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
-                  replied = true;
-                } catch (e) {
-                  this.logger.warn(`Public reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
-                }
+            } catch (e) {
+              this.logger.warn(`Private reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+            // 2) Reply público en el post (visible para todos)
+            try {
+              if (provider.replyToComment) {
+                await provider.replyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: publicReply });
+                this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
+              } else {
+                this.logger.warn(`No hay método replyToComment en provider`);
               }
-              if (!replied) this.logger.warn(`No hay método de reply disponible en provider para ${data.commentId}`);
-            } catch (error) {
-              this.logger.warn(`No se pudo responder comentario ${data.commentId}: ${error instanceof Error ? error.message : 'error'} | ${JSON.stringify((error as { statusCode?: number })?.statusCode)}`);
+            } catch (e) {
+              this.logger.warn(`Public reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
             }
           }
         }
@@ -257,6 +256,49 @@ export class SocialCommentService {
       return Boolean(anyIg && anyIg.status === 'connected' && anyIg.agentEnabled !== false);
     }
     return conn.status === 'connected' && conn.agentEnabled !== false;
+  }
+
+  private async generateReplies(
+    businessId: string,
+    commentText: string,
+    classification: { intent: string },
+    username?: string | null,
+  ): Promise<{ privateReply: string; publicReply: string }> {
+    const fallbackPrivate = this.buildReply(commentText, classification, username);
+    const fallbackPublic = username
+      ? `¡Gracias @${username}! Te respondimos por privado con la info 🙌`
+      : `¡Gracias! Te respondimos por privado con la info 🙌`;
+    try {
+      const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+      const agentConfig = await this.prisma.agentConfig.findFirst({ where: { businessId, isDefault: true } });
+      if (!business || !agentConfig) return { privateReply: fallbackPrivate, publicReply: fallbackPublic };
+
+      const services = await this.prisma.service.findMany({ where: { businessId, enabled: true }, take: 8 });
+      const servicesText = services.map((s) => `- ${s.name}: ${s.durationMinutes}min ${s.price ? `$${s.price}` : ''} ${s.description || ''}`.trim()).join('\n');
+      const target = this.llmRouting.resolvePrimary(agentConfig);
+      const systemPrompt = `Sos el asistente de ${business.name} (${business.type || 'negocio'}). Respondés comentarios de Instagram de forma cálida, breve y en español rioplatense. Tenés que responder la pregunta del usuario usando el contexto del negocio. Si preguntan precios/horarios, usá los servicios: \n${servicesText || 'Sin servicios cargados'}\nNegocio: ${business.description || ''} Tel: ${business.phone || ''} IG: ${business.instagram || ''} Dirección: ${business.address || ''}. No inventes precios si no están en servicios, decí "te paso info por privado".`;
+      const userPrompt = `Comentario de @${username || 'anon'}: "${commentText}" (intent=${classification.intent}). Generá 2 respuestas en JSON: {"privateReply": "DM privado detallado, responde la pregunta con precios/horarios si corresponde, invita a reservar,  <= 300 chars", "publicReply": "comentario público corto <= 120 chars, agradece y dice que respondiste por privado"}. Solo devolvé JSON válido.`;
+
+      const res = await target.provider.chat({
+        model: target.model,
+        temperature: 0.7,
+        maxTokens: 500,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      });
+      const raw = res.content?.trim() || '';
+      // intentar parsear JSON del contenido (puede venir con ```json)
+      const jsonStr = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+      const parsed = JSON.parse(jsonStr) as { privateReply?: string; publicReply?: string };
+      const privateReply = parsed.privateReply?.trim() || fallbackPrivate;
+      const publicReply = parsed.publicReply?.trim() || fallbackPublic;
+      return { privateReply: privateReply.slice(0, 900), publicReply: publicReply.slice(0, 300) };
+    } catch (error) {
+      this.logger.warn(`LLM reply falló, usando fallback: ${error instanceof Error ? error.message : String(error)}`);
+      return { privateReply: fallbackPrivate, publicReply: fallbackPublic };
+    }
   }
 
   private buildReply(text: string, classification: { intent: string }, username?: string | null): string {
