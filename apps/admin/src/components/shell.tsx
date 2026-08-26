@@ -34,6 +34,16 @@ const NAV = [
     ),
   },
   {
+    href: '/calendar',
+    label: 'Calendario',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="4" y="5" width="16" height="15" rx="2" />
+        <path d="M8 3v4M16 3v4M4 10h16" />
+      </svg>
+    ),
+  },
+  {
     href: '/leads',
     label: 'Leads',
     icon: (
@@ -57,22 +67,12 @@ const NAV = [
   },
   {
     href: '/pagos',
-    label: 'Pagos',
+    label: 'Pagos y clases',
     icon: (
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="3.5" y="6" width="17" height="12" rx="2" />
         <path d="M3.5 10h17" />
         <path d="M8 15h3" />
-      </svg>
-    ),
-  },
-  {
-    href: '/calendar',
-    label: 'Calendario',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="4" y="5" width="16" height="15" rx="2" />
-        <path d="M8 3v4M16 3v4M4 10h16" />
       </svg>
     ),
   },

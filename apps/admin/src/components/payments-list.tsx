@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { PersonSheet, type PersonTarget } from '@/components/person-sheet';
 import type {
   ClientRow,
   CatalogService,
@@ -64,8 +65,11 @@ function packLabel(pass: {
   sessionsPaid: number;
   sessionCount: number;
   remaining: number;
+  unusedCredits?: number;
 }) {
-  return `${pass.sessionsPaid}/${pass.sessionCount} pagadas · ${pass.remaining} por pagar`;
+  const remaining = pass.unusedCredits ?? pass.remaining;
+  const used = Math.max(0, pass.sessionsPaid - remaining);
+  return `${pass.sessionsPaid}/${pass.sessionCount} pagadas · ${used} usadas · ${remaining} quedan por usar`;
 }
 
 function canUseClass(pass: { unusedCredits?: number; sessionsPaid: number; sessionsUsed: number }) {
@@ -96,6 +100,7 @@ export function PaymentsList() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<PaymentRow | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [personTarget, setPersonTarget] = useState<PersonTarget | null>(null);
 
   useEffect(() => {
     const qs = searchParams.get('clientId');
@@ -179,9 +184,9 @@ export function PaymentsList() {
     <div className="space-y-6 max-w-5xl">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Pagos</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Pagos y clases</h2>
           <p className="text-sm text-muted mt-1">
-            Registrá lo que pagó cada alumno y el servicio que está cubriendo.
+            Registrá lo que pagó cada alumno, el servicio que cubre y cuántas clases le quedan por usar.
           </p>
         </div>
         <button
@@ -374,10 +379,28 @@ export function PaymentsList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {data.map((payment) => (
+                {data.map((payment) => {
+                  const remaining = payment.pass ? (payment.pass.unusedCredits ?? payment.pass.sessionsPaid - payment.pass.sessionsUsed) : null;
+                  const low = remaining !== null && remaining <= 2 && remaining > 0;
+                  const empty = remaining === 0;
+                  return (
                   <tr key={payment.id} className="align-top">
                     <td className="px-5 py-4 font-medium">
-                      {clientLabel(payment.client)}
+                      <button
+                        type="button"
+                        className="text-left hover:text-accent hover:underline underline-offset-2"
+                        onClick={() =>
+                          setPersonTarget({
+                            userId: payment.client.id,
+                            contactName: payment.client.name,
+                            contactPhone: payment.client.phone,
+                            contactEmail: payment.client.email,
+                          })
+                        }
+                        title="Ver ficha del alumno"
+                      >
+                        {clientLabel(payment.client)}
+                      </button>
                     </td>
                     <td className="px-5 py-4 text-muted">
                       {payment.service?.name ?? 'Sin servicio'}
@@ -388,8 +411,15 @@ export function PaymentsList() {
                     <td className="px-5 py-4 text-right tabular-nums font-medium whitespace-nowrap">
                       {money(payment.amount)}
                     </td>
-                    <td className="px-5 py-4 text-muted whitespace-nowrap text-xs">
-                      {payment.pass ? packLabel(payment.pass) : '—'}
+                    <td className="px-5 py-4 whitespace-nowrap text-xs">
+                      {payment.pass ? (
+                        <span className={empty ? 'text-rose font-semibold' : low ? 'text-amber-700 font-medium' : 'text-muted'}>
+                          {packLabel(payment.pass)}
+                          {low ? ' · renovar' : empty ? ' · vencido' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-muted max-w-xs">
                       {payment.notes || 'Sin observación'}
@@ -453,12 +483,15 @@ export function PaymentsList() {
                       ) : null}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </section>
+
+      <PersonSheet target={personTarget} open={!!personTarget} onClose={() => setPersonTarget(null)} />
     </div>
   );
 }
