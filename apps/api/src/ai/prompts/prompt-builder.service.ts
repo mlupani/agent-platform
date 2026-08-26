@@ -192,7 +192,7 @@ export class PromptBuilderService {
       `Si hay una clase a esa hora y queda lugar (remaining/capacity), anotá a la clienta ahí con createAppointment. No inventes un horario paralelo.`,
       `checkAvailability y createAppointment son opt-in: solo existen si figuran en herramientas habilitadas.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
-      `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`,
+      `Si el usuario pidió o aceptó confirmación por WhatsApp AHORA (o dio teléfono para esto), usá sendWhatsAppMessage para enviar la confirmación INMEDIATA con fecha/hora/servicio. Es un envío en el momento, NO un recordatorio programado antes de la clase. Nunca prometas "te escribo/te contacto/te aviso por WhatsApp antes de la clase" ni ofrezcas recordatorios futuros: los Recordatorios automáticos son un sistema aparte (Agenda > Recordatorios) y no los gestionás vos. No inventes números.`,
       ctx.business.googleReviewsUrl
         ? `Si createAppointment fue exitoso y hay link de reseñas de Google (${ctx.business.googleReviewsUrl}), incluilo en el cuerpo de sendEmail/sendWhatsAppMessage pidiendo amablemente que dejen una reseña. No lo uses en cancelaciones ni en otros mensajes.`
         : null,

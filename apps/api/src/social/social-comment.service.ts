@@ -313,18 +313,23 @@ export class SocialCommentService {
 
     const postId =
       stringOf(commentObj.postId) ??
+      stringOf(commentObj.platformPostId) ??
+      stringOf(commentObj.platform_post_id) ??
       stringOf(commentObj.post_id) ??
       stringOf(commentObj.mediaId) ??
       stringOf(commentObj.media_id) ??
       stringOf(commentObj.objectId) ??
       stringOf(commentObj.igPostId) ??
       stringOf(data.postId) ??
+      stringOf(data.platformPostId) ??
       stringOf(data.post_id) ??
       stringOf(data.mediaId) ??
       stringOf(asRecord(data.post)?.id) ??
+      stringOf(asRecord(data.post)?.platformPostId) ??
       stringOf(asRecord(data.post)?.postId) ??
       stringOf(asRecord(data.media)?.id) ??
       stringOf(root.postId) ??
+      stringOf(root.platformPostId) ??
       stringOf(root.mediaId) ??
       null;
 

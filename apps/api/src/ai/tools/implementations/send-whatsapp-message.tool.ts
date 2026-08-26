@@ -24,7 +24,7 @@ const schema = z.object({
     .min(1)
     .max(4000)
     .describe(
-      'Mensaje de WhatsApp. Para confirmación de turno incluí fecha, hora, servicio, datos del negocio y el link de reseñas de Google si está configurado.',
+      'Mensaje de WhatsApp INMEDIATO (no programado). Para confirmación de turno incluí fecha, hora, servicio, datos del negocio y el link de reseñas de Google si está configurado. No prometas recordatorios previos a la clase.',
     ),
 });
 
@@ -32,7 +32,7 @@ const schema = z.object({
 export class SendWhatsAppMessageTool implements AgentTool {
   readonly name = 'sendWhatsAppMessage';
   readonly description =
-    'Envía un mensaje de WhatsApp (p.ej. confirmación de turno). Usalo si el usuario pidió o aceptó confirmación por WhatsApp y hay un teléfono. No inventes números.';
+    'Envía un mensaje de WhatsApp INMEDIATO (p.ej. confirmación de turno con fecha/hora). Usalo SOLO si el usuario pidió o aceptó confirmación por WhatsApp AHORA y hay un teléfono. NO lo uses para prometer ni programar recordatorios futuros antes de la clase: esos los maneja el sistema automático de Recordatorios (Agenda > Recordatorios). No inventes números.';
   readonly schema = schema;
   readonly risk = 'WRITE' as const;
 

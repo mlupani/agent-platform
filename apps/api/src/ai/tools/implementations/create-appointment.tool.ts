@@ -140,8 +140,8 @@ export class CreateAppointmentTool implements AgentTool {
             ? 'Si el usuario dio email, podés usar sendEmail para mandar la confirmación.'
             : undefined,
           whatsappHint: appointment.contactPhone
-            ? 'Si el usuario pidió o aceptó confirmación por WhatsApp, usá sendWhatsAppMessage.'
-            : 'Si el usuario pide confirmación por WhatsApp y da su teléfono, usá sendWhatsAppMessage.',
+            ? 'Si el usuario pidió o aceptó confirmación por WhatsApp, usá sendWhatsAppMessage para enviar la confirmación AHORA (fecha/hora/servicio). No prometas recordatorios futuros/programados por WhatsApp: los recordatorios son un sistema aparte (Agenda > Recordatorios).'
+            : 'Si el usuario pide confirmación por WhatsApp y da su teléfono, usá sendWhatsAppMessage para enviar la confirmación inmediata. No ofrezcas recordatorios previos a la clase por WhatsApp.',
         },
       };
     } catch (error) {
