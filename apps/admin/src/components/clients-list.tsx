@@ -266,9 +266,29 @@ export function ClientsList() {
                           ? ` · ${client.conversations} conv.`
                           : ''}
                         {client.appointments > 0
-                          ? ` · ${client.appointments} turnos`
+                          ? ` · ${client.appointments} clases`
                           : ''}
                       </p>
+                      {client.pack || (client.attendance && (client.attendance.completed > 0 || client.attendance.noShow > 0)) ? (
+                        <div className="mt-1 rounded-lg bg-panel-2 px-2.5 py-1.5 text-xs">
+                          {client.pack ? (
+                            <p className="font-medium">{client.pack.name ?? 'Pack'} {client.pack.total ? `· ${client.pack.total} clases` : ''}</p>
+                          ) : (
+                            <p className="text-muted">Sin pack</p>
+                          )}
+                          <p className="mt-0.5">
+                            <span className="text-emerald-700 font-medium">{client.attendance?.completed ?? 0} asist.</span>
+                            <span className="text-muted"> · </span>
+                            <span className="text-rose-700">{client.attendance?.noShow ?? 0} faltas</span>
+                            {client.pack ? (
+                              <>
+                                <span className="text-muted"> · </span>
+                                <span className={client.pack.remaining <= 2 ? 'text-amber-700 font-semibold' : 'text-muted'}>{client.pack.remaining} quedan</span>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {waConnected && client.phone ? (
@@ -404,6 +424,7 @@ export function ClientsList() {
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Contacto</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Estado</th>
                     <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Actividad</th>
+                    <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Asistencias</th>
                     <th className="text-right font-medium px-4 py-3 whitespace-nowrap">Acciones</th>
                   </tr>
                 </thead>
@@ -466,9 +487,34 @@ export function ClientsList() {
                             {client.conversations} conv.
                           </span>
                           <span className="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-1">
-                            {client.appointments} turnos
+                            {client.appointments} clases
                           </span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3 align-top whitespace-nowrap min-w-[220px]">
+                        {client.pack ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium">
+                              {client.pack.name ?? 'Pack'} {client.pack.total ? `· ${client.pack.total} clases` : ''}
+                            </p>
+                            <p className="text-xs">
+                              <span className="text-emerald-700 font-medium">{client.attendance?.completed ?? 0} asist.</span>
+                              <span className="text-muted"> · </span>
+                              <span className="text-rose-700">{client.attendance?.noShow ?? 0} falta{(client.attendance?.noShow ?? 0) === 1 ? '' : 's'}</span>
+                              <span className="text-muted"> · </span>
+                              <span className={client.pack.remaining <= 2 ? 'text-amber-700 font-semibold' : 'text-muted'}>{client.pack.remaining} quedan</span>
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted">Sin pack</p>
+                            <p className="text-xs">
+                              <span className="text-emerald-700">{client.attendance?.completed ?? 0} asist.</span>
+                              <span className="text-muted"> · </span>
+                              <span className="text-rose-700">{client.attendance?.noShow ?? 0} falta{(client.attendance?.noShow ?? 0) === 1 ? '' : 's'}</span>
+                            </p>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 align-top whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>

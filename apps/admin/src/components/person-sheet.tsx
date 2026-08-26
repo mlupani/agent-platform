@@ -267,12 +267,23 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
       }>(`/admin/users/${client.id}/balance`),
   });
 
+  const { data: history, isLoading: histLoading } = useQuery({
+    queryKey: ['client-appointments', client.id],
+    queryFn: () =>
+      api<Array<{ id: string; startsAt: string; endsAt: string; status: string; service: { name: string } | null }>>(
+        `/admin/clients/${client.id}/appointments`,
+      ),
+  });
+
   const totalPaid = balance
     ? balance.allPacks.reduce((a, p) => a + p.totalClasses, 0)
     : 0;
   const totalUsed = balance
     ? balance.allPacks.reduce((a, p) => a + p.usedClasses, 0)
     : 0;
+
+  const asistencias = (history ?? []).filter((h) => h.status === 'completed');
+  const inasistencias = (history ?? []).filter((h) => h.status === 'no_show');
 
   return (
     <div className="space-y-4">
@@ -282,7 +293,7 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
           <span>{new Date(client.createdAt).toLocaleDateString('es-AR')}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted">Turnos</span>
+          <span className="text-muted">Clases</span>
           <span>{client.appointments}</span>
         </div>
         <div className="flex justify-between">
@@ -329,9 +340,48 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
         ) : (
           <p className="text-sm text-muted">Sin packs cargados</p>
         )}
-        <Link href={`/clientes?search=${encodeURIComponent(client.phone || client.id)}`} className="inline-flex text-xs text-accent hover:underline" onClick={onClose}>
+        <Link href={`/pagos?clientId=${encodeURIComponent(client.id)}`} className="inline-flex text-xs text-accent hover:underline" onClick={onClose}>
           Gestionar packs
         </Link>
+      </div>
+
+      <div className="rounded-xl border border-line p-3 space-y-2">
+        <p className="text-sm font-medium">Asistencias</p>
+        {histLoading ? (
+          <p className="text-xs text-muted">Cargando historial…</p>
+        ) : !history?.length ? (
+          <p className="text-xs text-muted">Sin clases registradas</p>
+        ) : (
+          <>
+            <div className="flex gap-4 text-xs">
+              <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> {asistencias.length} asistencias
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-rose-700">
+                <span className="h-2 w-2 rounded-full bg-rose-500" /> {inasistencias.length} inasistencias
+              </span>
+            </div>
+            <ul className="divide-y divide-line/60 max-h-56 overflow-y-auto -mx-1 px-1">
+              {history.slice(0, 30).map((h) => {
+                const d = new Date(h.startsAt);
+                const isCompleted = h.status === 'completed';
+                const isNoShow = h.status === 'no_show';
+                const label = isCompleted ? 'Asistió' : isNoShow ? 'Faltó' : h.status === 'cancelled' ? 'Cancelada' : 'Pendiente';
+                return (
+                  <li key={h.id} className="flex items-center justify-between py-1.5 text-xs gap-2">
+                    <span className={isCompleted ? 'text-emerald-700' : isNoShow ? 'text-rose-700' : 'text-muted'}>
+                      {d.toLocaleDateString('es-AR')} {d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} · {h.service?.name ?? 'Clase'}
+                    </span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium border ${isCompleted ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : isNoShow ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-panel-2 border-line text-muted'}`}>
+                      {label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {history.length > 30 ? <p className="text-[11px] text-muted">Mostrando 30 últimas</p> : null}
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
@@ -87,6 +88,7 @@ function dateLabel(value: string) {
 
 export function PaymentsList() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [clientId, setClientId] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [from, setFrom] = useState('');
@@ -94,6 +96,11 @@ export function PaymentsList() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<PaymentRow | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const qs = searchParams.get('clientId');
+    if (qs) setClientId(qs);
+  }, [searchParams]);
 
   const today = todayIso();
   const thisMonth = monthRange();

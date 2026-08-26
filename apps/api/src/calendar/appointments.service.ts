@@ -626,6 +626,19 @@ export class AppointmentsService {
       });
     }
 
+    // Si la clase ya terminó (registro a horario pasado) contabilizar asistencia inmediata
+    // en lugar de esperar al cron de 5 min, para que el test sea instantáneo.
+    const now = new Date();
+    if (created.endsAt.getTime() <= now.getTime() && created.status !== 'completed' && created.status !== 'cancelled' && created.status !== 'no_show') {
+      try {
+        return await this.complete(input.businessId, created.id);
+      } catch (e) {
+        // si falla por falta de crédito, queda como completed igual (ver autoCompletePast)
+        this.logger.warn(`create past auto-complete falló ${created.id}: ${e instanceof Error ? e.message : 'unknown'}`);
+        return this.get(input.businessId, created.id);
+      }
+    }
+
     return created;
   }
 

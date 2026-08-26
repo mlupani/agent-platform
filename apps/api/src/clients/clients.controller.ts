@@ -67,6 +67,11 @@ export class ClientsController {
     return this.clients.create(body);
   }
 
+  @Get(':id/appointments')
+  appointments(@Param('id') id: string) {
+    return this.clients.getAppointments(id);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.clients.get(id);

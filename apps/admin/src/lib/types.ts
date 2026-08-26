@@ -182,6 +182,18 @@ export interface DashboardPayload {
     contactPhone: string | null;
     service: { id: string; name: string } | null;
   }>;
+  packs: {
+    expiringCount: number;
+    expiring: Array<{ userId: string; name: string | null; phone: string | null; remaining: number; packName: string | null }>;
+    expiredCount: number;
+    expired: Array<{ userId: string; name: string | null; phone: string | null; remaining: number }>;
+  };
+  nextClass: {
+    startsAt: string;
+    endsAt: string;
+    serviceName: string | null;
+    attendees: Array<{ name: string | null; phone: string | null }>;
+  } | null;
 }
 
 export interface ChatResponse {
@@ -242,6 +254,8 @@ export interface ClientRow {
   status: Pick<ClientStatus, 'id' | 'slug' | 'name'>;
   appointments: number;
   conversations: number;
+  attendance?: { completed: number; noShow: number; pending: number };
+  pack?: { name: string | null; total: number; remaining: number; used: number } | null;
 }
 
 export interface LeadRow {

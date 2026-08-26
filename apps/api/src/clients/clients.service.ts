@@ -62,7 +62,57 @@ export class ClientsService {
       take: 300,
     });
 
-    return rows.map((row) => this.toClient(row));
+    const ids = rows.map((r) => r.id);
+    const [appointments, passes] = await Promise.all([
+      ids.length
+        ? this.prisma.appointment.findMany({
+            where: { businessId, userId: { in: ids } },
+            select: { userId: true, status: true },
+          })
+        : Promise.resolve([] as Array<{ userId: string | null; status: string }>),
+      ids.length
+        ? this.prisma.servicePass.findMany({
+            where: { businessId, userId: { in: ids } },
+            include: { service: { select: { name: true } } },
+          })
+        : Promise.resolve([] as Array<{ userId: string; sessionsPaid: number; sessionsUsed: number; status: string; service: { name: string } }>),
+    ]);
+
+    const attByUser = new Map<string, { completed: number; noShow: number; pending: number }>();
+    for (const a of appointments) {
+      if (!a.userId) continue;
+      const cur = attByUser.get(a.userId) ?? { completed: 0, noShow: 0, pending: 0 };
+      if (a.status === 'completed') cur.completed += 1;
+      else if (a.status === 'no_show') cur.noShow += 1;
+      else if (a.status === 'pending' || a.status === 'confirmed') cur.pending += 1;
+      attByUser.set(a.userId, cur);
+    }
+
+    const packByUser = new Map<string, { name: string | null; total: number; remaining: number; used: number }>();
+    const passesByUser = new Map<string, typeof passes>();
+    for (const p of passes) {
+      const list = passesByUser.get(p.userId) ?? [];
+      list.push(p);
+      passesByUser.set(p.userId, list);
+    }
+    for (const [userId, list] of passesByUser.entries()) {
+      const active = list.filter((p) => p.status === 'ACTIVE');
+      const src = active.length ? active : list;
+      // usar el pack más reciente activo o el último creado
+      const sorted = [...src].sort((a, b) => b.sessionsPaid - a.sessionsPaid);
+      const primary = sorted[0];
+      const total = list.reduce((acc, p) => acc + p.sessionsPaid, 0);
+      const remaining = list.reduce((acc, p) => acc + Math.max(0, p.sessionsPaid - p.sessionsUsed), 0);
+      const used = list.reduce((acc, p) => acc + p.sessionsUsed, 0);
+      packByUser.set(userId, { name: primary?.service?.name ?? null, total, remaining, used });
+    }
+
+    return rows.map((row) =>
+      this.toClient(row, {
+        attendance: attByUser.get(row.id) ?? { completed: 0, noShow: 0, pending: 0 },
+        pack: packByUser.get(row.id) ?? null,
+      }),
+    );
   }
 
   async create(input: ClientInput) {
@@ -146,6 +196,33 @@ export class ClientsService {
     });
     if (!row) throw new NotFoundException('Cliente no encontrado');
     return this.toClient(row);
+  }
+
+  async getAppointments(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const user = await this.prisma.user.findFirst({
+      where: { id, businessId },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('Cliente no encontrado');
+    const rows = await this.prisma.appointment.findMany({
+      where: { businessId, userId: id },
+      include: {
+        service: { select: { id: true, name: true, durationMinutes: true } },
+      },
+      orderBy: { startsAt: 'desc' },
+      take: 50,
+    });
+    // normalizar para ficha: status completed = asistencia, no_show = inasistencia, pending/confirmed = futura/pendiente
+    return rows.map((r) => ({
+      id: r.id,
+      startsAt: r.startsAt.toISOString(),
+      endsAt: r.endsAt.toISOString(),
+      status: r.status,
+      service: r.service,
+      notes: r.notes,
+      isTrial: r.isTrial,
+    }));
   }
 
   async remove(id: string) {
@@ -251,17 +328,23 @@ export class ClientsService {
     return status;
   }
 
-  private toClient(row: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-    notes: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    status: { id: string; slug: string; name: string };
-    _count: { appointments: number; conversations: number };
-  }) {
+  private toClient(
+    row: {
+      id: string;
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      notes: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      status: { id: string; slug: string; name: string };
+      _count: { appointments: number; conversations: number };
+    },
+    extra?: {
+      attendance?: { completed: number; noShow: number; pending: number };
+      pack?: { name: string | null; total: number; remaining: number; used: number } | null;
+    },
+  ) {
     return {
       id: row.id,
       name: row.name,
@@ -273,6 +356,8 @@ export class ClientsService {
       status: row.status,
       appointments: row._count.appointments,
       conversations: row._count.conversations,
+      attendance: extra?.attendance ?? { completed: 0, noShow: 0, pending: 0 },
+      pack: extra?.pack ?? null,
     };
   }
 }

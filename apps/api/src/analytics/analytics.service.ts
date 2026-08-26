@@ -78,6 +78,8 @@ export class AnalyticsService {
       prevLeads,
       prevClients,
       prevConversations,
+      servicePasses,
+      nextAppointmentsRaw,
     ] = await Promise.all([
       this.prisma.conversation.count({
         where: {
@@ -231,6 +233,23 @@ export class AnalyticsService {
           createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth },
         },
       }),
+      this.prisma.servicePass.findMany({
+        where: { businessId },
+        include: {
+          service: { select: { name: true } },
+          user: { select: { id: true, name: true, phone: true } },
+        },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          businessId,
+          status: { in: ['pending', 'confirmed'] },
+          startsAt: { gte: new Date() },
+        },
+        orderBy: { startsAt: 'asc' },
+        take: 20,
+        include: { service: { select: { name: true } } },
+      }),
     ]);
 
     const statusCounts = Object.fromEntries(
@@ -271,6 +290,46 @@ export class AnalyticsService {
       },
       null,
     );
+
+    // Packs KPIs: por vencer (1-2 clases) y vencidos (0)
+    const packsByUser = new Map<string, { name: string | null; phone: string | null; remaining: number; packs: typeof servicePasses }>();
+    for (const pass of servicePasses) {
+      const key = pass.userId;
+      const existing = packsByUser.get(key);
+      const remaining = Math.max(0, pass.sessionsPaid - pass.sessionsUsed);
+      const isActive = pass.status === 'ACTIVE' && remaining > 0;
+      const entry = existing ?? { name: pass.user?.name ?? null, phone: pass.user?.phone ?? null, remaining: 0, packs: [] as typeof servicePasses };
+      if (isActive) entry.remaining += remaining;
+      entry.packs.push(pass);
+      packsByUser.set(key, entry);
+    }
+    // También usuarios sin passes no entran. Para vencidos: incluir usuarios con passes pero remaining 0
+    const expiring: Array<{ userId: string; name: string | null; phone: string | null; remaining: number; packName: string | null }> = [];
+    const expired: Array<{ userId: string; name: string | null; phone: string | null; remaining: number }> = [];
+    for (const [userId, info] of packsByUser.entries()) {
+      if (info.remaining > 0 && info.remaining <= 2) {
+        const packName = info.packs.find((p) => p.status === 'ACTIVE' && Math.max(0, p.sessionsPaid - p.sessionsUsed) > 0)?.service?.name ?? null;
+        expiring.push({ userId, name: info.name, phone: info.phone, remaining: info.remaining, packName });
+      } else if (info.remaining === 0) {
+        // solo si tuvo al menos un pack (ya está en mapa)
+        expired.push({ userId, name: info.name, phone: info.phone, remaining: 0 });
+      }
+    }
+    expiring.sort((a, b) => a.remaining - b.remaining);
+    expired.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+
+    // Próxima clase: primer grupo de appointments futuros por startsAt
+    let nextClass: { startsAt: string; endsAt: string; serviceName: string | null; attendees: Array<{ name: string | null; phone: string | null }> } | null = null;
+    if (nextAppointmentsRaw.length) {
+      const firstStart = nextAppointmentsRaw[0].startsAt.toISOString();
+      const group = nextAppointmentsRaw.filter((a) => a.startsAt.toISOString() === firstStart);
+      nextClass = {
+        startsAt: group[0].startsAt.toISOString(),
+        endsAt: group[0].endsAt.toISOString(),
+        serviceName: group[0].service?.name ?? null,
+        attendees: group.map((a) => ({ name: a.contactName, phone: a.contactPhone })),
+      };
+    }
 
     return {
       business: {
@@ -329,6 +388,13 @@ export class AnalyticsService {
       daily,
       recentConversations,
       upcomingAppointments,
+      packs: {
+        expiringCount: expiring.length,
+        expiring,
+        expiredCount: expired.length,
+        expired,
+      },
+      nextClass,
     };
   }
 

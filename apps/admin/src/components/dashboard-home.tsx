@@ -174,6 +174,64 @@ export function DashboardHome() {
             ))}
           </section>
 
+          <section className="grid gap-4 lg:grid-cols-3">
+            <Link href="/pagos" className="panel rounded-2xl p-5 hover:border-amber-300 transition-colors">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-amber-700 font-medium">Packs por vencer</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight">{dashboard?.packs?.expiringCount ?? 0}</p>
+              <p className="mt-1 text-xs text-muted">Alumnas con ≤2 clases restantes</p>
+              {(dashboard?.packs?.expiring ?? []).length ? (
+                <ul className="mt-3 space-y-1 text-xs">
+                  {(dashboard?.packs?.expiring ?? []).slice(0, 3).map((u) => (
+                    <li key={u.userId} className="flex justify-between gap-2 truncate">
+                      <span className="truncate">{u.name || u.phone || 'Sin nombre'}</span>
+                      <span className="shrink-0 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[11px]">{u.remaining} clase{u.remaining === 1 ? '' : 's'}</span>
+                    </li>
+                  ))}
+                  {(dashboard?.packs?.expiring?.length ?? 0) > 3 ? <li className="text-[11px] text-muted">+{dashboard!.packs.expiring.length - 3} más</li> : null}
+                </ul>
+              ) : (
+                <p className="mt-3 text-xs text-muted">Ningún pack por vencer</p>
+              )}
+            </Link>
+            <Link href="/pagos" className="panel rounded-2xl p-5 hover:border-rose-300 transition-colors">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-rose font-medium">Packs vencidos</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight">{dashboard?.packs?.expiredCount ?? 0}</p>
+              <p className="mt-1 text-xs text-muted">Sin clases disponibles — renovar</p>
+              {(dashboard?.packs?.expired ?? []).length ? (
+                <ul className="mt-3 space-y-1 text-xs">
+                  {(dashboard?.packs?.expired ?? []).slice(0, 3).map((u) => (
+                    <li key={u.userId} className="flex justify-between gap-2 truncate">
+                      <span className="truncate">{u.name || u.phone || 'Sin nombre'}</span>
+                      <span className="shrink-0 rounded-full bg-rose-100 text-rose-700 px-2 py-0.5 text-[11px]">0 clases</span>
+                    </li>
+                  ))}
+                  {(dashboard?.packs?.expired?.length ?? 0) > 3 ? <li className="text-[11px] text-muted">+{dashboard!.packs.expired.length - 3} más</li> : null}
+                </ul>
+              ) : (
+                <p className="mt-3 text-xs text-muted">Nadie vencido</p>
+              )}
+            </Link>
+            <Link href="/calendar" className="panel rounded-2xl p-5 hover:border-teal-300 transition-colors">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-teal font-medium">Próxima clase</p>
+              {dashboard?.nextClass ? (
+                <>
+                  <p className="mt-3 text-lg font-semibold tracking-tight">
+                    {new Date(dashboard.nextClass.startsAt).toLocaleString('es-AR', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  <p className="text-xs text-muted mt-1">{dashboard.nextClass.serviceName ?? 'Clase'} · {dashboard.nextClass.attendees.length} alumna{dashboard.nextClass.attendees.length === 1 ? '' : 's'}</p>
+                  <ul className="mt-3 space-y-1 text-xs">
+                    {(dashboard.nextClass.attendees ?? []).slice(0, 4).map((a, i) => (
+                      <li key={i} className="truncate">{a.name || a.phone || 'Sin nombre'}</li>
+                    ))}
+                    {(dashboard.nextClass.attendees?.length ?? 0) > 4 ? <li className="text-[11px] text-muted">+{dashboard.nextClass.attendees.length - 4} más</li> : null}
+                  </ul>
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-muted">No hay clases próximas</p>
+              )}
+            </Link>
+          </section>
+
           <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
             <article className="panel rounded-2xl p-5">
               <div className="flex items-start justify-between gap-3">
