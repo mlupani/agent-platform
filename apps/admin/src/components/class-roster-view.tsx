@@ -209,20 +209,37 @@ export function ClassRosterView({
                       key={session.id}
                       className="rounded-xl border border-line bg-panel overflow-hidden"
                     >
-                      <div className="flex items-baseline justify-between gap-2 px-3 py-2 border-b border-line/80">
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-line/80">
                         <p className="font-semibold tabular-nums tracking-tight">
                           {session.start}
                         </p>
-                        <button
-                          type="button"
-                          className={`text-xs tabular-nums hover:underline ${
-                            session.remaining <= 0 ? 'text-rose' : 'text-muted'
-                          }`}
-                          onClick={() => setEditingCapacity(session)}
-                          title="Editar cupo"
-                        >
-                          {session.booked}/{session.capacity}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            className={`text-xs tabular-nums hover:underline ${
+                              session.remaining <= 0 ? 'text-rose' : 'text-muted'
+                            }`}
+                            onClick={() => setEditingCapacity(session)}
+                            title="Editar cupo"
+                          >
+                            {session.booked}/{session.capacity}
+                          </button>
+                          {session.remaining > 0 && session.service ? (
+                            <button
+                              type="button"
+                              onClick={() => setAdding(session)}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white text-sm leading-none hover:bg-accent/90 transition-colors"
+                              aria-label={`Agregar alumna a ${session.start}`}
+                              title={
+                                session.remaining === 1
+                                  ? 'Agregar alumna — queda 1 lugar'
+                                  : `Agregar alumna — quedan ${session.remaining} lugares`
+                              }
+                            >
+                              +
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                       <p className="px-3 pt-2 text-[11px] uppercase tracking-wide text-muted">
                         {session.service?.name ?? 'Clase'}
@@ -269,15 +286,6 @@ export function ClassRosterView({
                           </li>
                         ) : null}
                       </ul>
-                      {session.remaining > 0 && session.service ? (
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-accent border-t border-line hover:bg-panel"
-                          onClick={() => setAdding(session)}
-                        >
-                          Agregar alumna
-                        </button>
-                      ) : null}
                     </article>
                   ))}
                   {extra.map((item) => (

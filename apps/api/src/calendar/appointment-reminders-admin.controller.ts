@@ -9,9 +9,9 @@ const upsertSchema = z.object({
   enabled: z.boolean().optional(),
   hoursBefore: z.number().int().min(1).max(24).optional(),
   channels: z
-    .array(z.enum(['whatsapp', 'email', 'instagram']))
+    .array(z.enum(['whatsapp', 'email', 'instagram', 'facebook']))
     .min(1)
-    .max(3)
+    .max(4)
     .optional(),
   message: z.string().max(2000).nullable().optional(),
 });

@@ -258,12 +258,12 @@ export function DashboardHome() {
               </p>
               <dl className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3">
                 <StatChip
-                  label="Citas hoy"
+                  label="Alumnos hoy"
                   value={m?.appointmentsToday ?? 0}
                   href="/calendar"
                 />
                 <StatChip
-                  label="Citas semana"
+                  label="Alumnos semana"
                   value={m?.appointmentsWeek ?? 0}
                   href="/calendar"
                 />
