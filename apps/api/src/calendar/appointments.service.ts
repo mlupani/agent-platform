@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { DateTime } from 'luxon';
@@ -13,6 +14,8 @@ import type { CreateAppointmentInput } from './calendar.types';
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
@@ -633,6 +636,63 @@ export class AppointmentsService {
       await this.google.deleteEvent(businessId, appointment.googleEventId);
     }
 
+    // Si la cita ya estaba completada y consumió un pack, devolver el crédito
+    if (
+      appointment.status === 'completed' &&
+      (appointment as any).servicePassId &&
+      (appointment as any).userId
+    ) {
+      const servicePassId = (appointment as any).servicePassId as string;
+      const userId = (appointment as any).userId as string;
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const pass = await tx.servicePass.findUnique({
+            where: { id: servicePassId },
+          });
+          if (pass && pass.sessionsUsed > 0) {
+            await tx.servicePass.update({
+              where: { id: pass.id },
+              data: {
+                sessionsUsed: { decrement: 1 },
+                status: 'ACTIVE',
+              },
+            });
+            await tx.classCreditMovement.create({
+              data: {
+                businessId,
+                userId,
+                servicePassId: pass.id,
+                appointmentId: appointment.id,
+                type: 'REFUND',
+                amount: 1,
+                reason: reason
+                  ? `Devolución por cancelación: ${reason}`
+                  : 'Devolución por cancelación/borrado del calendario',
+              },
+            });
+          }
+          await tx.appointment.update({
+            where: { id },
+            data: {
+              status: 'cancelled',
+              servicePassId: null,
+              notes: reason
+                ? [appointment.notes, `Cancelada: ${reason}`]
+                    .filter(Boolean)
+                    .join('\n')
+                : appointment.notes,
+            },
+          });
+        });
+        return this.get(businessId, id);
+      } catch (error) {
+        this.logger.warn(
+          `Refund falló para cita ${id}: ${error instanceof Error ? error.message : 'unknown'}`,
+        );
+        // fallback: al menos cancelar la cita
+      }
+    }
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
@@ -909,5 +969,40 @@ export class AppointmentsService {
 
   async completeById(businessId: string, id: string) {
     return this.complete(businessId, id);
+  }
+
+  /** Cron: completa automáticamente clases que ya terminaron y descuenta del pack. */
+  async autoCompletePast(now = new Date()): Promise<number> {
+    const due = await this.prisma.appointment.findMany({
+      where: {
+        status: { in: ['pending', 'confirmed'] },
+        endsAt: { lte: now },
+      },
+      select: { id: true, businessId: true, startsAt: true, endsAt: true },
+      orderBy: { endsAt: 'asc' },
+      take: 200,
+    });
+
+    if (!due.length) return 0;
+
+    let completed = 0;
+    for (const row of due) {
+      try {
+        await this.complete(row.businessId, row.id);
+        completed += 1;
+      } catch (error) {
+        // Si es falta de crédito u otro error de negocio, igual marcamos como completada si no se pudo descontar?
+        // complete() ya deja la cita en 'completed' antes de consumir; si consume falla lanza pero cita quedó completed.
+        // Para no reintentar infinito, si el error fue por falta de crédito, lo consideramos completado igual y logueamos.
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('sin clases disponibles') || msg.includes('No tenés clases')) {
+          this.logger.warn(`Auto-complete ${row.id} sin crédito: ${msg}`);
+          completed += 1;
+        } else {
+          this.logger.warn(`Auto-complete falló ${row.id}: ${msg}`);
+        }
+      }
+    }
+    return completed;
   }
 }

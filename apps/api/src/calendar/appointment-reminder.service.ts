@@ -174,12 +174,15 @@ export class AppointmentReminderService {
     if (!config?.enabled) return 0;
 
     const hoursBefore = clampReminderHours(config.hoursBefore);
-    const { from, to } = reminderDueWindow(now, hoursBefore);
+    const { to } = reminderDueWindow(now, hoursBefore);
+    // Catch-up: si la config se activó tarde o la cita se creó con < hoursBefore de anticipación,
+    // enviamos igual si queda dentro de (now, now+hours] y nunca tuvo log sent/pending/failed.
+    // Antes era (now+hours-grace, now+hours] y perdía los tardíos.
     const appointments = await this.prisma.appointment.findMany({
       where: {
         businessId,
         status: { in: ['pending', 'confirmed'] },
-        startsAt: { gt: from, lte: to },
+        startsAt: { gt: now, lte: to },
         reminderLogs: {
           none: { status: { in: ['sent', 'pending', 'failed'] } },
         },

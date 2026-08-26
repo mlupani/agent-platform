@@ -17,6 +17,9 @@ import { APPOINTMENT_REMINDER_QUEUE } from './appointment-reminder.queue';
 import { AppointmentReminderScheduler } from './appointment-reminder.scheduler';
 import { AppointmentReminderService } from './appointment-reminder.service';
 import { AppointmentRemindersAdminController } from './appointment-reminders-admin.controller';
+import { AppointmentAutoCompleteProcessor } from './appointment-auto-complete.processor';
+import { APPOINTMENT_AUTO_COMPLETE_QUEUE } from './appointment-auto-complete.queue';
+import { AppointmentAutoCompleteScheduler } from './appointment-auto-complete.scheduler';
 import {
   CalendarAdminController,
   GoogleOAuthController,
@@ -33,6 +36,7 @@ import { GoogleCalendarService } from './google-calendar.service';
     forwardRef(() => SocialModule),
     PacksModule,
     BullModule.registerQueue({ name: APPOINTMENT_REMINDER_QUEUE }),
+    BullModule.registerQueue({ name: APPOINTMENT_AUTO_COMPLETE_QUEUE }),
   ],
   controllers: [
     CalendarAdminController,
@@ -51,6 +55,8 @@ import { GoogleCalendarService } from './google-calendar.service';
     AppointmentReminderService,
     AppointmentReminderScheduler,
     AppointmentReminderProcessor,
+    AppointmentAutoCompleteScheduler,
+    AppointmentAutoCompleteProcessor,
   ],
   exports: [
     AppointmentsService,
