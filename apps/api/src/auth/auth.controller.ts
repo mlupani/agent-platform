@@ -10,6 +10,7 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { PrismaService } from '../common/prisma/prisma.service';
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_SECONDS,
@@ -23,7 +24,26 @@ const loginSchema = z.object({
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Get('branding')
+  async branding() {
+    const business = await this.prisma.business.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        name: true,
+        brandingConfig: { select: { logoUrl: true } },
+      },
+    });
+    if (!business) return { name: null, logoUrl: null };
+    return {
+      name: business.name,
+      logoUrl: business.brandingConfig?.logoUrl ?? null,
+    };
+  }
 
   @Post('login')
   async login(
