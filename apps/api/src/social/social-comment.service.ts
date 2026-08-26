@@ -164,34 +164,48 @@ export class SocialCommentService {
       this.logger.log(`IG comment ${data.commentId} shouldAutoReply=${shouldReply} (platform=${platform} business=${businessId.slice(0,8)})`);
       if (shouldReply) {
         const replyText = this.buildReply(data.text, classification, data.authorUsername);
-        this.logger.log(`Intentando reply a ${data.commentId} (post ${data.postId || 'sin postId'})`);
+        this.logger.log(`Intentando reply a ${data.commentId} (post ${data.postId || 'sin postId'} account ${data.accountId || 'sin accountId'})`);
         if (!data.postId) {
           this.logger.warn(`No se puede responder comentario ${data.commentId}: falta postId (Zernio requiere postId para private-reply) raw=${JSON.stringify(data.raw).slice(0, 800)}`);
         } else {
-          try {
-            const provider = this.factory.get();
-            let replied = false;
-            if (provider.sendPrivateReplyToComment) {
-              try {
-                await provider.sendPrivateReplyToComment({ postId: data.postId, commentId: data.commentId, message: replyText });
-                this.logger.log(`Private reply enviado a comentario ${data.commentId}: "${replyText.slice(0, 60)}"`);
-                replied = true;
-              } catch (e) {
-                this.logger.warn(`Private reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)} — probando reply público`);
+          // resolver accountId para reply (puede no venir en webhook, buscar por business)
+          let replyAccountId = data.accountId;
+          if (!replyAccountId) {
+            const conn = await this.prisma.socialConnection.findFirst({
+              where: { businessId, provider: 'zernio', platform: 'instagram', status: 'connected' },
+              select: { externalAccountId: true },
+            });
+            replyAccountId = conn?.externalAccountId || null;
+            if (replyAccountId) this.logger.log(`AccountId resuelto por business ${businessId.slice(0,8)} -> ${replyAccountId.slice(0,8)}`);
+          }
+          if (!replyAccountId) {
+            this.logger.warn(`No se puede responder comentario ${data.commentId}: falta accountId y no se encontró conexión IG para business ${businessId.slice(0,8)}`);
+          } else {
+            try {
+              const provider = this.factory.get();
+              let replied = false;
+              if (provider.sendPrivateReplyToComment) {
+                try {
+                  await provider.sendPrivateReplyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: replyText });
+                  this.logger.log(`Private reply enviado a comentario ${data.commentId}: "${replyText.slice(0, 60)}"`);
+                  replied = true;
+                } catch (e) {
+                  this.logger.warn(`Private reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)} — probando reply público`);
+                }
               }
-            }
-            if (!replied && provider.replyToComment) {
-              try {
-                await provider.replyToComment({ postId: data.postId, commentId: data.commentId, message: replyText });
-                this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
-                replied = true;
-              } catch (e) {
-                this.logger.warn(`Public reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
+              if (!replied && provider.replyToComment) {
+                try {
+                  await provider.replyToComment({ postId: data.postId, commentId: data.commentId, accountId: replyAccountId, message: replyText });
+                  this.logger.log(`Public reply enviado a comentario ${data.commentId}`);
+                  replied = true;
+                } catch (e) {
+                  this.logger.warn(`Public reply falló ${data.commentId}: ${e instanceof Error ? e.message : String(e)}`);
+                }
               }
+              if (!replied) this.logger.warn(`No hay método de reply disponible en provider para ${data.commentId}`);
+            } catch (error) {
+              this.logger.warn(`No se pudo responder comentario ${data.commentId}: ${error instanceof Error ? error.message : 'error'} | ${JSON.stringify((error as { statusCode?: number })?.statusCode)}`);
             }
-            if (!replied) this.logger.warn(`No hay método de reply disponible en provider para ${data.commentId}`);
-          } catch (error) {
-            this.logger.warn(`No se pudo responder comentario ${data.commentId}: ${error instanceof Error ? error.message : 'error'} | ${JSON.stringify((error as { statusCode?: number })?.statusCode)}`);
           }
         }
       } else {
