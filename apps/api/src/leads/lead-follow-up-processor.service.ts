@@ -27,8 +27,12 @@ export class LeadFollowUpProcessorService {
     let locked = false;
     try {
       locked = await this.redis.acquireLock(LEAD_FOLLOW_UP_TICK_LOCK, 50);
-      if (!locked) return 0;
+      if (!locked) {
+        this.logger.warn('Follow-up tick lock busy, skip');
+        return 0;
+      }
       const due = await this.followUps.duePending(30);
+      this.logger.log(`Tick follow-ups: ${due.length} vencidos`);
       let handled = 0;
       for (const item of due) {
         try {

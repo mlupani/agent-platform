@@ -16,6 +16,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { BusinessesService } from '../businesses/businesses.service';
 import { LeadFollowUpSenderService } from './lead-follow-up-sender.service';
 import { LeadFollowUpService } from './lead-follow-up.service';
+import { LeadFollowUpProcessorService } from './lead-follow-up-processor.service';
 import { LeadLifecycleService } from './lead-lifecycle.service';
 import { LeadsService } from './leads.service';
 import { LEAD_STATUSES, SEND_MODES, CONVERSION_MODES } from './lead.constants';
@@ -109,6 +110,7 @@ export class LeadsAdminController {
     private readonly followUps: LeadFollowUpService,
     private readonly lifecycle: LeadLifecycleService,
     private readonly sender: LeadFollowUpSenderService,
+    private readonly processor: LeadFollowUpProcessorService,
     private readonly businesses: BusinessesService,
   ) {}
 
@@ -239,5 +241,11 @@ export class LeadsAdminController {
     }
     await this.sender.send(followUpId, message);
     return this.leads.getById(id);
+  }
+
+  @Post('_debug/process-follow-ups')
+  async debugProcess() {
+    const handled = await this.processor.processDue();
+    return { handled, at: new Date().toISOString() };
   }
 }
