@@ -160,21 +160,11 @@ export function buildFilterGraph(input: {
   }
 
   if (hasBars) {
-    const topBar = nextLabel();
-    filters.push(
-      `[${current}]drawbox=x=0:y=0:w=${width}:h=${barH}:color=black@0.82:t=fill[${topBar}]`,
-    );
-    current = topBar;
     const bottomBar = nextLabel();
     filters.push(
       `[${current}]drawbox=x=0:y=${height - barH}:w=${width}:h=${barH}:color=black@0.78:t=fill[${bottomBar}]`,
     );
     current = bottomBar;
-    const accent = nextLabel();
-    filters.push(
-      `[${current}]drawbox=x=0:y=${barH - 3}:w=${width}:h=3:color=${palette.accent}:t=fill[${accent}]`,
-    );
-    current = accent;
     applied.push('bars');
   }
 

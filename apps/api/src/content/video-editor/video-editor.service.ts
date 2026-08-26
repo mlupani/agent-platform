@@ -101,10 +101,7 @@ export class VideoEditorService {
       const operations = planOperations({
         probe,
         settings,
-        addHook:
-          Boolean(settings.fontFile) &&
-          input.instructions.addHook &&
-          Boolean(hookRange),
+        addHook: false,
         hookText: input.instructions.hookText,
         hookStart: hookRange.start,
         hookEnd: hookRange.end,
