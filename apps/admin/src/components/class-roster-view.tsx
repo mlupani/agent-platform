@@ -224,11 +224,11 @@ export function ClassRosterView({
                           >
                             {session.booked}/{session.capacity}
                           </button>
-                          {session.remaining > 0 && session.service ? (
+                          {session.remaining > 0 ? (
                             <button
                               type="button"
                               onClick={() => setAdding(session)}
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white text-sm leading-none hover:bg-accent/90 transition-colors"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white hover:bg-accent/90 transition-colors leading-none"
                               aria-label={`Agregar alumna a ${session.start}`}
                               title={
                                 session.remaining === 1
@@ -236,7 +236,17 @@ export function ClassRosterView({
                                   : `Agregar alumna — quedan ${session.remaining} lugares`
                               }
                             >
-                              +
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                aria-hidden
+                              >
+                                <path d="M12 5v14M5 12h14" />
+                              </svg>
                             </button>
                           ) : null}
                         </div>

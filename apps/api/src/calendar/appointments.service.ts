@@ -236,6 +236,14 @@ export class AppointmentsService {
         existing.attendees.push(attendee);
         existing.booked += 1;
         existing.remaining = Math.max(0, existing.capacity - existing.booked);
+        if (!existing.service && row.service) {
+          existing.service = {
+            id: row.service.id,
+            name: row.service.name,
+            durationMinutes: row.service.durationMinutes,
+            capacity: row.service.capacity,
+          };
+        }
         continue;
       }
       const capacity = Math.max(1, row.service?.capacity ?? 1);
@@ -246,7 +254,14 @@ export class AppointmentsService {
         startsAt: startsAt.toISO()!,
         endsAt: endsAt.toISO()!,
         dayOfWeek: startsAt.weekday - 1,
-        service: null,
+        service: row.service
+          ? {
+              id: row.service.id,
+              name: row.service.name,
+              durationMinutes: row.service.durationMinutes,
+              capacity: row.service.capacity,
+            }
+          : null,
         capacity,
         booked: 1,
         remaining: Math.max(0, capacity - 1),
@@ -284,6 +299,14 @@ export class AppointmentsService {
           existing.templateId = template.id;
           existing.capacity = Math.max(existing.capacity, capacity);
           existing.remaining = Math.max(0, existing.capacity - existing.booked);
+          if (!existing.service && template.service) {
+            existing.service = {
+              id: template.service.id,
+              name: template.service.name,
+              durationMinutes: template.service.durationMinutes,
+              capacity: template.service.capacity,
+            };
+          }
           continue;
         }
         sessions.set(key, {
@@ -293,7 +316,14 @@ export class AppointmentsService {
           startsAt: startsAt.toISO()!,
           endsAt: endsAt.toISO()!,
           dayOfWeek,
-          service: null,
+          service: template.service
+            ? {
+                id: template.service.id,
+                name: template.service.name,
+                durationMinutes: template.service.durationMinutes,
+                capacity: template.service.capacity,
+              }
+            : null,
           capacity,
           booked: 0,
           remaining: capacity,
