@@ -13,6 +13,7 @@ import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
 import { WahaConversationsSyncService } from './waha-conversations.sync';
 import { WahaWhatsAppProvider } from './providers/waha.whatsapp-provider';
+import { LeadsService } from '../leads/leads.service';
 import {
   alternateWhatsAppExternalIds,
   isWhatsAppLegacyPhoneId,
@@ -38,6 +39,7 @@ export class WhatsAppWebhookService {
     private readonly realtime: RealtimeEventsService,
     private readonly wahaSync: WahaConversationsSyncService,
     private readonly transcription: AudioTranscriptionService,
+    private readonly leads: LeadsService,
   ) {}
 
   /** Legacy Meta verify — kept for compatibility if verifyToken exists */
@@ -202,14 +204,32 @@ export class WhatsAppWebhookService {
       where: { businessId, externalId },
     });
 
-    const user = await this.upsertUser(
-      businessId,
-      phone || chatId,
-      contactName,
-    );
+    // NO auto-crear alumno (User) — solo vincular si ya existe. Lead sí se crea pero no alumno.
+    let user: { id: string } | null = null;
+    if (phone) {
+      const existingUser = await this.prisma.user.findFirst({
+        where: { businessId, phone },
+        select: { id: true },
+      });
+      user = existingUser;
+      // Si no es alumno y es mensaje entrante real, asegurar Lead (no User)
+      if (!user && !fromMe && phone) {
+        try {
+          await this.leads.capture({
+            businessId,
+            phone,
+            name: contactName ?? null,
+            source: 'WHATSAPP',
+            message: text?.slice(0, 500) || null,
+          });
+        } catch {
+          // no bloquear flujo
+        }
+      }
+    }
     const conversation = await this.upsertConversation(
       businessId,
-      user.id,
+      user?.id ?? null,
       chatId || from,
       phone || undefined,
       contactName,
@@ -390,7 +410,7 @@ export class WhatsAppWebhookService {
       result = await this.agent.run({
         businessId,
         conversationId: conversation.id,
-        userId: user.id,
+        userId: user?.id,
         channel: 'WHATSAPP',
         message: text,
         metadata: {
@@ -538,6 +558,7 @@ export class WhatsAppWebhookService {
     );
   }
 
+  // Deprecated: ya no auto-crea alumnos. Usar solo lookup; lead se crea aparte.
   private async upsertUser(businessId: string, phone: string, name?: string) {
     const existing = await this.prisma.user.findFirst({
       where: { businessId, phone },
@@ -551,14 +572,9 @@ export class WhatsAppWebhookService {
       }
       return existing;
     }
-    return this.prisma.user.create({
-      data: {
-        businessId,
-        phone,
-        name,
-        externalId: phone,
-      },
-    });
+    // No crear User automáticamente — solo lead. Retornar null para no crear alumno.
+    // Mantener firma por compatibilidad de tests, pero no persistir.
+    return null as unknown as { id: string };
   }
 
   private normalizeExternalId(id: unknown): string {
@@ -730,7 +746,7 @@ export class WhatsAppWebhookService {
 
   private async upsertConversation(
     businessId: string,
-    userId: string,
+    userId: string | null,
     chatId: string,
     phone?: string,
     contactName?: string,

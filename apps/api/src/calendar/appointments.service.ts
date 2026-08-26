@@ -154,7 +154,8 @@ export class AppointmentsService {
       this.prisma.appointment.findMany({
         where: {
           businessId,
-          status: { in: ['pending', 'confirmed'] },
+          // incluir completed/no_show para que sigan visibles en calendario con check verde/rojo
+          status: { in: ['pending', 'confirmed', 'completed', 'no_show'] },
           startsAt: { gte: rangeStart, lt: rangeEnd },
         },
         include: {
@@ -969,6 +970,132 @@ export class AppointmentsService {
 
   async completeById(businessId: string, id: string) {
     return this.complete(businessId, id);
+  }
+
+  async markAttendance(
+    businessId: string,
+    id: string,
+    attended: boolean,
+  ) {
+    const appointment = await this.get(businessId, id);
+    if (appointment.status === 'cancelled') {
+      throw new BadRequestException('La cita está cancelada');
+    }
+
+    if (attended) {
+      // Marcar como asistió -> completed + consumir pack si corresponde
+      if (appointment.status === 'completed') {
+        // asegurar consumo si faltó (idempotente)
+        const userId =
+          (appointment as any).userId || appointment.contactPhone
+            ? await this.resolveUserIdForContact({
+                businessId,
+                contactPhone: appointment.contactPhone ?? undefined,
+                contactEmail: appointment.contactEmail ?? undefined,
+              } as any)
+            : null;
+        const effectiveUserId = (appointment as any).userId || userId;
+        if (
+          effectiveUserId &&
+          !(appointment as any).servicePassId &&
+          !appointment.isTrial
+        ) {
+          try {
+            // forzar estado completed para que consumeCredit lo permita
+            await this.prisma.appointment.update({
+              where: { id },
+              data: { status: 'completed' },
+            });
+            await this.packs.consumeCredit({
+              businessId,
+              userId: effectiveUserId,
+              appointmentId: id,
+            });
+          } catch (e) {
+            this.logger.warn(
+              `markAttendance consume falló ${id}: ${e instanceof Error ? e.message : 'unknown'}`,
+            );
+          }
+        }
+        return this.get(businessId, id);
+      }
+      // si era no_show, volver a completed y consumir
+      if (appointment.status === 'no_show') {
+        await this.prisma.appointment.update({
+          where: { id },
+          data: { status: 'completed' },
+        });
+        const userId =
+          (appointment as any).userId ||
+          (await this.resolveUserIdForContact({
+            businessId,
+            contactPhone: appointment.contactPhone ?? undefined,
+            contactEmail: appointment.contactEmail ?? undefined,
+          } as any));
+        const effectiveUserId = (appointment as any).userId || userId;
+        if (effectiveUserId && !appointment.isTrial) {
+          try {
+            await this.packs.consumeCredit({
+              businessId,
+              userId: effectiveUserId,
+              appointmentId: id,
+            });
+          } catch (e) {
+            this.logger.warn(
+              `markAttendance re-consume falló ${id}: ${e instanceof Error ? e.message : 'unknown'}`,
+            );
+            // aunque falle por falta de crédito, dejamos en completed
+          }
+        }
+        return this.get(businessId, id);
+      }
+      // pending/confirmed -> completar normal
+      return this.complete(businessId, id);
+    } else {
+      // Marcar como faltó -> no_show + refund si estaba completed
+      if (appointment.status === 'no_show') return appointment;
+      if (
+        appointment.status === 'completed' &&
+        (appointment as any).servicePassId &&
+        (appointment as any).userId
+      ) {
+        const servicePassId = (appointment as any).servicePassId as string;
+        const userId = (appointment as any).userId as string;
+        await this.prisma.$transaction(async (tx) => {
+          const pass = await tx.servicePass.findUnique({
+            where: { id: servicePassId },
+          });
+          if (pass && pass.sessionsUsed > 0) {
+            await tx.servicePass.update({
+              where: { id: pass.id },
+              data: { sessionsUsed: { decrement: 1 }, status: 'ACTIVE' },
+            });
+            await tx.classCreditMovement.create({
+              data: {
+                businessId,
+                userId,
+                servicePassId: pass.id,
+                appointmentId: id,
+                type: 'REFUND',
+                amount: 1,
+                reason: 'Falta a clase — devolución automática',
+              },
+            });
+          }
+          await tx.appointment.update({
+            where: { id },
+            data: { status: 'no_show', servicePassId: null },
+          });
+        });
+        return this.get(businessId, id);
+      }
+      // pending/confirmed sin consumo -> solo pasar a no_show
+      await this.prisma.appointment.update({
+        where: { id },
+        data: { status: 'no_show', servicePassId: null },
+      });
+      return this.get(businessId, id);
+    }
   }
 
   /** Cron: completa automáticamente clases que ya terminaron y descuenta del pack. */

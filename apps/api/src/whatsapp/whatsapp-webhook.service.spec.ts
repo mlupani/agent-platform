@@ -32,7 +32,7 @@ describe('WhatsAppWebhookService (WAHA)', () => {
   };
   const waha = {
     mapSessionStatus: jest.fn((s: string) =>
-      s === 'WORKING' ? 'connected' : 'scan_qr',
+      s === 'WORKING' ? 'connected' : s === 'STOPPED' ? 'disconnected' : 'scan_qr',
     ),
     phoneFromMeId: jest.fn((id: string | null) =>
       id ? id.replace(/@c\.us$/, '') : null,
@@ -58,6 +58,9 @@ describe('WhatsAppWebhookService (WAHA)', () => {
   const transcription = {
     transcribe: jest.fn(),
   };
+  const leads = {
+    capture: jest.fn().mockResolvedValue({ id: 'lead-1' }),
+  };
 
   const service = new WhatsAppWebhookService(
     prisma as never,
@@ -69,6 +72,7 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     realtime as never,
     wahaSync as never,
     transcription as never,
+    leads as never,
   );
 
   beforeEach(() => {

@@ -123,8 +123,21 @@ export function ClassRosterView({
   onOpenDay?: (day: Date) => void;
   onOpenPerson?: (target: PersonTarget) => void;
 }) {
+  const queryClient = useQueryClient();
   const [adding, setAdding] = useState<ClassSession | null>(null);
   const [editingCapacity, setEditingCapacity] = useState<ClassSession | null>(null);
+
+  const attendance = useMutation({
+    mutationFn: ({ id, attended }: { id: string; attended: boolean }) =>
+      api(`/admin/appointments/${id}/attendance`, {
+        method: 'PATCH',
+        body: JSON.stringify({ attended }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['appointment-classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
+    },
+  });
   const byDay = useMemo(() => {
     const map = new Map<string, ClassSession[]>();
     for (const day of days) map.set(toIsoDate(day), []);
@@ -264,16 +277,75 @@ export function ClassRosterView({
                             contactPhone: attendee.contactPhone,
                             contactEmail: attendee.contactEmail,
                           };
+                          const isAttended = attendee.status === 'completed';
+                          const isMissed = attendee.status === 'no_show';
+                          const isCancelled = attendee.status === 'cancelled';
+                          const isPast = new Date(session.endsAt).getTime() <= Date.now();
+                          const showToggle = isPast && !isCancelled;
                           return (
                             <li key={attendee.id} className="flex items-center gap-1">
                               <button
                                 type="button"
-                                className="flex-1 text-left rounded-lg px-2 py-1.5 text-sm hover:bg-panel-2 min-h-10 truncate"
+                                className={`flex-1 text-left rounded-lg px-2 py-1.5 text-sm min-h-10 truncate flex items-center gap-1.5 border ${
+                                  isAttended
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                    : isMissed
+                                      ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                      : isCancelled
+                                        ? 'bg-panel-2 border-line text-muted line-through'
+                                        : 'border-transparent hover:bg-panel-2'
+                                }`}
                                 onClick={() => onSelect(attendeeToItem(session, attendee))}
                                 title={label}
                               >
-                                {label}
+                                {isAttended ? (
+                                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                      <path d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </span>
+                                ) : isMissed ? (
+                                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white">
+                                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                                      <path d="M6 6l12 12M18 6L6 18" />
+                                    </svg>
+                                  </span>
+                                ) : null}
+                                <span className="truncate">{label}</span>
                               </button>
+                              {showToggle ? (
+                                <button
+                                  type="button"
+                                  disabled={attendance.isPending}
+                                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] disabled:opacity-50 ${
+                                    isMissed
+                                      ? 'border-emerald-200 bg-emerald-500 text-white hover:bg-emerald-600'
+                                      : 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50'
+                                  }`}
+                                  title={
+                                    isMissed
+                                      ? 'Marcar como asistió — descuenta del pack'
+                                      : 'Marcar como faltó — devuelve la clase al pack'
+                                  }
+                                  aria-label={
+                                    isMissed ? `Marcar ${label} como asistió` : `Marcar ${label} como faltó`
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    attendance.mutate({ id: attendee.id, attended: isMissed });
+                                  }}
+                                >
+                                  {isMissed ? (
+                                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                                      <path d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                                      <path d="M6 6l12 12M18 6L6 18" />
+                                    </svg>
+                                  )}
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-panel text-[10px] hover:bg-panel-2"

@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
+import { LeadsService } from '../leads/leads.service';
 import { SocialAccountNotFoundError } from './social.errors';
 import { SocialProviderFactory } from './social-provider.factory';
 import {
@@ -76,6 +77,7 @@ export class SocialInboxService {
     private readonly agent: AgentService,
     private readonly realtime: RealtimeEventsService,
     private readonly transcription: AudioTranscriptionService,
+    private readonly leads: LeadsService,
   ) {}
 
   async markPushLive(businessId: string): Promise<void> {
@@ -468,6 +470,18 @@ export class SocialInboxService {
             zernioAccountId: connection.externalAccountId,
           },
         );
+        // Backfill: asegurar Lead si no es alumno existente
+        if (!conversation.userId && thread.participantName) {
+          try {
+            await this.leads.capture({
+              businessId,
+              conversationId: conversation.id,
+              name: thread.participantName ?? thread.participantUsername ?? null,
+              source: channel,
+              message: thread.lastMessage?.slice(0, 500) || null,
+            });
+          } catch {}
+        }
         if (!conversation.hiddenAt) {
           const previousAt = conversation.lastMessageAt?.getTime() ?? 0;
           const threadAt = thread.updatedAt?.getTime() ?? 0;
@@ -550,9 +564,20 @@ export class SocialInboxService {
 
     try {
       await this.hydrateVoiceText(businessId, inbound);
-      const user = await this.upsertUser(businessId, inbound);
+      // No auto-crear alumno: solo vincular si ya existe. Si no, crear Lead.
+      const existingUser = await this.findExistingSocialUser(businessId, inbound);
+      if (!existingUser && inbound.participantName) {
+        try {
+          await this.leads.capture({
+            businessId,
+            name: inbound.participantName ?? inbound.participantUsername ?? null,
+            source: inbound.channel,
+            message: inbound.text?.slice(0, 500) || null,
+          });
+        } catch {}
+      }
       let conversation = await this.upsertConversation(businessId, inbound, {
-        userId: user.id,
+        userId: existingUser?.id,
         zernioAccountId: opts.zernioAccountId,
       });
 
@@ -600,7 +625,7 @@ export class SocialInboxService {
         result = await this.agent.run({
           businessId,
           conversationId: conversation.id,
-          userId: user.id,
+          userId: conversation.userId ?? existingUser?.id ?? undefined,
           channel: inbound.channel,
           message: inbound.text,
           metadata: {
@@ -762,8 +787,9 @@ export class SocialInboxService {
 
     let userId = conversation.userId;
     if (!userId) {
-      const user = await this.upsertUser(businessId, inbound);
-      userId = user.id;
+      const existing = await this.findExistingSocialUser(businessId, inbound);
+      if (existing) userId = existing.id;
+      else userId = undefined as unknown as string;
     }
 
     const result = await this.agent.run({
@@ -997,32 +1023,24 @@ export class SocialInboxService {
     }
   }
 
-  private async upsertUser(businessId: string, inbound: SocialInboxInbound) {
+  private async findExistingSocialUser(businessId: string, inbound: SocialInboxInbound) {
     const externalId = `${userExternalPrefix(inbound.channel)}:${inbound.participantId ?? inbound.conversationId}`;
-    const name = inbound.participantName ?? inbound.participantUsername ?? null;
     const existing = await this.prisma.user.findFirst({
       where: { businessId, externalId },
     });
-    if (existing) {
-      if (name && existing.name !== name) {
-        return this.prisma.user.update({
-          where: { id: existing.id },
-          data: { name },
-        });
-      }
-      return existing;
+    if (existing && inbound.participantName && existing.name !== inbound.participantName) {
+      return this.prisma.user.update({
+        where: { id: existing.id },
+        data: { name: inbound.participantName },
+      });
     }
-    return this.prisma.user.create({
-      data: {
-        businessId,
-        externalId,
-        name,
-        metadata: {
-          channel: inbound.channel,
-          username: inbound.participantUsername,
-        },
-      },
-    });
+    return existing;
+  }
+
+  // Deprecated: no auto-crear alumno por inbox social. Mantener por compatibilidad pero no crea User.
+  private async upsertUser(businessId: string, inbound: SocialInboxInbound) {
+    const found = await this.findExistingSocialUser(businessId, inbound);
+    return found ?? (null as unknown as { id: string });
   }
 
   private async upsertConversation(
@@ -1030,8 +1048,9 @@ export class SocialInboxService {
     inbound: SocialInboxInbound,
     opts?: { userId?: string; zernioAccountId?: string },
   ) {
-    const userId =
-      opts?.userId ?? (await this.upsertUser(businessId, inbound)).id;
+    const resolvedUserId =
+      opts?.userId ?? (await this.findExistingSocialUser(businessId, inbound))?.id ?? null;
+    const userId = resolvedUserId;
     const existing = await this.prisma.conversation.findFirst({
       where: {
         businessId,

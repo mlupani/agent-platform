@@ -150,4 +150,14 @@ export class AppointmentsAdminController {
     const businessId = await this.businesses.getCurrentId();
     return this.appointments.complete(businessId, id);
   }
+
+  @Patch(':id/attendance')
+  async attendance(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(z.object({ attended: z.boolean() })))
+    body: { attended: boolean },
+  ) {
+    const businessId = await this.businesses.getCurrentId();
+    return this.appointments.markAttendance(businessId, id, body.attended);
+  }
 }

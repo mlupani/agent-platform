@@ -879,7 +879,24 @@ function EventModal({
   onOpenPerson: (t: PersonTarget) => void;
   onRemove: () => void;
 }) {
+  const queryClient = useQueryClient();
   const hasIdentity = Boolean(selected.userId || selected.contactPhone || selected.contactEmail);
+  const isLocal = selected.source === 'local';
+  const isPast = !selected.allDay && new Date(selected.endsAt).getTime() <= Date.now();
+  const isCompleted = selected.status === 'completed';
+  const isNoShow = selected.status === 'no_show';
+  const attendance = useMutation({
+    mutationFn: ({ id, attended }: { id: string; attended: boolean }) =>
+      api(`/admin/appointments/${id}/attendance`, {
+        method: 'PATCH',
+        body: JSON.stringify({ attended }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
+      await queryClient.invalidateQueries({ queryKey: ['appointment-classes'] });
+      onClose();
+    },
+  });
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -945,6 +962,60 @@ function EventModal({
             )}
           </div>
         ) : null}
+        {isLocal && selected.status !== 'cancelled' ? (
+          <div
+            className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
+              isCompleted
+                ? 'border-emerald-200 bg-emerald-50'
+                : isNoShow
+                  ? 'border-rose-200 bg-rose-50'
+                  : 'border-line bg-panel-2/40'
+            }`}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted">Asistencia</p>
+              <p
+                className={`text-sm font-medium ${isCompleted ? 'text-emerald-700' : isNoShow ? 'text-rose-700' : 'text-text'}`}
+              >
+                {isCompleted
+                  ? '✓ Asistió — clase descontada'
+                  : isNoShow
+                    ? '✕ Faltó — clase devuelta al pack'
+                    : isPast
+                      ? 'Pendiente de confirmar'
+                      : 'Anotada — se marcará al pasar la clase'}
+              </p>
+            </div>
+            {isPast ? (
+              <div className="flex gap-2 shrink-0">
+                {!isCompleted ? (
+                  <button
+                    type="button"
+                    disabled={attendance.isPending}
+                    onClick={() => attendance.mutate({ id: selected.id, attended: true })}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 text-white px-3 py-1.5 text-xs font-medium hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    Asistió
+                  </button>
+                ) : null}
+                {!isNoShow ? (
+                  <button
+                    type="button"
+                    disabled={attendance.isPending}
+                    onClick={() => attendance.mutate({ id: selected.id, attended: false })}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white text-rose-700 px-3 py-1.5 text-xs font-medium hover:bg-rose-50 disabled:opacity-50"
+                  >
+                    Faltó
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {attendance.isError ? (
+          <p className="text-sm text-rose">{(attendance.error as Error).message}</p>
+        ) : null}
+        {attendance.isSuccess ? <p className="text-sm text-emerald-700">Asistencia actualizada.</p> : null}
         {selected.htmlLink ? (
           <a
             href={selected.htmlLink}

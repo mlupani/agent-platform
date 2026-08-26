@@ -155,6 +155,9 @@ describe('SocialInboxService', () => {
   const transcription = {
     transcribeFromUrl: jest.fn(),
   };
+  const leads = {
+    capture: jest.fn().mockResolvedValue({ id: 'lead-1' }),
+  };
 
   const service = new SocialInboxService(
     prisma as never,
@@ -163,6 +166,7 @@ describe('SocialInboxService', () => {
     agent as never,
     realtime as never,
     transcription as never,
+    leads as never,
   );
 
   beforeEach(() => {

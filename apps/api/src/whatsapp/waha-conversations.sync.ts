@@ -8,6 +8,7 @@ import type {
 } from './providers/waha.whatsapp-provider';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
+import { LeadsService } from '../leads/leads.service';
 import {
   alternateWhatsAppExternalIds,
   isWhatsAppLid,
@@ -31,6 +32,7 @@ export class WahaConversationsSyncService {
     private readonly waha: WahaWhatsAppProvider,
     private readonly config: WhatsAppConfigService,
     private readonly realtime: RealtimeEventsService,
+    private readonly leads: LeadsService,
   ) {}
 
   async purgeChats(businessId: string): Promise<number> {
@@ -302,15 +304,38 @@ export class WahaConversationsSyncService {
           externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
         });
       } else {
-        const user = await this.upsertUser(
-          businessId,
-          contactPhone || chatId,
-          name ?? undefined,
-        );
+        // FIX: no crear User (alumno) automáticamente — solo vincular si ya existe; crear Lead si corresponde
+        let existingUser: { id: string } | null = null;
+        if (contactPhone) {
+          existingUser = await this.prisma.user.findFirst({
+            where: { businessId, phone: contactPhone },
+            select: { id: true },
+          });
+          if (!existingUser) {
+            try {
+              await this.leads.capture({
+                businessId,
+                phone: contactPhone,
+                name: name ?? null,
+                source: 'WHATSAPP',
+                message: preview?.slice(0, 500) || null,
+              });
+            } catch {}
+          }
+        } else if (name) {
+          try {
+            await this.leads.capture({
+              businessId,
+              name,
+              source: 'WHATSAPP',
+              message: preview?.slice(0, 500) || null,
+            });
+          } catch {}
+        }
         await this.prisma.conversation.create({
           data: {
             businessId,
-            userId: user.id,
+            userId: existingUser?.id ?? null,
             agentConfigId: agent?.id,
             channel: 'WHATSAPP',
             // Número nuevo: bot activo por defecto (igual que el webhook)
@@ -331,6 +356,8 @@ export class WahaConversationsSyncService {
               wahaSyncedAt: new Date().toISOString(),
               source: 'waha_overview',
               selfChat: selfChat || undefined,
+              // no se creó User automáticamente
+              autoUserSkipped: !existingUser ? true : undefined,
             },
           },
         });
@@ -344,6 +371,7 @@ export class WahaConversationsSyncService {
     return upserted;
   }
 
+  // Deprecated: no auto-crear alumnos por sync de chats
   private async upsertUser(businessId: string, phone: string, name?: string) {
     const existing = await this.prisma.user.findFirst({
       where: { businessId, phone },
@@ -357,14 +385,7 @@ export class WahaConversationsSyncService {
       }
       return existing;
     }
-    return this.prisma.user.create({
-      data: {
-        businessId,
-        phone,
-        name,
-        externalId: phone,
-      },
-    });
+    return null as unknown as { id: string };
   }
 
   private normalizeChatId(id: WahaChatOverview['id']): string | null {

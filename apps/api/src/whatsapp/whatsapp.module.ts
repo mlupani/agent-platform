@@ -3,6 +3,7 @@ import { AiModule } from '../ai/ai.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { SecretsService } from '../common/crypto/secrets.service';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { LeadsModule } from '../leads/leads.module';
 import { WhatsAppAdminController } from './whatsapp-admin.controller';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppWebhookController } from './whatsapp-webhook.controller';
@@ -14,7 +15,7 @@ import { WahaMessagingProvider } from './providers/waha.messaging-provider';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
 
 @Module({
-  imports: [BusinessesModule, RealtimeModule, forwardRef(() => AiModule)],
+  imports: [BusinessesModule, RealtimeModule, forwardRef(() => AiModule), forwardRef(() => LeadsModule)],
   controllers: [WhatsAppWebhookController, WhatsAppAdminController],
   providers: [
     SecretsService,
