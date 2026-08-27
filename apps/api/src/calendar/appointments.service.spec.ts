@@ -15,7 +15,9 @@ describe('AppointmentsService', () => {
     },
     appointmentReminderLog: { deleteMany: jest.fn() },
     classTemplate: { findFirst: jest.fn().mockResolvedValue(null) },
-  };
+    classTemplateFindMany: jest.fn(),
+    servicePass: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+  } as any;
   const availability = { getAvailableSlots: jest.fn() };
   const google = {
     isConnected: jest.fn().mockResolvedValue(false),
@@ -108,14 +110,16 @@ describe('AppointmentsService', () => {
       {
         start: '10:00',
         end: '10:30',
-        startIso: '2026-08-12T10:00:00.000-03:00',
-        endIso: '2026-08-12T10:30:00.000-03:00',
+        startIso: '2099-08-12T10:00:00.000-03:00',
+        endIso: '2099-08-12T10:30:00.000-03:00',
       },
     ]);
     prisma.appointment.create.mockImplementation(
       async ({ data }: { data: unknown }) => ({
         id: 'apt-1',
         ...(data as object),
+        startsAt: new Date('2099-08-12T13:00:00.000Z'),
+        endsAt: new Date('2099-08-12T13:30:00.000Z'),
         service: { id: 'svc-1', name: 'Consulta', durationMinutes: 30 },
       }),
     );
@@ -123,7 +127,7 @@ describe('AppointmentsService', () => {
     const appointment = await service.create({
       businessId: 'biz-1',
       serviceId: 'svc-1',
-      startsAt: new Date('2026-08-12T13:00:00.000Z'),
+      startsAt: new Date('2099-08-12T13:00:00.000Z'),
       timezone: 'America/Argentina/Buenos_Aires',
       contactName: 'Ana',
       contactPhone: '54911',

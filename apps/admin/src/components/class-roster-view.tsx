@@ -14,6 +14,9 @@ export interface ClassAttendee {
   userId: string | null;
   status: string;
   notes: string | null;
+  isTrial?: boolean | null;
+  classLabel?: string | null;
+  packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
 }
 
 export interface ClassSession {
@@ -54,6 +57,8 @@ export interface CalendarFeedItem {
   service: { id: string; name: string; durationMinutes?: number } | null;
   userId?: string | null;
   isTrial?: boolean | null;
+  classLabel?: string | null;
+  packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
 }
 
 function toIsoDate(date: Date) {
@@ -81,12 +86,21 @@ export function attendeeToItem(
   session: ClassSession,
   attendee: ClassAttendee,
 ): CalendarFeedItem {
+  const isTrial = !!attendee.isTrial;
+  const name = attendee.contactName || attendee.contactPhone || 'Alumna';
+  const title = isTrial
+    ? `${name} — clase de prueba`
+    : attendee.classLabel
+      ? `${name} — ${attendee.classLabel}`
+      : attendee.packProgress
+        ? `${name} — clase ${attendee.packProgress.display}`
+        : session.service
+          ? `${session.service.name} · ${name}`
+          : name;
   return {
     id: attendee.id,
     source: 'local',
-    title: session.service
-      ? `${session.service.name} · ${attendee.contactName || 'Alumna'}`
-      : attendee.contactName || 'Cita',
+    title,
     startsAt: session.startsAt,
     endsAt: session.endsAt,
     allDay: false,
@@ -100,7 +114,9 @@ export function attendeeToItem(
     canCancel: true,
     service: session.service,
     userId: attendee.userId,
-    isTrial: null,
+    isTrial,
+    classLabel: attendee.classLabel ?? null,
+    packProgress: attendee.packProgress ?? null,
   };
 }
 
@@ -269,8 +285,16 @@ export function ClassRosterView({
                       </p>
                       <ul className="px-2 py-1.5 space-y-0.5">
                         {session.attendees.map((attendee) => {
-                          const label =
+                          const baseName =
                             attendee.contactName || attendee.contactPhone || 'Alumna';
+                          const isTrialAttendee = !!attendee.isTrial;
+                          const label = isTrialAttendee
+                            ? `${baseName} — clase de prueba`
+                            : attendee.classLabel
+                              ? `${baseName} — ${attendee.classLabel}`
+                              : attendee.packProgress
+                                ? `${baseName} — clase ${attendee.packProgress.display}`
+                                : baseName;
                           const personTarget: PersonTarget = {
                             userId: attendee.userId,
                             contactName: attendee.contactName,
@@ -287,18 +311,24 @@ export function ClassRosterView({
                               <button
                                 type="button"
                                 className={`flex-1 text-left rounded-lg px-2 py-1.5 text-sm min-h-10 truncate flex items-center gap-1.5 border ${
-                                  isAttended
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                    : isMissed
-                                      ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                      : isCancelled
-                                        ? 'bg-panel-2 border-line text-muted line-through'
-                                        : 'border-transparent hover:bg-panel-2'
+                                  isTrialAttendee
+                                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                    : isAttended
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                      : isMissed
+                                        ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                        : isCancelled
+                                          ? 'bg-panel-2 border-line text-muted line-through'
+                                          : 'border-transparent hover:bg-panel-2'
                                 }`}
                                 onClick={() => onSelect(attendeeToItem(session, attendee))}
                                 title={label}
                               >
-                                {isAttended ? (
+                                {isTrialAttendee ? (
+                                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold" title="Clase de prueba">
+                                    P
+                                  </span>
+                                ) : isAttended ? (
                                   <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
                                     <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                                       <path d="M5 13l4 4L19 7" />
@@ -545,6 +575,7 @@ function AddStudentDialog({
       ),
   });
 
+  const [asTrial, setAsTrial] = useState(false);
   const add = useMutation({
     mutationFn: (userId: string) =>
       api('/admin/appointments', {
@@ -553,6 +584,7 @@ function AddStudentDialog({
           serviceId: session.service?.id,
           userId,
           startsAt: session.startsAt,
+          ...(asTrial ? { isTrial: true } : {}),
         }),
       }),
     onSuccess: async () => {
@@ -597,25 +629,57 @@ function AddStudentDialog({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <label className="flex items-center gap-2 rounded-xl border border-line bg-panel-2/50 px-3 py-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-line"
+            checked={asTrial}
+            onChange={(e) => setAsTrial(e.target.checked)}
+          />
+          <div className="flex-1">
+            <p className="text-sm font-medium">Como clase de prueba</p>
+            <p className="text-xs text-muted">Usar si nunca tomó la clase gratis (no descuenta del pack)</p>
+          </div>
+        </label>
+        <p className="text-xs text-muted">
+          Si la alumna no tiene clases y nunca usó la prueba, se asigna automáticamente como clase de prueba aunque no marques el casillero.
+        </p>
         {add.isError ? (
           <p className="text-sm text-rose">{formatApiError(add.error)}</p>
         ) : null}
         <ul className="divide-y divide-line max-h-80 overflow-y-auto">
-          {(clientsQuery.data ?? []).slice(0, 40).map((client) => (
-            <li key={client.id}>
-              <button
-                type="button"
-                className="w-full text-left py-3 min-h-11 hover:bg-panel-2 px-1"
-                disabled={add.isPending}
-                onClick={() => add.mutate(client.id)}
-              >
-                <p className="text-sm font-medium">{clientLabel(client)}</p>
-                <p className="text-xs text-muted">
-                  {client.phone || client.email || 'Sin contacto'}
-                </p>
-              </button>
-            </li>
-          ))}
+          {(clientsQuery.data ?? []).slice(0, 40).map((client) => {
+            const packInfo = client.pack;
+            const remaining = packInfo?.remaining ?? 0;
+            const total = packInfo?.total ?? 0;
+            const packLabel = packInfo
+              ? remaining > 0
+                ? `${remaining}/${total} clases disponibles`
+                : total > 0
+                  ? `Sin clases — 0/${total}`
+                  : 'Sin pack'
+              : 'Sin pack';
+            const trialHint = remaining <= 0 ? ' · puede usar prueba si nunca tomó' : '';
+            return (
+              <li key={client.id}>
+                <button
+                  type="button"
+                  className="w-full text-left py-3 min-h-11 hover:bg-panel-2 px-1"
+                  disabled={add.isPending}
+                  onClick={() => add.mutate(client.id)}
+                >
+                  <p className="text-sm font-medium">{clientLabel(client)}</p>
+                  <p className="text-xs text-muted">
+                    {client.phone || client.email || 'Sin contacto'} · {packLabel}
+                    {trialHint}
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    {client.attendance ? `${client.attendance.completed} asistencias` : ''}
+                  </p>
+                </button>
+              </li>
+            );
+          })}
           {!clientsQuery.data?.length ? (
             <li className="py-6 text-sm text-muted">No hay clientas para mostrar.</li>
           ) : null}

@@ -76,29 +76,38 @@ export class AppointmentsService {
         .filter((id): id is string => Boolean(id)),
     );
 
+    const userIdsForFeed = [...new Set(local.map((i) => (i as any).userId).filter(Boolean) as string[])];
+    const progressForFeed = await this.getPackProgressMap(businessId, userIdsForFeed);
+
     const localItems = local
       .filter((item) => item.status !== 'cancelled')
-      .map((item) => ({
-        id: item.id,
-        source: 'local' as const,
-        title: item.service?.name
-          ? `${item.service.name} · ${item.contactName || item.contactPhone || 'Cliente'}`
-          : item.contactName || item.contactPhone || 'Cita',
-        startsAt: item.startsAt.toISOString(),
-        endsAt: item.endsAt.toISOString(),
-        allDay: false,
-        status: item.status,
-        contactName: item.contactName,
-        contactPhone: item.contactPhone,
-        contactEmail: item.contactEmail,
-        notes: item.notes,
-        googleEventId: item.googleEventId,
-        htmlLink: null as string | null,
-        canCancel: true,
-        service: item.service,
-        userId: (item as any).userId as string | null,
-        isTrial: (item as any).isTrial as boolean | undefined,
-      }));
+      .map((item) => {
+        const isTrial = !!(item as any).isTrial;
+        const contactLabel = item.contactName || item.contactPhone || 'Alumna';
+        const progress = item.userId ? progressForFeed.get(item.userId) ?? null : null;
+        const title = this.buildAppointmentTitle(contactLabel, isTrial, progress, item.service?.name);
+        return {
+          id: item.id,
+          source: 'local' as const,
+          title,
+          startsAt: item.startsAt.toISOString(),
+          endsAt: item.endsAt.toISOString(),
+          allDay: false,
+          status: item.status,
+          contactName: item.contactName,
+          contactPhone: item.contactPhone,
+          contactEmail: item.contactEmail,
+          notes: item.notes,
+          googleEventId: item.googleEventId,
+          htmlLink: null as string | null,
+          canCancel: true,
+          service: item.service,
+          userId: (item as any).userId as string | null,
+          isTrial: isTrial as boolean | undefined,
+          classLabel: isTrial ? 'clase de prueba' : progress ? `clase ${progress.display}` : null,
+          packProgress: progress,
+        };
+      });
 
     const googleItems = googleEvents
       .filter((event) => !localGoogleIds.has(event.id))
@@ -212,11 +221,17 @@ export class AppointmentsService {
           userId: string | null;
           status: string;
           notes: string | null;
+          isTrial?: boolean | null;
+          classLabel?: string | null;
+          packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
         }>;
       }
     >();
 
     const keyOf = (startsAt: DateTime) => startsAt.toUTC().toISO()!;
+
+    const userIdsForProgress = [...new Set(appointments.map((a) => (a as any).userId).filter(Boolean) as string[])];
+    const progressMap = await this.getPackProgressMap(businessId, userIdsForProgress);
 
     for (const row of appointments) {
       const startsAt = DateTime.fromJSDate(row.startsAt, {
@@ -227,6 +242,9 @@ export class AppointmentsService {
       );
       const key = keyOf(startsAt);
       const existing = sessions.get(key);
+      const isTrial = !!(row as any).isTrial;
+      const prog = row.userId ? progressMap.get(row.userId) ?? null : null;
+      const classLabel = isTrial ? 'clase de prueba' : prog ? `clase ${prog.display}` : null;
       const attendee = {
         id: row.id,
         contactName: row.contactName,
@@ -235,6 +253,9 @@ export class AppointmentsService {
         userId: row.userId,
         status: row.status,
         notes: row.notes,
+        isTrial,
+        classLabel,
+        packProgress: prog,
       };
       if (existing) {
         existing.attendees.push(attendee);
@@ -463,7 +484,9 @@ export class AppointmentsService {
     }
 
     // Validación de saldo / trial antes de crear
-    if (input.isTrial) {
+    // si isTrial viene explícito, validar que no haya usado
+    let effectiveIsTrial = !!input.isTrial;
+    if (effectiveIsTrial) {
       // Verificar que no haya usado prueba ya
       let trialUser: any = null;
       if (input.userId) {
@@ -507,17 +530,31 @@ export class AppointmentsService {
         try {
           const balance = await this.packs.getBalance(input.businessId, balanceUserId);
           if (!balance.hasAvailableClasses) {
-            throw new BadRequestException(
-              'No tenés clases disponibles en tu pack. Renovás tu pack para poder reservar. Consultá a la profesora.',
-            );
+            // sin clases: permitir como clase de prueba si nunca la usó
+            const trialEligible = await this.isTrialEligible(input.businessId, balanceUserId);
+            if (trialEligible) {
+              effectiveIsTrial = true;
+              // no lanzar, se creará como isTrial
+            } else {
+              throw new BadRequestException(
+                'No tenés clases disponibles en tu pack. Renovás tu pack para poder reservar. Consultá a la profesora.',
+              );
+            }
           }
         } catch (e: any) {
           if (e.message?.includes('No tenés clases disponibles')) throw e;
-          // si alumno no tiene packs pero es INACTIVE, también bloquear con mensaje
-          // si es error "Alumno no encontrado", ignorar (prospect)
+          // si alumno no tiene packs pero es INACTIVE, también chequear trial
+          if (e.message?.includes('Alumno no encontrado')) {
+            // prospect sin packs pero con userId: chequear trial
+            const trialEligible = await this.isTrialEligible(input.businessId, balanceUserId);
+            if (trialEligible) effectiveIsTrial = true;
+          }
+          // si es otro error, ignorar (prospect sin pack)
         }
       }
     }
+    // propagar effectiveIsTrial al input para el resto del flujo
+    (input as any).effectiveIsTrial = effectiveIsTrial;
 
     const timezone = input.timezone || business.timezone;
     const startsAt = DateTime.fromJSDate(input.startsAt).setZone(timezone);
@@ -565,9 +602,21 @@ export class AppointmentsService {
     const contactPhone = input.contactPhone?.trim() || extras.phone || undefined;
     const contactEmail = input.contactEmail?.trim() || extras.email || undefined;
 
-    const summary = service
-      ? `${service.name} — ${contactName ?? 'Cliente'}`
-      : `Cita — ${contactName ?? 'Cliente'}`;
+    const effectiveIsTrialForSummary = (input as any).effectiveIsTrial ?? !!input.isTrial;
+    let summaryProgress: { display: string } | null = null;
+    if (!effectiveIsTrialForSummary) {
+      const summaryUserId = input.userId || null;
+      if (summaryUserId) {
+        summaryProgress = await this.getPackProgressMap(input.businessId, [summaryUserId]).then((m) => m.get(summaryUserId) ?? null);
+      }
+    }
+    const summary = effectiveIsTrialForSummary
+      ? `${contactName ?? 'Alumna'} — clase de prueba`
+      : summaryProgress
+        ? `${contactName ?? 'Alumna'} — clase ${summaryProgress.display}`
+        : service
+          ? `${contactName ?? 'Alumna'} — ${service.name}`
+          : `Cita — ${contactName ?? 'Alumna'}`;
 
     const googleEventId = await this.google.createEvent({
       businessId: input.businessId,
@@ -587,6 +636,7 @@ export class AppointmentsService {
 
     const resolvedUserId = input.userId || (await this.resolveUserIdForContact(input));
 
+    const finalIsTrial = effectiveIsTrialForSummary;
     const created = await this.prisma.appointment.create({
       data: {
         businessId: input.businessId,
@@ -594,7 +644,7 @@ export class AppointmentsService {
         conversationId: input.conversationId,
         userId: resolvedUserId || input.userId,
         servicePassId: null,
-        isTrial: input.isTrial ?? false,
+        isTrial: finalIsTrial,
         contactName,
         contactPhone,
         contactEmail,
@@ -1109,6 +1159,61 @@ export class AppointmentsService {
       });
       return this.get(businessId, id);
     }
+  }
+
+  private async isTrialEligible(businessId: string, userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, businessId }, select: { hasUsedTrial: true } });
+    if (user?.hasUsedTrial) return false;
+    const prev = await this.prisma.appointment.findFirst({ where: { businessId, userId, isTrial: true }, select: { id: true } });
+    if (prev) return false;
+    return true;
+  }
+
+  private async getPackProgressMap(
+    businessId: string,
+    userIds: string[],
+  ): Promise<Map<string, { total: number; used: number; remaining: number; display: string; packName: string | null }>> {
+    const map = new Map<string, { total: number; used: number; remaining: number; display: string; packName: string | null }>();
+    if (!userIds.length) return map;
+    if (!(this.prisma as any).servicePass?.findMany) return map;
+    const passes = await (this.prisma as any).servicePass.findMany({
+      where: { businessId, userId: { in: userIds } },
+      include: { service: { select: { name: true } } },
+    });
+    const grouped = new Map<string, typeof passes>();
+    for (const p of passes) {
+      const list = grouped.get(p.userId) ?? [];
+      list.push(p);
+      grouped.set(p.userId, list);
+    }
+    for (const uid of userIds) {
+      const list = grouped.get(uid) ?? [];
+      if (!list.length) continue;
+      const total = list.reduce((acc, p) => acc + p.sessionsPaid, 0);
+      const used = list.reduce((acc, p) => acc + p.sessionsUsed, 0);
+      const remaining = Math.max(0, total - used);
+      if (total <= 0) continue;
+      // ordenar para obtener pack principal (activo más antiguo)
+      const sorted = [...list].sort((a, b) => {
+        if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+        if (b.status === 'ACTIVE' && a.status !== 'ACTIVE') return 1;
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
+      const primary = sorted[0];
+      const next = remaining > 0 ? Math.min(used + 1, total) : used;
+      // display como 2/4 ; si total es suma de packs mostrar suma, pero preferir primary size si hay uno dominante
+      const displayTotal = total;
+      const display = `${next}/${displayTotal}`;
+      map.set(uid, { total, used, remaining, display, packName: primary?.service?.name ?? null });
+    }
+    return map;
+  }
+
+  private buildAppointmentTitle(contactLabel: string, isTrial: boolean, progress: { display: string } | null, serviceName?: string | null): string {
+    if (isTrial) return `${contactLabel} — clase de prueba`;
+    if (progress) return `${contactLabel} — clase ${progress.display}`;
+    if (serviceName) return `${contactLabel} — ${serviceName}`;
+    return `${contactLabel} — clase`;
   }
 
   /** Cron: completa automáticamente clases que ya terminaron y descuenta del pack. */
