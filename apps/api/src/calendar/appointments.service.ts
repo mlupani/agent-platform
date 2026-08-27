@@ -1189,8 +1189,8 @@ export class AppointmentsService {
     for (const uid of userIds) {
       const list = grouped.get(uid) ?? [];
       if (!list.length) continue;
-      const total = list.reduce((acc, p) => acc + p.sessionsPaid, 0);
-      const used = list.reduce((acc, p) => acc + p.sessionsUsed, 0);
+      const total = list.reduce((acc: number, p: any) => acc + p.sessionsPaid, 0);
+      const used = list.reduce((acc: number, p: any) => acc + p.sessionsUsed, 0);
       const remaining = Math.max(0, total - used);
       if (total <= 0) continue;
       // ordenar para obtener pack principal (activo más antiguo)
