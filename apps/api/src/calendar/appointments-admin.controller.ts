@@ -40,6 +40,14 @@ const deleteFeedItemSchema = z.object({
   id: z.string().min(1),
 });
 
+const replicateWeekSchema = z.object({
+  sourceFrom: z.string().min(1),
+  sourceTo: z.string().min(1),
+  targetFrom: z.string().min(1),
+  dryRun: z.boolean().optional(),
+  includeTrials: z.boolean().optional(),
+});
+
 @Controller('admin/appointments')
 @UseGuards(ApiKeyGuard)
 export class AppointmentsAdminController {
@@ -74,6 +82,15 @@ export class AppointmentsAdminController {
   ) {
     const businessId = await this.businesses.getCurrentId();
     return this.appointments.deleteFeedItem(businessId, body.source, body.id);
+  }
+
+  @Post('replicate-week')
+  async replicateWeek(
+    @Body(new ZodValidationPipe(replicateWeekSchema))
+    body: z.infer<typeof replicateWeekSchema>,
+  ) {
+    const businessId = await this.businesses.getCurrentId();
+    return this.appointments.replicateWeek(businessId, body);
   }
 
   @Get('classes')

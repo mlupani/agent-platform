@@ -1209,6 +1209,303 @@ export class AppointmentsService {
     return map;
   }
 
+  async replicateWeek(
+    businessId: string,
+    params: {
+      sourceFrom: string;
+      sourceTo: string;
+      targetFrom: string;
+      dryRun?: boolean;
+      includeTrials?: boolean;
+    },
+  ): Promise<{
+    businessId: string;
+    sourceFrom: string;
+    sourceTo: string;
+    targetFrom: string;
+    dryRun: boolean;
+    totalSource: number;
+    toCreate: number;
+    skippedDuplicate: number;
+    skippedFull: number;
+    skippedNoTemplate: number;
+    created: number;
+    items: Array<{
+      sourceId: string;
+      contactName: string | null;
+      sourceStartsAt: string;
+      targetStartsAt: string;
+      targetEndsAt: string;
+      status: 'will_create' | 'skipped_duplicate' | 'skipped_full' | 'skipped_no_template' | 'created' | 'error';
+      reason?: string;
+    }>;
+    errors: Array<{ sourceId: string; message: string }>;
+  }> {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { timezone: true },
+    });
+    const zone = business.timezone || 'America/Argentina/Buenos_Aires';
+
+    const parse = (value: string, label: string): DateTime => {
+      if (!value) throw new BadRequestException(`${label} es requerido`);
+      // accept YYYY-MM-DD as date in business timezone
+      let dt: DateTime;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+        dt = DateTime.fromISO(value.trim(), { zone }).startOf('day');
+      } else {
+        dt = DateTime.fromISO(value.trim(), { setZone: true });
+        if (dt.isValid) dt = dt.setZone(zone);
+      }
+      if (!dt.isValid) throw new BadRequestException(`${label} inválido: ${value}`);
+      return dt;
+    };
+
+    const sourceFromDT = parse(params.sourceFrom, 'sourceFrom');
+    const sourceToDT = parse(params.sourceTo, 'sourceTo');
+    const targetFromDT = parse(params.targetFrom, 'targetFrom');
+    if (sourceFromDT >= sourceToDT) throw new BadRequestException('sourceFrom debe ser menor que sourceTo');
+    const dryRun = !!params.dryRun;
+    const includeTrials = params.includeTrials !== false;
+
+    const sourceStartDay = sourceFromDT.setZone(zone).startOf('day');
+    const targetStartDay = targetFromDT.setZone(zone).startOf('day');
+
+    // source appointments
+    const sourceApps = await this.prisma.appointment.findMany({
+      where: {
+        businessId,
+        status: { in: ['pending', 'confirmed', 'completed'] },
+        startsAt: { gte: sourceFromDT.toUTC().toJSDate(), lt: sourceToDT.toUTC().toJSDate() },
+        ...(includeTrials ? {} : { isTrial: false }),
+      },
+      include: {
+        service: { select: { id: true, name: true, durationMinutes: true, capacity: true } },
+      },
+      orderBy: { startsAt: 'asc' },
+      take: 500,
+    });
+
+    // range for target
+    const sourceDurationDays = Math.max(1, Math.ceil(sourceToDT.diff(sourceFromDT, 'days').days));
+    const targetToDay = targetStartDay.plus({ days: sourceDurationDays });
+    const targetRangeStartUTC = targetStartDay.toUTC().toJSDate();
+    const targetRangeEndUTC = targetToDay.toUTC().toJSDate();
+
+    const [targetExisting, templates] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          businessId,
+          status: { in: ['pending', 'confirmed', 'completed'] },
+          startsAt: { gte: targetRangeStartUTC, lt: targetRangeEndUTC },
+        },
+        select: { id: true, startsAt: true, userId: true, contactPhone: true, contactEmail: true },
+      }),
+      this.prisma.classTemplate.findMany({
+        where: { businessId },
+        include: { service: { select: { id: true, capacity: true, durationMinutes: true } } },
+      }),
+    ]);
+
+    const templateByKey = new Map<string, (typeof templates)[number]>();
+    for (const t of templates) templateByKey.set(`${t.dayOfWeek}-${t.startTime}`, t);
+
+    const existingCountBySlot = new Map<number, number>();
+    for (const row of targetExisting) {
+      const key = row.startsAt.getTime();
+      existingCountBySlot.set(key, (existingCountBySlot.get(key) ?? 0) + 1);
+    }
+
+    const pendingCountBySlot = new Map<number, number>();
+    const items: Array<{
+      sourceId: string;
+      contactName: string | null;
+      sourceStartsAt: string;
+      targetStartsAt: string;
+      targetEndsAt: string;
+      status: 'will_create' | 'skipped_duplicate' | 'skipped_full' | 'skipped_no_template' | 'created' | 'error';
+      reason?: string;
+    }> = [];
+    const errors: Array<{ sourceId: string; message: string }> = [];
+    let toCreate = 0;
+    let skippedDuplicate = 0;
+    let skippedFull = 0;
+    let skippedNoTemplate = 0;
+
+    type Planned = { source: (typeof sourceApps)[number]; targetStartUTC: Date; targetEndUTC: Date; targetStartZone: DateTime };
+    const planned: Planned[] = [];
+
+    for (const app of sourceApps) {
+      const srcStartZone = DateTime.fromJSDate(app.startsAt, { zone: 'utc' }).setZone(zone);
+      const daysOffset = Math.floor(srcStartZone.startOf('day').diff(sourceStartDay, 'days').days);
+      const targetStartZone = targetStartDay
+        .plus({ days: daysOffset })
+        .set({ hour: srcStartZone.hour, minute: srcStartZone.minute, second: 0, millisecond: 0 });
+      const durationMs = app.endsAt.getTime() - app.startsAt.getTime();
+      const targetEndZone = targetStartZone.plus({ milliseconds: durationMs });
+      const targetStartUTC = targetStartZone.toUTC().toJSDate();
+      const targetEndUTC = targetEndZone.toUTC().toJSDate();
+
+      const dayOfWeek = targetStartZone.weekday - 1;
+      const startTime = targetStartZone.toFormat('HH:mm');
+      const tmpl = templateByKey.get(`${dayOfWeek}-${startTime}`);
+      // Si no hay template para ese horario y no hay servicio, lo omitimos (horario cerrado)
+      // pero si hay servicio asociado lo permitimos aunque no haya template (clase extra)
+      if (!tmpl && !app.serviceId) {
+        skippedNoTemplate++;
+        items.push({
+          sourceId: app.id,
+          contactName: app.contactName,
+          sourceStartsAt: app.startsAt.toISOString(),
+          targetStartsAt: targetStartUTC.toISOString(),
+          targetEndsAt: targetEndUTC.toISOString(),
+          status: 'skipped_no_template',
+          reason: `Sin horario modelo para ${startTime} del día ${dayOfWeek}`,
+        });
+        continue;
+      }
+      const capacity = tmpl ? Math.max(1, tmpl.capacity ?? tmpl.service.capacity ?? app.service?.capacity ?? 5) : Math.max(1, app.service?.capacity ?? 5);
+      const slotKey = targetStartUTC.getTime();
+      const existingCount = existingCountBySlot.get(slotKey) ?? 0;
+      const pendingForSlot = pendingCountBySlot.get(slotKey) ?? 0;
+      if (existingCount + pendingForSlot >= capacity) {
+        skippedFull++;
+        items.push({
+          sourceId: app.id,
+          contactName: app.contactName,
+          sourceStartsAt: app.startsAt.toISOString(),
+          targetStartsAt: targetStartUTC.toISOString(),
+          targetEndsAt: targetEndUTC.toISOString(),
+          status: 'skipped_full',
+          reason: `Clase llena ${existingCount + pendingForSlot}/${capacity}`,
+        });
+        continue;
+      }
+      // duplicate check: same person at same slot
+      const isDuplicate = targetExisting.some(
+        (row) =>
+          row.startsAt.getTime() === slotKey &&
+          ((row.userId && app.userId && row.userId === app.userId) ||
+            (row.contactPhone && app.contactPhone && row.contactPhone.replace(/\D/g, '').slice(-8) === app.contactPhone.replace(/\D/g, '').slice(-8))),
+      );
+      // also check among already planned for same slot+person
+      const alreadyPlannedDuplicate = planned.some(
+        (p) =>
+          p.targetStartUTC.getTime() === slotKey &&
+          ((p.source.userId && app.userId && p.source.userId === app.userId) ||
+            (p.source.contactPhone && app.contactPhone && p.source.contactPhone.replace(/\D/g, '').slice(-8) === app.contactPhone.replace(/\D/g, '').slice(-8))),
+      );
+      if (isDuplicate || alreadyPlannedDuplicate) {
+        skippedDuplicate++;
+        items.push({
+          sourceId: app.id,
+          contactName: app.contactName,
+          sourceStartsAt: app.startsAt.toISOString(),
+          targetStartsAt: targetStartUTC.toISOString(),
+          targetEndsAt: targetEndUTC.toISOString(),
+          status: 'skipped_duplicate',
+          reason: 'Ya anotada en ese horario',
+        });
+        continue;
+      }
+
+      toCreate++;
+      pendingCountBySlot.set(slotKey, pendingForSlot + 1);
+      planned.push({ source: app, targetStartUTC, targetEndUTC, targetStartZone });
+      items.push({
+        sourceId: app.id,
+        contactName: app.contactName,
+        sourceStartsAt: app.startsAt.toISOString(),
+        targetStartsAt: targetStartUTC.toISOString(),
+        targetEndsAt: targetEndUTC.toISOString(),
+        status: dryRun ? 'will_create' : 'will_create',
+      });
+    }
+
+    let created = 0;
+    if (!dryRun) {
+      for (const p of planned) {
+        const app = p.source;
+        try {
+          // Resolve userId for contact if missing (keep original)
+          const createdRow = await this.prisma.appointment.create({
+            data: {
+              businessId,
+              serviceId: app.serviceId,
+              userId: app.userId,
+              contactName: app.contactName,
+              contactPhone: app.contactPhone,
+              contactEmail: app.contactEmail,
+              startsAt: p.targetStartUTC,
+              endsAt: p.targetEndUTC,
+              timezone: zone,
+              status: 'confirmed',
+              isTrial: !!(app as any).isTrial,
+              notes: app.notes,
+            },
+          });
+          // try google sync best-effort
+          try {
+            const summary = this.buildAppointmentTitle(
+              app.contactName || app.contactPhone || 'Alumna',
+              !!(app as any).isTrial,
+              null,
+              app.service?.name,
+            );
+            const googleId = await this.google.createEvent({
+              businessId,
+              summary,
+              description: [
+                app.contactPhone ? `Tel: ${app.contactPhone}` : null,
+                app.contactEmail ? `Email: ${app.contactEmail}` : null,
+                app.notes ?? null,
+              ]
+                .filter(Boolean)
+                .join('\n'),
+              startsAt: p.targetStartUTC,
+              endsAt: p.targetEndUTC,
+              timezone: zone,
+              attendeeEmail: app.contactEmail ?? undefined,
+            });
+            if (googleId) {
+              await this.prisma.appointment.update({ where: { id: createdRow.id }, data: { googleEventId: googleId } });
+            }
+          } catch (e) {
+            this.logger.warn(`replicate google sync failed ${createdRow.id}: ${e instanceof Error ? e.message : 'unknown'}`);
+          }
+          created++;
+          const idx = items.findIndex((it) => it.sourceId === app.id && it.status === 'will_create');
+          if (idx >= 0) items[idx].status = 'created';
+        } catch (e: any) {
+          const msg = e instanceof Error ? e.message : String(e);
+          errors.push({ sourceId: app.id, message: msg });
+          const idx = items.findIndex((it) => it.sourceId === app.id && it.status === 'will_create');
+          if (idx >= 0) {
+            items[idx].status = 'error';
+            items[idx].reason = msg;
+          }
+        }
+      }
+      // update counts for response: toCreate stays as planned, created as actual
+    }
+
+    return {
+      businessId,
+      sourceFrom: sourceFromDT.toISO()!,
+      sourceTo: sourceToDT.toISO()!,
+      targetFrom: targetStartDay.toISODate()!,
+      dryRun,
+      totalSource: sourceApps.length,
+      toCreate,
+      skippedDuplicate,
+      skippedFull,
+      skippedNoTemplate,
+      created,
+      items,
+      errors,
+    };
+  }
+
   private buildAppointmentTitle(contactLabel: string, isTrial: boolean, progress: { display: string } | null, serviceName?: string | null): string {
     if (isTrial) return `${contactLabel} — clase de prueba`;
     if (progress) return `${contactLabel} — clase ${progress.display}`;

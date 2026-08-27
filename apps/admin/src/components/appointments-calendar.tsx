@@ -8,6 +8,7 @@ import {
   type ClassSession,
 } from '@/components/class-roster-view';
 import { PersonSheet, type PersonTarget } from '@/components/person-sheet';
+import { ReplicateWeekDialog } from '@/components/replicate-week-dialog';
 
 interface CalendarFeedItem {
   id: string;
@@ -229,6 +230,7 @@ export function AppointmentsCalendar() {
   const [viewReady, setViewReady] = useState(false);
   const [selected, setSelected] = useState<CalendarFeedItem | null>(null);
   const [person, setPerson] = useState<PersonTarget | null>(null);
+  const [replicateOpen, setReplicateOpen] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
@@ -399,6 +401,16 @@ export function AppointmentsCalendar() {
           >
             ›
           </button>
+          {view !== 'month' ? (
+            <button
+              type="button"
+              className="min-h-9 rounded-lg border border-line bg-panel px-3 text-sm font-medium text-text hover:bg-panel-2"
+              onClick={() => setReplicateOpen(true)}
+              title="Copiar las alumnas de esta semana a otra semana"
+            >
+              Duplicar semana
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -465,6 +477,13 @@ export function AppointmentsCalendar() {
         />
       ) : null}
       <PersonSheet target={person} open={!!person} onClose={() => setPerson(null)} />
+      <ReplicateWeekDialog
+        open={replicateOpen}
+        onClose={() => setReplicateOpen(false)}
+        sourceFrom={range.from.toISOString()}
+        sourceTo={range.to.toISOString()}
+        viewLabel={view === 'day' ? 'día' : 'semana'}
+      />
     </div>
   );
 }
