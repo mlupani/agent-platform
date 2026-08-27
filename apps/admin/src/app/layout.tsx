@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { AppFrame } from '@/components/app-frame';
+import { BrandingFavicon } from '@/components/branding-favicon';
 import './globals.css';
 
 const sans = Plus_Jakarta_Sans({
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="es" className={`${sans.variable} ${mono.variable} h-full`}>
       <body className="min-h-full antialiased">
+        <BrandingFavicon />
         <Providers>
           <AppFrame>{children}</AppFrame>
         </Providers>
