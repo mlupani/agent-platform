@@ -11,6 +11,7 @@ interface AgentConfig {
   id: string;
   name: string;
   tone?: string;
+  model?: string;
   systemPrompt: string;
   customInstructions?: string | null;
   personality?: string | null;
@@ -98,6 +99,7 @@ export function PersonalizationEditor() {
 
   const agent = data?.agentConfigs?.[0];
   const [tone, setTone] = useState('professional_warm');
+  const [model, setModel] = useState('gpt-4.1-mini');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -164,6 +166,7 @@ export function PersonalizationEditor() {
     }
     if (agent) {
       setTone(agent.tone ?? 'professional_warm');
+      setModel(agent.model ?? 'gpt-4.1-mini');
       setSystemPrompt(agent.systemPrompt ?? '');
     }
   }
@@ -172,7 +175,7 @@ export function PersonalizationEditor() {
     mutationFn: () =>
       api('/admin/business/assistant', {
         method: 'PATCH',
-        body: JSON.stringify({ tone, systemPrompt }),
+        body: JSON.stringify({ tone, model, systemPrompt }),
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['current-business'] });
@@ -358,6 +361,22 @@ export function PersonalizationEditor() {
       {tab === 'general' ? (
         <section className="panel rounded-2xl p-5 space-y-4">
           <h3 className="font-medium">Identidad del agente</h3>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted">Modelo</span>
+            <select
+              className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+            >
+              <option value="gpt-4.1-mini">gpt-4.1-mini — rápido y económico</option>
+              <option value="gpt-4o-mini">gpt-4o-mini — equilibrado</option>
+              <option value="gpt-5-mini">gpt-5-mini — más capaz</option>
+              <option value="gpt-4.1">gpt-4.1 — máxima calidad</option>
+              <option value="gpt-4o">gpt-4o — flagship</option>
+              <option value="gpt-5">gpt-5 — razonamiento</option>
+            </select>
+            <span className="block text-xs text-muted mt-1">Permitidos: {['gpt-4.1-mini','gpt-4o-mini','gpt-5-mini','gpt-4.1','gpt-4o','gpt-5'].join(' · ')} — se aplica a Playground, WhatsApp e Instagram.</span>
+          </label>
           <label className="block space-y-1 text-sm">
             <span className="text-muted">Tono</span>
             <select

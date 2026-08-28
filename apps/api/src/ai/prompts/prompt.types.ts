@@ -50,6 +50,7 @@ export interface AgentPromptContext {
   memoryContext?: string;
   knowledgeContext?: string;
   enabledTools: string[];
+  whatsappConnected?: boolean;
 }
 
 /** @deprecated Prefer AgentPromptContext + buildFromContext */

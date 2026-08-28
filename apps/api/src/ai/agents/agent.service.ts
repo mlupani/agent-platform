@@ -191,7 +191,7 @@ export class AgentService {
       });
     }
 
-    const [hours, services] = await Promise.all([
+    const [hours, services, whatsappConfig] = await Promise.all([
       this.prisma.businessHour.findMany({
         where: { businessId: business.id },
         orderBy: { dayOfWeek: 'asc' },
@@ -200,7 +200,14 @@ export class AgentService {
         where: { businessId: business.id, enabled: true },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       }),
+      this.prisma.whatsAppConfig.findUnique({
+        where: { businessId: business.id },
+        select: { enabled: true, status: true, agentEnabled: true },
+      }),
     ]);
+    const whatsappConnected = Boolean(
+      whatsappConfig?.enabled && whatsappConfig?.agentEnabled && whatsappConfig?.status === 'connected',
+    );
 
     const configuredMessages = this.parseConfiguredMessages(
       business.defaultMessages,
@@ -245,6 +252,7 @@ export class AgentService {
         .join('\n\n'),
       knowledgeContext: this.rag.formatContext(ragChunks),
       enabledTools: agentConfig.enabledTools,
+      whatsappConnected,
     });
 
     const llmMessages: LlmMessage[] = [

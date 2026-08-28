@@ -177,20 +177,25 @@ export class PromptBuilderService {
     if (!enabledTools.length) {
       return 'No hay herramientas habilitadas. Respondé solo con la información disponible en este prompt.';
     }
+    const wa = ctx.whatsappConnected === true;
     return [
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
       `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
-      `Si el usuario deja datos de contacto y NO reserva, usá createLead.`,
+      `Si el usuario deja datos de contacto y NO reserva, usá createLead. Siempre pedí teléfono como dato de contacto, sin prometer confirmación por WhatsApp si no corresponde.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
-      `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`,
+      wa
+        ? `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`
+        : `WhatsApp NO está conectado en este negocio: NO menciones ni ofrezcas confirmación por WhatsApp, NO digas que vas a enviar mensaje por WhatsApp, NO uses sendWhatsAppMessage. Pedí el teléfono solo como dato de contacto para el turno.`,
       ctx.business.googleReviewsUrl
-        ? `Si createAppointment fue exitoso y hay link de reseñas de Google (${ctx.business.googleReviewsUrl}), incluilo en el cuerpo de sendEmail/sendWhatsAppMessage pidiendo amablemente que dejen una reseña. No lo uses en cancelaciones ni en otros mensajes.`
+        ? wa
+          ? `Si createAppointment fue exitoso y hay link de reseñas de Google (${ctx.business.googleReviewsUrl}), incluilo en el cuerpo de sendEmail/sendWhatsAppMessage pidiendo amablemente que dejen una reseña. No lo uses en cancelaciones ni en otros mensajes.`
+          : `Si createAppointment fue exitoso y hay link de reseñas de Google (${ctx.business.googleReviewsUrl}), incluilo solo en sendEmail pidiendo amablemente que dejen una reseña. No lo uses en cancelaciones ni en otros mensajes.`
         : null,
-      `No pidas autorización verbal extra para sendEmail/sendWhatsAppMessage: si el usuario pidió la confirmación y ya dio el canal (email/teléfono), ejecutá la tool sin repreguntar.`,
-      `Si sendEmail o sendWhatsAppMessage fallan, confirmá el turno en este chat con los datos del turno. No digas que "falta una integración" ni derives a un humano salvo que el usuario lo pida.`,
+      wa ? `No pidas autorización verbal extra para sendEmail/sendWhatsAppMessage: si el usuario pidió la confirmación y ya dio el canal (email/teléfono), ejecutá la tool sin repreguntar.` : `No pidas autorización verbal extra para sendEmail: si el usuario dio email y createAppointment fue exitoso, ejecutá sendEmail sin repreguntar.`,
+      `Si sendEmail${wa ? ' o sendWhatsAppMessage' : ''} falla, confirmá el turno en este chat con los datos del turno. No digas que "falta una integración" ni derives a un humano salvo que el usuario lo pida.`,
       `checkAvailability exige fecha YYYY-MM-DD según la fecha actual del prompt; si avisa fecha pasada, corregí UNA vez y reintentá.`,
       `No repitas la misma herramienta con los mismos argumentos. Después de un resultado exitoso, contestá al usuario.`,
       `Para derivar a un humano: requestHumanAssistance.`,
