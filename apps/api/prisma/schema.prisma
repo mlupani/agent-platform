@@ -125,7 +125,7 @@ model Service {
   business            Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   name                String
   description         String?
-  durationMinutes     Int      @default(30)
+  durationMinutes     Int?
   price               Decimal? @db.Decimal(12, 2)
   priceDescription    String?
   enabled             Boolean  @default(true)

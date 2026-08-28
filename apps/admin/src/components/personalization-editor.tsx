@@ -26,7 +26,7 @@ interface ServiceRow {
   id: string;
   name: string;
   description?: string | null;
-  durationMinutes: number;
+  durationMinutes: number | null;
   price?: string | number | null;
   enabled: boolean;
 }
@@ -118,6 +118,15 @@ export function PersonalizationEditor() {
   const [preferNotes, setPreferNotes] = useState('');
   const [avoidNotes, setAvoidNotes] = useState('');
   const [brandExtra, setBrandExtra] = useState('');
+  const [svcName, setSvcName] = useState('');
+  const [svcDesc, setSvcDesc] = useState('');
+  const [svcDuration, setSvcDuration] = useState('');
+  const [svcPrice, setSvcPrice] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editDuration, setEditDuration] = useState('');
+  const [editPrice, setEditPrice] = useState('');
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   if (data && data.id !== hydratedId) {
     setHydratedId(data.id);
@@ -227,6 +236,48 @@ export function PersonalizationEditor() {
           avoidNotes: avoidNotes.trim() || null,
           additionalInstructions: brandExtra.trim() || null,
         }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+    },
+  });
+
+  const createService = useMutation({
+    mutationFn: () =>
+      api('/admin/services', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: svcName.trim(),
+          description: svcDesc.trim() || undefined,
+          durationMinutes: svcDuration.trim() ? Number(svcDuration) : null,
+          price: svcPrice.trim() ? Number(svcPrice) : null,
+        }),
+      }),
+    onSuccess: async () => {
+      setSvcName('');
+      setSvcDesc('');
+      setSvcDuration('');
+      setSvcPrice('');
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+    },
+  });
+
+  const updateService = useMutation({
+    mutationFn: ({ id, data: d }: { id: string; data: Record<string, unknown> }) =>
+      api(`/admin/services/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(d),
+      }),
+    onSuccess: async () => {
+      setEditingId(null);
+      await queryClient.invalidateQueries({ queryKey: ['current-business'] });
+    },
+  });
+
+  const deleteService = useMutation({
+    mutationFn: (id: string) =>
+      api(`/admin/services/${id}`, {
+        method: 'DELETE',
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['current-business'] });
@@ -669,40 +720,62 @@ export function PersonalizationEditor() {
       ) : null}
 
       {tab === 'servicios' ? (
-        <section className="panel rounded-2xl p-5 space-y-3">
-          <p className="text-sm text-muted">
-            Servicios que el agente puede ofrecer al agendar citas.
-          </p>
-          <ul className="divide-y divide-line">
+        <section className="panel rounded-2xl p-5 space-y-4">
+          <p className="text-sm text-muted">Servicios que el agente puede ofrecer al agendar citas. La duración es opcional.</p>
+
+          <div className="rounded-xl border border-line bg-panel-2/40 p-4 space-y-3">
+            <p className="text-sm font-medium">Nuevo servicio</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" placeholder="Nombre *" value={svcName} onChange={(e) => setSvcName(e.target.value)} />
+              <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" placeholder="Duración (min) — opcional" type="number" min={5} value={svcDuration} onChange={(e) => setSvcDuration(e.target.value)} />
+              <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm sm:col-span-2" placeholder="Descripción" value={svcDesc} onChange={(e) => setSvcDesc(e.target.value)} />
+              <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" placeholder="Precio — opcional" type="number" min={0} value={svcPrice} onChange={(e) => setSvcPrice(e.target.value)} />
+              <button type="button" disabled={!svcName.trim() || createService.isPending} onClick={() => createService.mutate()} className="rounded-lg bg-accent text-white px-4 py-2 text-sm font-medium disabled:opacity-50">
+                {createService.isPending ? 'Creando…' : 'Agregar'}
+              </button>
+            </div>
+            {createService.error ? <p className="text-sm text-rose">{(createService.error as Error).message}</p> : null}
+          </div>
+
+          <ul className="divide-y divide-line border-t border-line">
             {(data?.services ?? []).map((service) => (
-              <li
-                key={service.id}
-                className="py-3 flex items-center justify-between gap-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{service.name}</p>
-                  <p className="text-xs text-muted">
-                    {service.durationMinutes} min
-                    {service.price !== null && service.price !== undefined
-                      ? ` · $${service.price}`
-                      : ''}
-                  </p>
-                </div>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full ${
-                    service.enabled ? 'badge-success' : 'badge-muted'
-                  }`}
-                >
-                  {service.enabled ? 'Activo' : 'Off'}
-                </span>
+              <li key={service.id} className="py-3 text-sm">
+                {editingId === service.id ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nombre" />
+                      <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" type="number" value={editDuration} onChange={(e) => setEditDuration(e.target.value)} placeholder="Duración (min) — vacío = sin duración" />
+                      <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm sm:col-span-2" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Descripción" />
+                      <input className="rounded-lg border border-line bg-panel px-3 py-2 text-sm" type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Precio" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={updateService.isPending} onClick={() => updateService.mutate({ id: service.id, data: { name: editName.trim(), description: editDesc.trim() || null, durationMinutes: editDuration.trim() ? Number(editDuration) : null, price: editPrice.trim() ? Number(editPrice) : null } })} className="rounded-lg bg-accent text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Guardar</button>
+                      <button type="button" onClick={() => setEditingId(null)} className="rounded-lg border border-line px-3 py-1.5 text-xs">Cancelar</button>
+                    </div>
+                    {updateService.error ? <p className="text-xs text-rose">{(updateService.error as Error).message}</p> : null}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{service.name}</p>
+                      <p className="text-xs text-muted truncate">
+                        {service.durationMinutes ? `${service.durationMinutes} min` : 'Sin duración'}
+                        {service.price !== null && service.price !== undefined && service.price !== '' ? ` · $${service.price}` : ''}
+                        {service.description ? ` · ${service.description}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${service.enabled ? 'badge-success' : 'badge-muted'}`}>{service.enabled ? 'Activo' : 'Off'}</span>
+                      <button type="button" onClick={() => { setEditingId(service.id); setEditName(service.name); setEditDesc(service.description ?? ''); setEditDuration(service.durationMinutes?.toString() ?? ''); setEditPrice(service.price?.toString() ?? ''); }} className="rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-panel-2">Editar</button>
+                      <button type="button" onClick={() => { if (confirm(`Eliminar "${service.name}"?`)) deleteService.mutate(service.id); }} className="rounded-lg border border-rose/20 text-rose px-2.5 py-1.5 text-xs hover:bg-rose/10">Eliminar</button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
-            {!data?.services?.length ? (
-              <li className="py-4 text-sm text-muted">
-                No hay servicios todavía.
-              </li>
-            ) : null}
+            {!data?.services?.length ? <li className="py-4 text-sm text-muted">No hay servicios todavía.</li> : null}
           </ul>
+          {deleteService.error ? <p className="text-sm text-rose">{(deleteService.error as Error).message}</p> : null}
         </section>
       ) : null}
 

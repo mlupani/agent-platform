@@ -65,7 +65,8 @@ export const createServiceSchema = z.object({
     .int()
     .min(5)
     .max(24 * 60)
-    .default(30),
+    .optional()
+    .nullable(),
   price: z.number().nonnegative().optional().nullable(),
   priceDescription: z.string().max(200).optional().nullable(),
   enabled: z.boolean().optional(),

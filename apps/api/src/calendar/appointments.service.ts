@@ -175,7 +175,7 @@ export class AppointmentsService {
         },
       });
       if (!service) throw new NotFoundException('Servicio no encontrado');
-      duration = service.durationMinutes;
+      duration = service.durationMinutes ?? 30;
       serviceName = service.name;
     }
 
@@ -217,7 +217,7 @@ export class AppointmentsService {
       where: { id: input.businessId },
     });
 
-    let service: { id: string; name: string; durationMinutes: number } | null =
+    let service: { id: string; name: string; durationMinutes: number | null } | null =
       null;
     if (input.serviceId) {
       service = await this.prisma.service.findFirst({

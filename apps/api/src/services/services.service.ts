@@ -33,7 +33,7 @@ export class ServicesService {
   async create(input: {
     name: string;
     description?: string;
-    durationMinutes?: number;
+    durationMinutes?: number | null;
     price?: number | null;
     priceDescription?: string | null;
     enabled?: boolean;
@@ -47,7 +47,7 @@ export class ServicesService {
         businessId,
         name: input.name,
         description: input.description,
-        durationMinutes: input.durationMinutes ?? 30,
+        durationMinutes: input.durationMinutes ?? null,
         price:
           input.price === undefined || input.price === null
             ? null
@@ -66,7 +66,7 @@ export class ServicesService {
     input: Partial<{
       name: string;
       description: string;
-      durationMinutes: number;
+      durationMinutes: number | null;
       price: number | null;
       priceDescription: string | null;
       enabled: boolean;
@@ -80,6 +80,10 @@ export class ServicesService {
       where: { id },
       data: {
         ...input,
+        durationMinutes:
+          input.durationMinutes === undefined
+            ? undefined
+            : input.durationMinutes,
         price:
           input.price === undefined
             ? undefined
@@ -100,7 +104,7 @@ export class ServicesService {
     services: Array<{
       name: string;
       description: string | null;
-      durationMinutes: number;
+      durationMinutes: number | null;
       price: Prisma.Decimal | null;
       priceDescription: string | null;
       requiresAppointment: boolean;
@@ -114,7 +118,8 @@ export class ServicesService {
           (service.price != null
             ? `$${service.price.toString()}`
             : 'Consultar');
-        return `- ${service.name} (${service.durationMinutes} min) — ${price}${
+        const dur = service.durationMinutes ? ` (${service.durationMinutes} min)` : '';
+        return `- ${service.name}${dur} — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;
       })

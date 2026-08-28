@@ -234,7 +234,7 @@ export class PromptBuilderService {
       id?: string;
       name: string;
       description?: string | null;
-      durationMinutes: number;
+      durationMinutes: number | null;
       price?: { toString(): string } | string | null;
       priceDescription?: string | null;
       requiresAppointment?: boolean;
@@ -247,7 +247,8 @@ export class PromptBuilderService {
           service.priceDescription ||
           (service.price != null ? `$${String(service.price)}` : 'Consultar');
         const idPart = service.id ? ` [id=${service.id}]` : '';
-        return `- ${service.name}${idPart} (${service.durationMinutes} min) — ${price}${
+        const dur = service.durationMinutes ? ` (${service.durationMinutes} min)` : '';
+        return `- ${service.name}${idPart}${dur} — ${price}${
           service.description ? `: ${service.description}` : ''
         }${service.requiresAppointment ? ' [requiere cita]' : ''}`;
       })

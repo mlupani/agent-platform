@@ -621,7 +621,7 @@ Reglas de imagePrompt (CRÍTICO — la imagen debe ser una PIEZA DE MARKETING, n
         id: string;
         name: string;
         description: string | null;
-        durationMinutes: number;
+        durationMinutes: number | null;
         price: { toString(): string } | null;
       }>;
       businessHours: Array<{
