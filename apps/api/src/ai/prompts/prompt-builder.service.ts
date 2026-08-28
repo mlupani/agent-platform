@@ -181,10 +181,15 @@ export class PromptBuilderService {
     return [
       `Herramientas habilitadas: ${enabledTools.join(', ')}.`,
       `Horarios y servicios ya están en este prompt: no llames getOpeningHours/getServices salvo que falte un dato concreto.`,
-      `Para turnos: checkAvailability → respondé al usuario con 2–4 horarios → createAppointment solo si pide reservar. Nunca inventes horarios libres.`,
+      `FLUJO OBLIGATORIO PARA TURNOS - PROHIBIDO DESVIARSE:`,
+      `1) checkAvailability(date) → ofrece 2-4 horarios concretos al usuario y recordá el horario elegido.`,
+      `2) Cuando el usuario elige un horario (ej: "mañana 10hs", "el de las 14:00", "el primero"), pedí NOMBRE y TELÉFONO si aún no los tenés. NO vuelvas a consultar disponibilidad.`,
+      `3) Cuando el usuario te da el teléfono (aunque sea solo el número sin nombre), llamá DIRECTAMENTE a createAppointment con startsAt = el horario que ya elegiste convertido a ISO 8601 con la zona horaria del negocio (${ctx.business.timezone}), sin volver a llamar checkAvailability. PROHIBIDO re-consultar horarios después de pedir teléfono.`,
+      `4) Si el usuario ya dio teléfono antes y luego elige horario, también llamá directamente createAppointment.`,
+      `Si ya ofreciste horarios y el usuario acaba de dar teléfono, tu ÚNICA acción válida es createAppointment - cualquier nuevo checkAvailability es un ERROR.`,
       `createAppointment ya guarda el lead si hay nombre, teléfono o email: no hace falta createLead después de reservar.`,
       `Si el usuario deja datos de contacto y NO reserva, usá createLead. Siempre pedí teléfono como dato de contacto, sin prometer confirmación por WhatsApp si no corresponde.`,
-      `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
+      `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio. createAppointment requiere startsAt ISO con offset de la zona horaria (ej: 2026-08-28T10:00:00-03:00).`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,
       wa
         ? `Si el usuario pidió o aceptó confirmación por WhatsApp (o dio teléfono), usá sendWhatsAppMessage con el cuerpo de confirmación. No inventes números.`
