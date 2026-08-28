@@ -51,6 +51,17 @@ export function LeadsList() {
     queryFn: () => api<LeadRow[]>('/admin/leads'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      api(`/admin/leads/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['leads'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
   return (
     <div className="space-y-6 max-w-4xl">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -108,14 +119,26 @@ export function LeadsList() {
                       {new Date(lead.createdAt).toLocaleString('es-AR')}
                     </p>
                   </div>
-                  {lead.conversationId ? (
-                    <Link
-                      href={`/conversations?c=${lead.conversationId}`}
-                      className="text-sm text-accent hover:underline min-h-10 inline-flex items-center"
+                  <div className="flex items-center gap-2 shrink-0">
+                    {lead.conversationId ? (
+                      <Link
+                        href={`/conversations?c=${lead.conversationId}`}
+                        className="text-sm text-accent hover:underline min-h-10 inline-flex items-center"
+                      >
+                        Ver conversación
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Eliminar lead "${lead.name || lead.phone || lead.email || lead.id}"?`)) deleteMutation.mutate(lead.id);
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="text-sm text-rose hover:bg-rose/10 border border-rose/20 rounded-lg px-2.5 py-1.5 min-h-8 disabled:opacity-50"
                     >
-                      Ver conversación
-                    </Link>
-                  ) : null}
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
                 <dl className="grid gap-1 text-sm sm:grid-cols-2">
                   {lead.phone ? (

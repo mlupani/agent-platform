@@ -101,6 +101,7 @@ export function PlaygroundClient() {
   const [openRag, setOpenRag] = useState(false);
   const [openHist, setOpenHist] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const executionsQuery = useQuery({
     queryKey: ['executions', conversationId],
@@ -114,6 +115,10 @@ export function PlaygroundClient() {
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, loading]);
+
+  useEffect(() => {
+    if (!loading) inputRef.current?.focus();
   }, [messages, loading]);
 
   function resetSession() {
@@ -136,6 +141,7 @@ export function PlaygroundClient() {
     const now = formatTime();
     setMessages((current) => [...current, { role: 'user', content: userMessage, at: now }]);
     setInput('');
+    requestAnimationFrame(() => inputRef.current?.focus());
     try {
       const result = await api<ChatResponse>('/chat/messages', {
         method: 'POST',
@@ -325,6 +331,8 @@ export function PlaygroundClient() {
                       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx="12" cy="12" r="8.5" /><path d="M8 14c1 1.2 2.3 1.8 4 1.8s3-.6 4-1.8" /><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none" /></svg>
                     </button>
                     <input
+                      ref={inputRef}
+                      autoFocus
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => {

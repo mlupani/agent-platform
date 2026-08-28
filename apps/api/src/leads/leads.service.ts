@@ -122,6 +122,17 @@ export class LeadsService {
     return created;
   }
 
+  async remove(id: string): Promise<{ ok: true }> {
+    const businessId = await this.businesses.getCurrentId();
+    const lead = await this.prisma.lead.findFirst({
+      where: { id, businessId },
+      select: { id: true },
+    });
+    if (!lead) throw new BadRequestException('Lead no encontrado');
+    await this.prisma.lead.delete({ where: { id: lead.id } });
+    return { ok: true };
+  }
+
   async list(): Promise<LeadListItem[]> {
     const businessId = await this.businesses.getCurrentId();
     const rows = await this.prisma.lead.findMany({

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -40,5 +40,10 @@ export class LeadsAdminController {
     body: z.infer<typeof createManualSchema>,
   ) {
     return this.leads.createManual(body);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.leads.remove(id);
   }
 }
