@@ -5,6 +5,7 @@ import { SecretsService } from '../common/crypto/secrets.service';
 import { PacksModule } from '../packs/packs.module';
 import { EmailModule } from '../email/email.module';
 import { LeadsModule } from '../leads/leads.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { AppointmentsAdminController } from './appointments-admin.controller';
@@ -32,6 +33,7 @@ import { GoogleCalendarService } from './google-calendar.service';
     BusinessesModule,
     EmailModule,
     LeadsModule,
+    NotificationsModule,
     forwardRef(() => WhatsAppModule),
     forwardRef(() => SocialModule),
     PacksModule,

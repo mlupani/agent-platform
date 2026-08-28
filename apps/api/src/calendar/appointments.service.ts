@@ -10,6 +10,7 @@ import { LeadConversionService } from '../leads/lead-conversion.service';
 import { AvailabilityService } from './availability.service';
 import { GoogleCalendarService } from './google-calendar.service';
 import { PackBalanceService } from '../packs/pack-balance.service';
+import { AdminNotifyService } from '../notifications/admin-notify.service';
 import type { CreateAppointmentInput } from './calendar.types';
 
 @Injectable()
@@ -22,6 +23,7 @@ export class AppointmentsService {
     private readonly google: GoogleCalendarService,
     private readonly conversions: LeadConversionService,
     private readonly packs: PackBalanceService,
+    private readonly adminNotify: AdminNotifyService,
   ) {}
 
   async list(
@@ -667,6 +669,8 @@ export class AppointmentsService {
       },
     });
 
+    void this.adminNotify.notifyAppointmentCreated(created);
+
     if ((created.status ?? 'confirmed') === 'confirmed') {
       await this.conversions.maybeConvertFromSignal({
         businessId: input.businessId,
@@ -748,7 +752,9 @@ export class AppointmentsService {
             },
           });
         });
-        return this.get(businessId, id);
+        const refunded = await this.get(businessId, id);
+        void this.adminNotify.notifyAppointmentCancelled(refunded);
+        return refunded;
       } catch (error) {
         this.logger.warn(
           `Refund falló para cita ${id}: ${error instanceof Error ? error.message : 'unknown'}`,
@@ -757,7 +763,7 @@ export class AppointmentsService {
       }
     }
 
-    return this.prisma.appointment.update({
+    const cancelled = await this.prisma.appointment.update({
       where: { id },
       data: {
         status: 'cancelled',
@@ -778,6 +784,8 @@ export class AppointmentsService {
         },
       },
     });
+    void this.adminNotify.notifyAppointmentCancelled(cancelled);
+    return cancelled;
   }
 
   async reschedule(businessId: string, id: string, startsAtInput: Date) {
@@ -830,7 +838,8 @@ export class AppointmentsService {
       where: { appointmentId: id },
     });
 
-    return this.prisma.appointment.update({
+    const previousStartsAt = appointment.startsAt;
+    const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
         startsAt: startsAt.toUTC().toJSDate(),
@@ -848,6 +857,11 @@ export class AppointmentsService {
         },
       },
     });
+    void this.adminNotify.notifyAppointmentRescheduled({
+      ...updated,
+      previousStartsAt,
+    });
+    return updated;
   }
 
   async findForContact(businessId: string, phone?: string, email?: string) {

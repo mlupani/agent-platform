@@ -32,6 +32,7 @@ import { VoiceModule } from './voice/voice.module';
 import { CompositionModule } from './composition/composition.module';
 import { PacksModule } from './packs/packs.module';
 import { StudentsModule } from './students/students.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -82,6 +83,7 @@ import { AppService } from './app.service';
     CompositionModule,
     PacksModule,
     StudentsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

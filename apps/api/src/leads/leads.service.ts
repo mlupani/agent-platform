@@ -9,6 +9,7 @@ import { BusinessesService } from '../businesses/businesses.service';
 import { LeadContactabilityService } from './lead-contactability.service';
 import { LeadConversionService } from './lead-conversion.service';
 import { LeadEventsService } from './lead-events.service';
+import { AdminNotifyService } from '../notifications/admin-notify.service';
 import { LeadFollowUpService } from './lead-follow-up.service';
 import {
   TERMINAL_LEAD_STATUSES,
@@ -76,6 +77,7 @@ export class LeadsService {
     private readonly events: LeadEventsService,
     private readonly conversion: LeadConversionService,
     private readonly followUps: LeadFollowUpService,
+    private readonly adminNotify: AdminNotifyService,
   ) {}
 
   async capture(input: LeadCaptureInput): Promise<{ id: string } | null> {
@@ -201,6 +203,17 @@ export class LeadsService {
       type: 'captured',
       actor: input.metadata?.origin === 'manual' ? 'admin' : 'agent',
       payload: { source: input.source, status: nextStatus },
+    });
+    void this.adminNotify.notifyLeadCreated({
+      businessId: input.businessId,
+      id: created.id,
+      name: created.name,
+      email: created.email,
+      phone: created.phone,
+      source: created.source,
+      interest: created.interest,
+      message: created.message,
+      status: created.status,
     });
     if (nextStatus === 'interested') {
       await this.followUps.scheduleAutoSequence(input.businessId, created.id);

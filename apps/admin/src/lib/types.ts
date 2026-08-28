@@ -333,6 +333,13 @@ export interface LeadLifecycleConfig {
   trialClientStatusSlug: string;
 }
 
+export interface AdminNotifyConfig {
+  enabled: boolean;
+  email: string | null;
+  events: string[];
+  emailConfigured: boolean;
+}
+
 export interface CatalogService {
   id: string;
   name: string;

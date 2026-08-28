@@ -4,6 +4,7 @@ import { AiModule } from '../ai/ai.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { ChannelsModule } from '../channels/channels.module';
 import { EmailModule } from '../email/email.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { SocialModule } from '../social/social.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { LeadContactabilityService } from './lead-contactability.service';
@@ -25,6 +26,7 @@ import { LeadsService } from './leads.service';
   imports: [
     BusinessesModule,
     EmailModule,
+    NotificationsModule,
     ChannelsModule,
     forwardRef(() => WhatsAppModule),
     forwardRef(() => SocialModule),

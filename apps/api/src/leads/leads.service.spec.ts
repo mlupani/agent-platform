@@ -26,6 +26,9 @@ describe('LeadsService', () => {
     scheduleAutoSequence: jest.fn().mockResolvedValue([]),
     cancelPendingAuto: jest.fn().mockResolvedValue(undefined),
   };
+  const adminNotify = {
+    notifyLeadCreated: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new LeadsService(
     prisma as never,
     businesses as never,
@@ -33,6 +36,7 @@ describe('LeadsService', () => {
     events as never,
     conversion as never,
     followUps as never,
+    adminNotify as never,
   );
 
   beforeEach(() => {
@@ -138,6 +142,9 @@ describe('LeadsService', () => {
       }),
     });
     expect(events.append).toHaveBeenCalled();
+    expect(adminNotify.notifyLeadCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'lead-1', businessId: 'biz-1' }),
+    );
   });
 
   it('updates the existing lead for the same conversation', async () => {
@@ -169,6 +176,7 @@ describe('LeadsService', () => {
     ).resolves.toEqual({ id: 'lead-1' });
 
     expect(prisma.lead.create).not.toHaveBeenCalled();
+    expect(adminNotify.notifyLeadCreated).not.toHaveBeenCalled();
     expect(prisma.lead.update).toHaveBeenCalledWith({
       where: { id: 'lead-1' },
       data: expect.objectContaining({

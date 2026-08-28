@@ -30,6 +30,11 @@ describe('AppointmentsService', () => {
     getBalance: jest.fn().mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5 }),
     consumeCredit: jest.fn(),
   };
+  const adminNotify = {
+    notifyAppointmentCreated: jest.fn().mockResolvedValue(undefined),
+    notifyAppointmentCancelled: jest.fn().mockResolvedValue(undefined),
+    notifyAppointmentRescheduled: jest.fn().mockResolvedValue(undefined),
+  };
 
   const service = new AppointmentsService(
     prisma as never,
@@ -37,6 +42,7 @@ describe('AppointmentsService', () => {
     google as never,
     conversions as never,
     packs as never,
+    adminNotify as never,
   );
 
   beforeEach(() => {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { api, apiForm } from '@/lib/api';
+import { AdminNotifyForm } from '@/components/admin-notify-form';
 import { LeadLifecycleForm } from '@/components/lead-lifecycle-form';
 
 type Tab =
@@ -13,7 +14,8 @@ type Tab =
   | 'horarios'
   | 'servicios'
   | 'mensajes'
-  | 'leads';
+  | 'leads'
+  | 'avisos';
 
 interface AgentConfig {
   id: string;
@@ -285,7 +287,7 @@ export function PersonalizationEditor() {
           >
             Probar agente
           </Link>
-          {tab !== 'servicios' && tab !== 'leads' ? (
+          {tab !== 'servicios' && tab !== 'leads' && tab !== 'avisos' ? (
             <button
               type="button"
               onClick={saveCurrent}
@@ -308,6 +310,7 @@ export function PersonalizationEditor() {
             ['servicios', 'Servicios'],
             ['mensajes', 'Mensajes'],
             ['leads', 'Leads'],
+            ['avisos', 'Avisos'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -821,6 +824,8 @@ export function PersonalizationEditor() {
       ) : null}
 
       {tab === 'leads' ? <LeadLifecycleForm /> : null}
+
+      {tab === 'avisos' ? <AdminNotifyForm /> : null}
 
       {tab === 'mensajes' ? (
         <section className="panel rounded-2xl p-5 space-y-4">

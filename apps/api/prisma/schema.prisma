@@ -62,6 +62,7 @@ model Business {
   socialContentConfig  SocialContentConfig?
   appointmentReminderConfig AppointmentReminderConfig?
   leadLifecycleConfig  LeadLifecycleConfig?
+  adminNotifyConfig    AdminNotifyConfig?
   leadFollowUps        LeadFollowUp[]
   leadEvents           LeadEvent[]
   generatedContents    GeneratedContent[]
@@ -734,6 +735,21 @@ model LeadLifecycleConfig {
   updatedAt                  DateTime @updatedAt
 
   @@map("lead_lifecycle_configs")
+}
+
+/// Avisos por email al negocio cuando hay operaciones sensibles (agenda, leads, clientes).
+model AdminNotifyConfig {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  enabled    Boolean  @default(false)
+  email      String?
+  /// appointment.created | appointment.cancelled | appointment.rescheduled | lead.created | client.auto_created
+  events     String[] @default(["appointment.created", "lead.created", "client.auto_created"])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("admin_notify_configs")
 }
 
 model LeadFollowUp {

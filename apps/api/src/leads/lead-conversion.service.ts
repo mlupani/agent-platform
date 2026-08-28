@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { AdminNotifyService } from '../notifications/admin-notify.service';
 import { LeadEventsService } from './lead-events.service';
 import { LeadLifecycleService } from './lead-lifecycle.service';
 
@@ -13,6 +14,7 @@ export class LeadConversionService {
     private readonly prisma: PrismaService,
     private readonly events: LeadEventsService,
     private readonly lifecycle: LeadLifecycleService,
+    private readonly adminNotify: AdminNotifyService,
   ) {}
 
   async convert(input: {
@@ -111,11 +113,21 @@ export class LeadConversionService {
       return { suggested: true, leadId: lead.id };
     }
 
-    return this.convert({
+    const converted = await this.convert({
       businessId: input.businessId,
       leadId: lead.id,
       source: input.trigger,
     });
+    void this.adminNotify.notifyClientAutoCreated({
+      businessId: input.businessId,
+      leadId: converted.id,
+      userId: converted.userId,
+      name: converted.name,
+      email: converted.email,
+      phone: converted.phone,
+      source: input.trigger,
+    });
+    return converted;
   }
 
   private async findOpenLead(input: {
