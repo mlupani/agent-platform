@@ -157,11 +157,13 @@ function NavLinks({
   pathname,
   onNavigate,
   contentBadge = 0,
+  conversationsBadge = 0,
   role,
 }: {
   pathname: string;
   onNavigate?: () => void;
   contentBadge?: number;
+  conversationsBadge?: number;
   role: 'ADMIN' | 'USER';
 }) {
   const items = NAV.filter((item) => !item.adminOnly || role === 'ADMIN');
@@ -173,7 +175,11 @@ function NavLinks({
             ? pathname === '/'
             : pathname.startsWith(item.href);
         const badge =
-          item.href === '/content' && contentBadge > 0 ? contentBadge : 0;
+          item.href === '/content' && contentBadge > 0
+            ? contentBadge
+            : item.href === '/conversations' && conversationsBadge > 0
+              ? conversationsBadge
+              : 0;
         return (
           <Link
             key={item.href}
@@ -234,6 +240,13 @@ export function Shell({
     refetchInterval: 60_000,
   });
   const contentBadge = contentSummary?.drafts ?? 0;
+  const { data: conversations } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: () => api<Array<{ unreadCount?: number }>>('/admin/conversations?sync=0'),
+    staleTime: 20_000,
+    refetchInterval: 20_000,
+  });
+  const conversationsBadge = (conversations ?? []).reduce((acc, c) => acc + (c.unreadCount ?? 0), 0);
 
   const label =
     user.displayName?.trim() ||
@@ -283,6 +296,7 @@ export function Shell({
         <NavLinks
           pathname={pathname}
           contentBadge={contentBadge}
+          conversationsBadge={conversationsBadge}
           role={user.role}
         />
       </aside>
@@ -312,6 +326,7 @@ export function Shell({
             <NavLinks
               pathname={pathname}
               contentBadge={contentBadge}
+              conversationsBadge={conversationsBadge}
               role={user.role}
               onNavigate={() => setMenuOpen(false)}
             />

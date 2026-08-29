@@ -648,7 +648,7 @@ export function ConversationsInbox() {
                               ) : null}
                               {hasUnread ? (
                                 <span
-                                  className="inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full bg-accent text-white text-[11px] font-semibold px-1.5"
+                                  className="inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-semibold px-1.5"
                                   aria-label={`${unread} sin leer`}
                                 >
                                   {unread > 99 ? '99+' : unread}
