@@ -517,43 +517,6 @@ export class AppointmentsService {
         ? await this.prisma.appointment.findFirst({ where: { businessId: input.businessId, userId: input.userId, isTrial: true } })
         : null;
       if (prevTrialByUser) throw new BadRequestException('Ya utilizaste tu clase de prueba.');
-    } else {
-      // Validar saldo si es alumno identificado
-      let balanceUserId: string | null = input.userId || null;
-      if (!balanceUserId && input.contactPhone) {
-        const phoneDigits = input.contactPhone.replace(/\D/g, '').slice(-8);
-        const u = await this.prisma.user.findFirst({
-          where: { businessId: input.businessId, phone: { contains: phoneDigits } },
-          select: { id: true },
-        });
-        if (u) balanceUserId = u.id;
-      }
-      if (balanceUserId) {
-        try {
-          const balance = await this.packs.getBalance(input.businessId, balanceUserId);
-          if (!balance.hasAvailableClasses) {
-            // sin clases: permitir como clase de prueba si nunca la usó
-            const trialEligible = await this.isTrialEligible(input.businessId, balanceUserId);
-            if (trialEligible) {
-              effectiveIsTrial = true;
-              // no lanzar, se creará como isTrial
-            } else {
-              throw new BadRequestException(
-                'No tenés clases disponibles en tu pack. Renovás tu pack para poder reservar. Consultá a la profesora.',
-              );
-            }
-          }
-        } catch (e: any) {
-          if (e.message?.includes('No tenés clases disponibles')) throw e;
-          // si alumno no tiene packs pero es INACTIVE, también chequear trial
-          if (e.message?.includes('Alumno no encontrado')) {
-            // prospect sin packs pero con userId: chequear trial
-            const trialEligible = await this.isTrialEligible(input.businessId, balanceUserId);
-            if (trialEligible) effectiveIsTrial = true;
-          }
-          // si es otro error, ignorar (prospect sin pack)
-        }
-      }
     }
     // propagar effectiveIsTrial al input para el resto del flujo
     (input as any).effectiveIsTrial = effectiveIsTrial;
@@ -1033,9 +996,7 @@ export class AppointmentsService {
       try {
         await this.packs.consumeCredit({ businessId, userId, appointmentId: updated.id });
       } catch (e: any) {
-        // si no tiene saldo, no fallar el completado pero loggear
-        // lanzamos para que admin vea error, pero no revertimos status
-        throw new BadRequestException(e.message || 'No se pudo consumir crédito');
+        this.logger.warn(`consumeCredit sin saldo ${updated.id} user ${userId}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 

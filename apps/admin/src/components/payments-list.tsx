@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -76,12 +76,136 @@ function canUseClass(pass: { unusedCredits?: number; sessionsPaid: number; sessi
   return (pass.unusedCredits ?? pass.sessionsPaid - pass.sessionsUsed) > 0;
 }
 
+function canReturnClass(pass: { sessionsUsed: number }) {
+  return pass.sessionsUsed > 0;
+}
+
 function money(value: number) {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function ClientSearchSelect({
+  value,
+  onChange,
+  clients,
+  placeholder,
+  allowClear,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  clients: ClientRow[];
+  placeholder: string;
+  allowClear?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const sorted = useMemo(
+    () =>
+      [...clients].sort((a, b) =>
+        clientLabel(a).localeCompare(clientLabel(b), 'es', { sensitivity: 'base' }),
+      ),
+    [clients],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((c) => {
+      const label = clientLabel(c).toLowerCase();
+      const phone = (c.phone ?? '').toLowerCase();
+      const email = (c.email ?? '').toLowerCase();
+      return label.includes(q) || phone.includes(q) || email.includes(q);
+    });
+  }, [sorted, query]);
+
+  const selected = clients.find((c) => c.id === value);
+  const displayValue = open ? query : selected ? clientLabel(selected) : '';
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        className="input w-full pr-8"
+        value={displayValue}
+        placeholder={placeholder}
+        onFocus={() => {
+          setOpen(true);
+          setQuery('');
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onClick={() => setOpen(true)}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted text-xs">
+        ▾
+      </span>
+      {open ? (
+        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-line bg-panel shadow-lg">
+          {allowClear ? (
+            <button
+              type="button"
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-panel-2 ${!value ? 'bg-panel-2 font-medium' : ''}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                setQuery('');
+              }}
+            >
+              {placeholder}
+            </button>
+          ) : null}
+          {filtered.length ? (
+            filtered.map((client) => (
+              <button
+                key={client.id}
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-panel-2 ${value === client.id ? 'bg-panel-2 font-medium' : ''}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange(client.id);
+                  setOpen(false);
+                  setQuery('');
+                }}
+              >
+                {clientLabel(client)}
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-sm text-muted">Sin resultados</p>
+          )}
+        </div>
+      ) : null}
+      {selected && allowClear && !open ? (
+        <button
+          type="button"
+          className="absolute right-6 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xs px-1"
+          onClick={() => onChange('')}
+          aria-label="Limpiar"
+        >
+          ✕
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function dateLabel(value: string) {
@@ -167,6 +291,12 @@ export function PaymentsList() {
     onSuccess: () => refresh(),
   });
 
+  const returnPass = useMutation({
+    mutationFn: (passId: string) =>
+      api(`/admin/payments/passes/${passId}/return`, { method: 'POST' }),
+    onSuccess: () => refresh(),
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) =>
       api<{ id: string }>(`/admin/payments/${id}`, { method: 'DELETE' }),
@@ -210,18 +340,13 @@ export function PaymentsList() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 flex-1">
             <label className="space-y-1 text-sm">
               <span className="text-muted">Alumno</span>
-              <select
-                className="input w-full"
+              <ClientSearchSelect
                 value={clientId}
-                onChange={(event) => setClientId(event.target.value)}
-              >
-                <option value="">Todos</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {clientLabel(client)}
-                  </option>
-                ))}
-              </select>
+                onChange={setClientId}
+                clients={clients}
+                placeholder="Todos"
+                allowClear
+              />
             </label>
             <label className="space-y-1 text-sm">
               <span className="text-muted">Servicio</span>
@@ -425,20 +550,31 @@ export function PaymentsList() {
                       {payment.notes || 'Sin observación'}
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex flex-wrap gap-2 justify-end">
+                      <div className="flex flex-nowrap items-center gap-1.5 justify-end">
                         {payment.pass && canUseClass(payment.pass) ? (
                           <button
                             type="button"
-                            className="btn-secondary min-h-10 px-3 text-sm"
-                            disabled={consumePass.isPending}
+                            className="btn-secondary shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs"
+                            disabled={consumePass.isPending || returnPass.isPending}
                             onClick={() => consumePass.mutate(payment.pass!.id)}
                           >
                             Usar clase
                           </button>
                         ) : null}
+                        {payment.pass && canReturnClass(payment.pass) ? (
+                          <button
+                            type="button"
+                            className="btn-secondary shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs"
+                            disabled={consumePass.isPending || returnPass.isPending}
+                            onClick={() => returnPass.mutate(payment.pass!.id)}
+                            title="Devolver una clase usada por error"
+                          >
+                            Devolver clase
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          className="btn-secondary min-h-10 px-3 text-sm"
+                          className="btn-secondary shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs"
                           onClick={() => {
                             setEditing(payment);
                             setFormOpen(true);
@@ -450,7 +586,7 @@ export function PaymentsList() {
                           <>
                             <button
                               type="button"
-                              className="min-h-10 px-3 text-sm rounded-lg bg-rose text-white disabled:opacity-50"
+                              className="shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs rounded-lg bg-rose text-white disabled:opacity-50"
                               disabled={remove.isPending}
                               onClick={() => remove.mutate(payment.id)}
                             >
@@ -458,7 +594,7 @@ export function PaymentsList() {
                             </button>
                             <button
                               type="button"
-                              className="btn-secondary min-h-10 px-3 text-sm"
+                              className="btn-secondary shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs"
                               onClick={() => setConfirmId(null)}
                               disabled={remove.isPending}
                             >
@@ -468,7 +604,7 @@ export function PaymentsList() {
                         ) : (
                           <button
                             type="button"
-                            className="btn-secondary min-h-10 px-3 text-sm text-rose"
+                            className="btn-secondary shrink-0 whitespace-nowrap min-h-8 px-2.5 text-xs text-rose"
                             onClick={() => setConfirmId(payment.id)}
                           >
                             Eliminar
@@ -582,19 +718,12 @@ function PaymentForm({
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="space-y-1 text-sm sm:col-span-3">
           <span className="text-muted">Alumno</span>
-          <select
-            className="input w-full"
+          <ClientSearchSelect
             value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            required
-          >
-            <option value="">Elegí un alumno</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {clientLabel(client)}
-              </option>
-            ))}
-          </select>
+            onChange={setUserId}
+            clients={clients}
+            placeholder="Elegí un alumno — escribí para buscar"
+          />
         </label>
         <label className="space-y-1 text-sm sm:col-span-3">
           <span className="text-muted">Servicio</span>

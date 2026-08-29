@@ -285,6 +285,25 @@ export class PaymentsService {
     return this.toPass(updated);
   }
 
+  async returnSession(passId: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const pass = await this.prisma.servicePass.findFirst({
+      where: { id: passId, businessId },
+    });
+    if (!pass) throw new NotFoundException('Pack no encontrado');
+    if (pass.sessionsUsed <= 0) {
+      throw new BadRequestException('No hay clases usadas para devolver.');
+    }
+    const updated = await this.prisma.servicePass.update({
+      where: { id: pass.id },
+      data: { sessionsUsed: pass.sessionsUsed - 1 },
+      include: {
+        service: { select: { id: true, name: true, sessionCount: true } },
+      },
+    });
+    return this.toPass(updated);
+  }
+
   private resolveCoverage(
     service: { sessionCount: number; price: Prisma.Decimal | null } | null,
     amount: number,

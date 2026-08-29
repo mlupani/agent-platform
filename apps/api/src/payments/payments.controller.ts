@@ -73,6 +73,11 @@ export class PaymentsController {
     return this.payments.useSession(id);
   }
 
+  @Post('passes/:id/return')
+  returnSession(@Param('id') id: string) {
+    return this.payments.returnSession(id);
+  }
+
   @Post()
   create(
     @Body(new ZodValidationPipe(paymentSchema))

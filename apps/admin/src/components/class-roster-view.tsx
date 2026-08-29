@@ -306,25 +306,36 @@ export function ClassRosterView({
                           const isCancelled = attendee.status === 'cancelled';
                           const isPast = new Date(session.endsAt).getTime() <= Date.now();
                           const showToggle = isPast && !isCancelled;
+                          const isWithoutCredit = !isTrialAttendee && !isCancelled && (!attendee.packProgress || attendee.packProgress.remaining <= 0);
                           return (
                             <li key={attendee.id} className="flex items-center gap-1">
                               <button
                                 type="button"
                                 className={`flex-1 text-left rounded-lg px-2 py-1.5 text-sm min-h-10 truncate flex items-center gap-1.5 border ${
-                                  isTrialAttendee
-                                    ? 'bg-amber-50 border-amber-200 text-amber-800'
-                                    : isAttended
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                      : isMissed
-                                        ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                        : isCancelled
-                                          ? 'bg-panel-2 border-line text-muted line-through'
-                                          : 'border-transparent hover:bg-panel-2'
+                                  isWithoutCredit
+                                    ? 'bg-amber-400 border-amber-500 text-amber-950 font-semibold shadow-sm'
+                                    : isTrialAttendee
+                                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                      : isAttended
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                        : isMissed
+                                          ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                          : isCancelled
+                                            ? 'bg-panel-2 border-line text-muted line-through'
+                                            : 'border-transparent hover:bg-panel-2'
                                 }`}
                                 onClick={() => onSelect(attendeeToItem(session, attendee))}
                                 title={label}
                               >
-                                {isTrialAttendee ? (
+                                {isWithoutCredit ? (
+                                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-900 text-amber-300" title="Sin clases disponibles">
+                                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      <path d="M12 9v4" />
+                                      <path d="M12 17h.01" />
+                                    </svg>
+                                  </span>
+                                ) : isTrialAttendee ? (
                                   <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white text-[8px] font-bold" title="Clase de prueba">
                                     P
                                   </span>
@@ -575,24 +586,55 @@ function AddStudentDialog({
       ),
   });
 
-  const [asTrial, setAsTrial] = useState(false);
-  const add = useMutation({
-    mutationFn: (userId: string) =>
-      api('/admin/appointments', {
-        method: 'POST',
-        body: JSON.stringify({
-          serviceId: session.service?.id,
-          userId,
-          startsAt: session.startsAt,
-          ...(asTrial ? { isTrial: true } : {}),
-        }),
-      }),
+  const maxSelectable = Math.max(0, session.capacity - session.booked);
+  const [selected, setSelected] = useState<Map<string, boolean>>(new Map());
+  const attendeeIds = new Set(session.attendees.map((a) => a.userId).filter(Boolean));
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else {
+        if (next.size >= maxSelectable) return prev;
+        next.set(id, false);
+      }
+      return next;
+    });
+  };
+  const toggleTrial = (id: string) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (!next.has(id)) return prev;
+      next.set(id, !next.get(id));
+      return next;
+    });
+  };
+  const addMany = useMutation({
+    mutationFn: async (entries: Array<{ userId: string; isTrial: boolean }>) => {
+      const results = await Promise.allSettled(
+        entries.map(({ userId, isTrial }) =>
+          api('/admin/appointments', {
+            method: 'POST',
+            body: JSON.stringify({
+              serviceId: session.service?.id,
+              userId,
+              startsAt: session.startsAt,
+              ...(isTrial ? { isTrial: true } : {}),
+            }),
+          }),
+        ),
+      );
+      const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      if (rejected.length) throw new Error(rejected.map((r) => formatApiError(r.reason)).join(' · '));
+      return results;
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['appointment-classes'] });
       await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
       onClose();
     },
   });
+  const selectedCount = selected.size;
+  const canAdd = selectedCount > 0 && selectedCount <= maxSelectable;
 
   return (
     <div
@@ -609,14 +651,12 @@ function AddStudentDialog({
       <div className="relative w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-panel border border-line shadow-xl p-5 space-y-4 max-h-[90dvh] overflow-y-auto">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted">
-              Anotar en clase
-            </p>
+            <p className="text-[11px] uppercase tracking-wide text-muted">Anotar en clase</p>
             <h3 className="font-semibold text-lg mt-1">
               {session.start} · {session.service?.name}
             </h3>
             <p className="text-sm text-muted">
-              {session.booked}/{session.capacity} lugares tomados
+              {session.booked}/{session.capacity} lugares — quedan {maxSelectable} · seleccionadas {selectedCount}
             </p>
           </div>
           <button type="button" className="text-muted text-xl px-1" onClick={onClose}>
@@ -629,54 +669,68 @@ function AddStudentDialog({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <label className="flex items-center gap-2 rounded-xl border border-line bg-panel-2/50 px-3 py-2 cursor-pointer">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-line"
-            checked={asTrial}
-            onChange={(e) => setAsTrial(e.target.checked)}
-          />
-          <div className="flex-1">
-            <p className="text-sm font-medium">Como clase de prueba</p>
-            <p className="text-xs text-muted">Usar si nunca tomó la clase gratis (no descuenta del pack)</p>
-          </div>
-        </label>
-        <p className="text-xs text-muted">
-          Si la alumna no tiene clases y nunca usó la prueba, se asigna automáticamente como clase de prueba aunque no marques el casillero.
-        </p>
-        {add.isError ? (
-          <p className="text-sm text-rose">{formatApiError(add.error)}</p>
+        {maxSelectable === 0 ? (
+          <p className="text-sm text-rose font-medium">Clase llena — no hay lugares.</p>
         ) : null}
+        {addMany.isError ? <p className="text-sm text-rose">{formatApiError(addMany.error)}</p> : null}
         <ul className="divide-y divide-line max-h-80 overflow-y-auto">
           {(clientsQuery.data ?? []).slice(0, 40).map((client) => {
             const packInfo = client.pack;
             const remaining = packInfo?.remaining ?? 0;
             const total = packInfo?.total ?? 0;
+            const noCredit = remaining <= 0;
             const packLabel = packInfo
               ? remaining > 0
-                ? `${remaining}/${total} clases disponibles`
+                ? `${remaining}/${total} clases`
                 : total > 0
                   ? `Sin clases — 0/${total}`
                   : 'Sin pack'
               : 'Sin pack';
-            const trialHint = remaining <= 0 ? ' · puede usar prueba si nunca tomó' : '';
+            const isSelected = selected.has(client.id);
+            const isTrial = selected.get(client.id) ?? false;
+            const alreadyIn = attendeeIds.has(client.id);
+            const disabled = alreadyIn || (!isSelected && selectedCount >= maxSelectable);
             return (
-              <li key={client.id}>
+              <li key={client.id} className={`flex items-center gap-2 py-2 px-1 rounded-lg ${isSelected ? 'bg-panel-2' : ''} ${alreadyIn ? 'opacity-50' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-line shrink-0"
+                  checked={isSelected}
+                  disabled={!!alreadyIn || (!isSelected && selectedCount >= maxSelectable) || addMany.isPending}
+                  onChange={() => toggleSelect(client.id)}
+                />
                 <button
                   type="button"
-                  className="w-full text-left py-3 min-h-11 hover:bg-panel-2 px-1"
-                  disabled={add.isPending}
-                  onClick={() => add.mutate(client.id)}
+                  className={`flex-1 text-left min-h-11 px-2 rounded-lg border ${noCredit ? 'bg-amber-400 border-amber-500' : 'border-transparent'} ${disabled && !isSelected ? 'cursor-not-allowed' : ''}`}
+                  disabled={!!alreadyIn}
+                  onClick={() => !alreadyIn && toggleSelect(client.id)}
                 >
-                  <p className="text-sm font-medium">{clientLabel(client)}</p>
-                  <p className="text-xs text-muted">
-                    {client.phone || client.email || 'Sin contacto'} · {packLabel}
-                    {trialHint}
+                  <p className={`text-sm font-medium flex items-center gap-1.5 ${noCredit ? 'text-amber-950' : ''}`}>
+                    {noCredit ? (
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-900 text-amber-300">
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                          <path d="M12 9v4" />
+                          <path d="M12 17h.01" />
+                        </svg>
+                      </span>
+                    ) : null}
+                    {clientLabel(client)} {noCredit ? '· ¡SIN CLASES!' : ''} {alreadyIn ? '· ya anotada' : ''}
                   </p>
-                  <p className="text-[11px] text-muted">
-                    {client.attendance ? `${client.attendance.completed} asistencias` : ''}
+                  <p className={`text-xs ${noCredit ? 'text-amber-950/80 font-medium' : 'text-muted'}`}>
+                    {client.phone || client.email || 'Sin contacto'} · {packLabel}
                   </p>
                 </button>
+                <label className={`flex items-center gap-1 text-xs shrink-0 px-2 py-1 rounded-full border cursor-pointer ${isTrial ? 'bg-amber-500 text-white border-amber-600' : 'bg-panel border-line text-muted'} ${!isSelected ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3 rounded"
+                    checked={isTrial}
+                    disabled={!isSelected}
+                    onChange={() => toggleTrial(client.id)}
+                  />
+                  Prueba
+                </label>
               </li>
             );
           })}
@@ -684,6 +738,22 @@ function AddStudentDialog({
             <li className="py-6 text-sm text-muted">No hay clientas para mostrar.</li>
           ) : null}
         </ul>
+        <div className="flex gap-2 pt-2">
+          <button
+            type="button"
+            className="btn-primary flex-1 min-h-11"
+            disabled={!canAdd || addMany.isPending || maxSelectable === 0}
+            onClick={() => {
+              const entries = [...selected.entries()].map(([userId, isTrial]) => ({ userId, isTrial }));
+              addMany.mutate(entries);
+            }}
+          >
+            {addMany.isPending ? 'Agregando…' : selectedCount ? `Agregar ${selectedCount} alumna${selectedCount > 1 ? 's' : ''}` : 'Seleccioná alumnas'}
+          </button>
+          <button type="button" className="btn-secondary min-h-11 px-4" onClick={onClose} disabled={addMany.isPending}>
+            Cancelar
+          </button>
+        </div>
       </div>
     </div>
   );
