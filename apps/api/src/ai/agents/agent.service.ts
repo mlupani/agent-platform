@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Conversation } from '@prisma/client';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { ConversationStatus } from '../../common/constants';
@@ -679,14 +679,9 @@ export class AgentService {
     return fallback;
   }
 
-  private async reopenIfClosedOrHidden<
-    T extends {
-      id: string;
-      status: string;
-      hiddenAt: Date | null;
-      metadata: Prisma.JsonValue;
-    },
-  >(conversation: T): Promise<T> {
+  private async reopenIfClosedOrHidden(
+    conversation: Conversation,
+  ): Promise<Conversation> {
     if (conversation.status !== 'CLOSED' && conversation.hiddenAt == null) {
       return conversation;
     }
@@ -709,7 +704,7 @@ export class AgentService {
         ...(conversation.status === 'CLOSED' ? { status: 'AI' as const } : {}),
         metadata: metaBase as Prisma.InputJsonValue,
       },
-    }) as Promise<T>;
+    });
   }
 
   private async resolveConversation(
