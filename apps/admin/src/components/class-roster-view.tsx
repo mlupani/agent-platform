@@ -1,7 +1,7 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import type { ClientRow } from '@/lib/types';
 import type { PersonTarget } from '@/components/person-sheet';
@@ -586,9 +586,20 @@ function AddStudentDialog({
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(id);
+  }, [query]);
   const clientsQuery = useQuery({
-    queryKey: ['clients', 'picker'],
-    queryFn: () => api<ClientRow[]>('/admin/clients?lite=1'),
+    queryKey: ['clients', 'picker', debounced],
+    queryFn: () =>
+      api<ClientRow[]>(
+        debounced
+          ? `/admin/clients?lite=1&name=${encodeURIComponent(debounced)}`
+          : '/admin/clients?lite=1',
+      ),
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 
@@ -642,25 +653,11 @@ function AddStudentDialog({
   const selectedCount = selected.size;
   const canAdd = selectedCount > 0 && selectedCount <= maxSelectable;
   const clients = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const digits = q.replace(/\D/g, '');
     const rows = [...(clientsQuery.data ?? [])].sort((a, b) =>
       clientLabel(a).localeCompare(clientLabel(b), 'es', { sensitivity: 'base' }),
     );
-    if (!q) return rows;
-    return rows.filter((c) => {
-      const label = clientLabel(c).toLowerCase();
-      const phone = (c.phone ?? '').toLowerCase();
-      const email = (c.email ?? '').toLowerCase();
-      const phoneDigits = (c.phone ?? '').replace(/\D/g, '');
-      return (
-        label.includes(q) ||
-        phone.includes(q) ||
-        email.includes(q) ||
-        (digits.length >= 3 && phoneDigits.includes(digits))
-      );
-    });
-  }, [clientsQuery.data, query]);
+    return rows;
+  }, [clientsQuery.data]);
 
   return (
     <div
