@@ -284,7 +284,15 @@ export function ClassRosterView({
                         {session.service?.name ?? 'Clase'}
                       </p>
                       <ul className="px-2 py-1.5 space-y-0.5">
-                        {session.attendees.map((attendee) => {
+                        {[...session.attendees]
+                          .sort((a, b) =>
+                            (a.contactName || a.contactPhone || 'Alumna').localeCompare(
+                              b.contactName || b.contactPhone || 'Alumna',
+                              'es',
+                              { sensitivity: 'base' },
+                            ),
+                          )
+                          .map((attendee) => {
                           const baseName =
                             attendee.contactName || attendee.contactPhone || 'Alumna';
                           const isTrialAttendee = !!attendee.isTrial;
@@ -635,6 +643,9 @@ function AddStudentDialog({
   });
   const selectedCount = selected.size;
   const canAdd = selectedCount > 0 && selectedCount <= maxSelectable;
+  const clients = [...(clientsQuery.data ?? [])].sort((a, b) =>
+    clientLabel(a).localeCompare(clientLabel(b), 'es', { sensitivity: 'base' }),
+  );
 
   return (
     <div
@@ -674,7 +685,7 @@ function AddStudentDialog({
         ) : null}
         {addMany.isError ? <p className="text-sm text-rose">{formatApiError(addMany.error)}</p> : null}
         <ul className="divide-y divide-line max-h-80 overflow-y-auto">
-          {(clientsQuery.data ?? []).slice(0, 40).map((client) => {
+          {clients.slice(0, 40).map((client) => {
             const packInfo = client.pack;
             const remaining = packInfo?.remaining ?? 0;
             const total = packInfo?.total ?? 0;
@@ -734,7 +745,7 @@ function AddStudentDialog({
               </li>
             );
           })}
-          {!clientsQuery.data?.length ? (
+          {!clients.length ? (
             <li className="py-6 text-sm text-muted">No hay clientas para mostrar.</li>
           ) : null}
         </ul>

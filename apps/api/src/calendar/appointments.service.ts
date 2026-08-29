@@ -360,6 +360,16 @@ export class AppointmentsService {
       }
     }
 
+    const byName = (a: { contactName: string | null; contactPhone: string | null }, b: { contactName: string | null; contactPhone: string | null }) =>
+      (a.contactName || a.contactPhone || '').localeCompare(
+        b.contactName || b.contactPhone || '',
+        'es',
+        { sensitivity: 'base' },
+      );
+    for (const session of sessions.values()) {
+      session.attendees.sort(byName);
+    }
+
     return {
       timezone: zone,
       sessions: [...sessions.values()].sort(
