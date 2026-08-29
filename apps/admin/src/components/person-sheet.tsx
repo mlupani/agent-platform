@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { ClientRow, LeadDetail, LeadRow } from '@/lib/types';
-import { useEffect } from 'react';
+import type { CatalogService, ClientRow, LeadDetail, LeadRow } from '@/lib/types';
+import { useEffect, useState } from 'react';
 
 export interface PersonTarget {
   userId?: string | null;
@@ -256,6 +256,7 @@ export function PersonSheet({
 }
 
 function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => void }) {
+  const [showPay, setShowPay] = useState(false);
   const { data: balance, isLoading: balLoading } = useQuery({
     queryKey: ['packs-balance', client.id],
     queryFn: () =>
@@ -340,10 +341,16 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
         ) : (
           <p className="text-sm text-muted">Sin packs cargados</p>
         )}
-        <Link href={`/pagos?clientId=${encodeURIComponent(client.id)}`} className="inline-flex text-xs text-accent hover:underline" onClick={onClose}>
-          Gestionar packs
-        </Link>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setShowPay(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-white px-3 py-1.5 text-xs font-medium hover:bg-accent/90">
+            + Agregar pago
+          </button>
+          <Link href={`/pagos?clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center text-xs text-accent hover:underline px-2 py-1" onClick={onClose}>
+            Gestionar packs
+          </Link>
+        </div>
       </div>
+      {showPay ? <AddPaymentModal clientId={client.id} onClose={() => setShowPay(false)} /> : null}
 
       <div className="rounded-xl border border-line p-3 space-y-2">
         <p className="text-sm font-medium">Asistencias</p>
@@ -401,6 +408,117 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
           </a>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function AddPaymentModal({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { data: services = [] } = useQuery({
+    queryKey: ['services'],
+    queryFn: () => api<CatalogService[]>('/admin/services'),
+  });
+  const [serviceId, setServiceId] = useState('');
+  const [cover, setCover] = useState<'pack' | 'session'>('pack');
+  const [amount, setAmount] = useState('');
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState('');
+  const selected = services.find((s) => s.id === serviceId);
+  const isPack = (selected?.sessionCount ?? 1) > 1;
+  const mutation = useMutation({
+    mutationFn: () =>
+      api('/admin/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: clientId,
+          amount: Number(amount.replace(',', '.')),
+          paidAt,
+          notes: notes.trim() || null,
+          serviceId: serviceId || null,
+          cover: isPack ? cover : undefined,
+        }),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['packs-balance'] }),
+        queryClient.invalidateQueries({ queryKey: ['client-appointments'] }),
+        queryClient.invalidateQueries({ queryKey: ['payments'] }),
+        queryClient.invalidateQueries({ queryKey: ['appointment-classes'] }),
+      ]);
+      onClose();
+    },
+  });
+  const parsed = Number(amount.replace(',', '.'));
+  const canSubmit = Number.isFinite(parsed) && parsed > 0 && !!paidAt;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Cerrar" onClick={onClose} />
+      <form
+        className="relative w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-panel border border-line shadow-xl p-5 space-y-4 max-h-[90dvh] overflow-y-auto"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canSubmit || mutation.isPending) return;
+          mutation.mutate();
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="font-semibold">Agregar pago</h4>
+            <p className="text-xs text-muted mt-1">Importe y fecha obligatorios. Si es pack, elegí si cubre todo o 1 clase.</p>
+          </div>
+          <button type="button" className="text-muted text-xl px-1" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <label className="block space-y-1 text-sm">
+          <span className="text-muted">Servicio</span>
+          <select className="input w-full" value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+            <option value="">Sin servicio</option>
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.sessionCount > 1 ? ` · pack ${s.sessionCount}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        {isPack ? (
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-muted">Este pago cubre</legend>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2 text-sm min-h-10 px-3 rounded-full border border-line">
+                <input type="radio" checked={cover === 'pack'} onChange={() => setCover('pack')} /> Pack completo ({selected?.sessionCount} clases)
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm min-h-10 px-3 rounded-full border border-line">
+                <input type="radio" checked={cover === 'session'} onChange={() => setCover('session')} /> 1 clase
+              </label>
+            </div>
+          </fieldset>
+        ) : null}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Importe</span>
+            <input className="input w-full" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" required />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-muted">Fecha</span>
+            <input className="input w-full" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} required />
+          </label>
+        </div>
+        <label className="block space-y-1 text-sm">
+          <span className="text-muted">Observación</span>
+          <textarea className="input w-full min-h-20" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />
+        </label>
+        {mutation.isError ? <p className="text-sm text-rose">{(mutation.error as Error).message}</p> : null}
+        <div className="flex gap-2">
+          <button type="submit" className="btn-primary flex-1 min-h-11" disabled={!canSubmit || mutation.isPending}>
+            {mutation.isPending ? 'Guardando…' : 'Guardar pago'}
+          </button>
+          <button type="button" className="btn-secondary min-h-11 px-4" onClick={onClose} disabled={mutation.isPending}>
+            Cancelar
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -974,11 +974,6 @@ function EventModal({
             >
               Ver ficha
             </button>
-            {selected.userId && (
-              <span className="text-xs text-muted inline-flex items-center px-1 py-1" title={selected.userId}>
-                ID: {selected.userId.slice(0, 8)}…
-              </span>
-            )}
           </div>
         ) : null}
         {isLocal && selected.status !== 'cancelled' ? (
