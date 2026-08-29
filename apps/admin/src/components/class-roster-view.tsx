@@ -587,11 +587,9 @@ function AddStudentDialog({
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const clientsQuery = useQuery({
-    queryKey: ['clients', 'picker', query],
-    queryFn: () =>
-      api<ClientRow[]>(
-        `/admin/clients${query ? `?name=${encodeURIComponent(query)}` : ''}`,
-      ),
+    queryKey: ['clients', 'picker'],
+    queryFn: () => api<ClientRow[]>('/admin/clients?lite=1'),
+    staleTime: 30_000,
   });
 
   const maxSelectable = Math.max(0, session.capacity - session.booked);
@@ -643,9 +641,26 @@ function AddStudentDialog({
   });
   const selectedCount = selected.size;
   const canAdd = selectedCount > 0 && selectedCount <= maxSelectable;
-  const clients = [...(clientsQuery.data ?? [])].sort((a, b) =>
-    clientLabel(a).localeCompare(clientLabel(b), 'es', { sensitivity: 'base' }),
-  );
+  const clients = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const digits = q.replace(/\D/g, '');
+    const rows = [...(clientsQuery.data ?? [])].sort((a, b) =>
+      clientLabel(a).localeCompare(clientLabel(b), 'es', { sensitivity: 'base' }),
+    );
+    if (!q) return rows;
+    return rows.filter((c) => {
+      const label = clientLabel(c).toLowerCase();
+      const phone = (c.phone ?? '').toLowerCase();
+      const email = (c.email ?? '').toLowerCase();
+      const phoneDigits = (c.phone ?? '').replace(/\D/g, '');
+      return (
+        label.includes(q) ||
+        phone.includes(q) ||
+        email.includes(q) ||
+        (digits.length >= 3 && phoneDigits.includes(digits))
+      );
+    });
+  }, [clientsQuery.data, query]);
 
   return (
     <div
@@ -685,7 +700,21 @@ function AddStudentDialog({
         ) : null}
         {addMany.isError ? <p className="text-sm text-rose">{formatApiError(addMany.error)}</p> : null}
         <ul className="divide-y divide-line max-h-80 overflow-y-auto">
-          {clients.slice(0, 40).map((client) => {
+          {clientsQuery.isLoading ? (
+            <li className="py-6 text-sm text-muted">Cargando alumnas…</li>
+          ) : clientsQuery.isError ? (
+            <li className="py-6 text-sm text-rose">
+              No se pudo cargar el listado.{' '}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => clientsQuery.refetch()}
+              >
+                Reintentar
+              </button>
+            </li>
+          ) : null}
+          {clients.map((client) => {
             const packInfo = client.pack;
             const remaining = packInfo?.remaining ?? 0;
             const total = packInfo?.total ?? 0;
@@ -745,8 +774,12 @@ function AddStudentDialog({
               </li>
             );
           })}
-          {!clients.length ? (
-            <li className="py-6 text-sm text-muted">No hay clientas para mostrar.</li>
+          {!clientsQuery.isLoading && !clientsQuery.isError && !clients.length ? (
+            <li className="py-6 text-sm text-muted">
+              {query.trim()
+                ? 'No hay alumnas que coincidan con esa búsqueda.'
+                : 'No hay clientas para mostrar.'}
+            </li>
           ) : null}
         </ul>
         <div className="flex gap-2 pt-2">

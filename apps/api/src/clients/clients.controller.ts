@@ -55,8 +55,11 @@ export class ClientsController {
     @Query('status') status?: string,
     @Query('name') name?: string,
     @Query('search') search?: string,
+    @Query('lite') lite?: string,
   ) {
-    return this.clients.list(status, name ?? search);
+    return this.clients.list(status, name ?? search, {
+      lite: lite === '1' || lite === 'true',
+    });
   }
 
   @Post()

@@ -28,13 +28,14 @@ export class ClientsService {
     });
   }
 
-  async list(statusSlug?: string, name?: string) {
+  async list(statusSlug?: string, name?: string, options?: { lite?: boolean }) {
     const businessId = await this.businesses.getCurrentId();
     const status = statusSlug
       ? await this.resolveStatus(statusSlug)
       : undefined;
     const nameQuery = name?.trim().slice(0, 120) || '';
     const isPhoneLike = nameQuery.replace(/\D/g, '').length >= 6;
+    const lite = Boolean(options?.lite);
 
     const rows = await this.prisma.user.findMany({
       where: {
@@ -49,7 +50,13 @@ export class ClientsService {
                   { email: { contains: nameQuery, mode: 'insensitive' } },
                 ],
               }
-            : { name: { contains: nameQuery, mode: 'insensitive' } }
+            : {
+                OR: [
+                  { name: { contains: nameQuery, mode: 'insensitive' } },
+                  { phone: { contains: nameQuery } },
+                  { email: { contains: nameQuery, mode: 'insensitive' } },
+                ],
+              }
           : {}),
       },
       include: {
@@ -58,13 +65,13 @@ export class ClientsService {
           select: { appointments: true, conversations: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 300,
+      orderBy: lite ? { name: 'asc' } : { createdAt: 'desc' },
+      take: lite ? 1000 : 300,
     });
 
     const ids = rows.map((r) => r.id);
     const [appointments, passes] = await Promise.all([
-      ids.length
+      ids.length && !lite
         ? this.prisma.appointment.findMany({
             where: { businessId, userId: { in: ids } },
             select: { userId: true, status: true },

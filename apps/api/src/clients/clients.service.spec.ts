@@ -17,6 +17,8 @@ describe('ClientsService', () => {
     },
     agentConfig: { findFirst: jest.fn() },
     whatsAppConfig: { findUnique: jest.fn() },
+    appointment: { findMany: jest.fn() },
+    servicePass: { findMany: jest.fn() },
   };
   const businesses = { getCurrentId: jest.fn().mockResolvedValue('biz-1') };
   const service = new ClientsService(prisma as never, businesses as never);
@@ -51,10 +53,36 @@ describe('ClientsService', () => {
       expect.objectContaining({
         where: {
           businessId: 'biz-1',
-          name: { contains: 'Miguel', mode: 'insensitive' },
+          OR: [
+            { name: { contains: 'Miguel', mode: 'insensitive' } },
+            { phone: { contains: 'Miguel' } },
+            { email: { contains: 'Miguel', mode: 'insensitive' } },
+          ],
         },
       }),
     );
+  });
+
+  it('skips appointment history in lite picker mode', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 'user-1',
+        name: 'Ana',
+        email: null,
+        phone: '11',
+        notes: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: activo,
+        _count: { appointments: 2, conversations: 0 },
+      },
+    ]);
+    prisma.servicePass.findMany.mockResolvedValue([]);
+
+    await service.list(undefined, undefined, { lite: true });
+
+    expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+    expect(prisma.servicePass.findMany).toHaveBeenCalled();
   });
 
   it('creates a manual client as visita by default', async () => {
