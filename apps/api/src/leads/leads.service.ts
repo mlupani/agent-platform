@@ -406,6 +406,14 @@ export class LeadsService {
     return updated;
   }
 
+  async remove(id: string) {
+    const businessId = await this.businesses.getCurrentId();
+    const existing = await this.prisma.lead.findFirst({ where: { id, businessId } });
+    if (!existing) throw new NotFoundException('Lead no encontrado');
+    await this.prisma.lead.delete({ where: { id } });
+    return { id };
+  }
+
   async convert(id: string, source = 'manual') {
     const businessId = await this.businesses.getCurrentId();
     await this.followUps.cancelPendingAuto(businessId, id, 'converted');

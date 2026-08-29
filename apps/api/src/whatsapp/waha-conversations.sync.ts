@@ -304,33 +304,14 @@ export class WahaConversationsSyncService {
           externalId: resolveWhatsAppExternalId(existing.externalId, chatId),
         });
       } else {
-        // FIX: no crear User (alumno) automáticamente — solo vincular si ya existe; crear Lead si corresponde
         let existingUser: { id: string } | null = null;
         if (contactPhone) {
           existingUser = await this.prisma.user.findFirst({
             where: { businessId, phone: contactPhone },
             select: { id: true },
           });
-          if (!existingUser) {
-            try {
-              await this.leads.capture({
-                businessId,
-                phone: contactPhone,
-                name: name ?? null,
-                source: 'WHATSAPP',
-                message: preview?.slice(0, 500) || null,
-              });
-            } catch {}
-          }
         } else if (name) {
-          try {
-            await this.leads.capture({
-              businessId,
-              name,
-              source: 'WHATSAPP',
-              message: preview?.slice(0, 500) || null,
-            });
-          } catch {}
+          existingUser = null;
         }
         await this.prisma.conversation.create({
           data: {

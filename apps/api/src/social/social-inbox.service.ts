@@ -470,18 +470,7 @@ export class SocialInboxService {
             zernioAccountId: connection.externalAccountId,
           },
         );
-        // Backfill: asegurar Lead si no es alumno existente
-        if (!conversation.userId && thread.participantName) {
-          try {
-            await this.leads.capture({
-              businessId,
-              conversationId: conversation.id,
-              name: thread.participantName ?? thread.participantUsername ?? null,
-              source: channel,
-              message: thread.lastMessage?.slice(0, 500) || null,
-            });
-          } catch {}
-        }
+
         if (!conversation.hiddenAt) {
           const previousAt = conversation.lastMessageAt?.getTime() ?? 0;
           const threadAt = thread.updatedAt?.getTime() ?? 0;
@@ -570,18 +559,6 @@ export class SocialInboxService {
         userId: existingUser?.id,
         zernioAccountId: opts.zernioAccountId,
       });
-      // Si no es alumno, asegurar Lead vinculado a la conversación (para que sea contactable por IG)
-      if (!existingUser && inbound.participantName) {
-        try {
-          await this.leads.capture({
-            businessId,
-            conversationId: conversation.id,
-            name: inbound.participantName ?? inbound.participantUsername ?? null,
-            source: inbound.channel,
-            message: inbound.text?.slice(0, 500) || null,
-          });
-        } catch {}
-      }
 
       if (conversation.hiddenAt) {
         if (inbound.fromMe) return false;
@@ -678,6 +655,17 @@ export class SocialInboxService {
       });
 
       if (previousStatus === 'AI' && result.status === 'AI' && result.message) {
+        if (!existingUser && inbound.participantName) {
+          try {
+            await this.leads.capture({
+              businessId,
+              conversationId: conversation.id,
+              name: inbound.participantName ?? inbound.participantUsername ?? null,
+              source: inbound.channel,
+              message: inbound.text?.slice(0, 500) || null,
+            });
+          } catch {}
+        }
         await this.sendAgentOutbound(
           businessId,
           conversation,

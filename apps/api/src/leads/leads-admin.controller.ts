@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -163,6 +164,11 @@ export class LeadsAdminController {
     @Body(new ZodValidationPipe(updateSchema)) body: z.infer<typeof updateSchema>,
   ) {
     return this.leads.update(id, body);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.leads.remove(id);
   }
 
   @Post(':id/convert')

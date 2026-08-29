@@ -204,7 +204,6 @@ export class WhatsAppWebhookService {
       where: { businessId, externalId },
     });
 
-    // NO auto-crear alumno (User) — solo vincular si ya existe. Lead sí se crea pero no alumno.
     let user: { id: string } | null = null;
     if (phone) {
       const existingUser = await this.prisma.user.findFirst({
@@ -212,20 +211,6 @@ export class WhatsAppWebhookService {
         select: { id: true },
       });
       user = existingUser;
-      // Si no es alumno y es mensaje entrante real, asegurar Lead (no User)
-      if (!user && !fromMe && phone) {
-        try {
-          await this.leads.capture({
-            businessId,
-            phone,
-            name: contactName ?? null,
-            source: 'WHATSAPP',
-            message: text?.slice(0, 500) || null,
-          });
-        } catch {
-          // no bloquear flujo
-        }
-      }
     }
     const conversation = await this.upsertConversation(
       businessId,
@@ -464,6 +449,17 @@ export class WhatsAppWebhookService {
     });
 
     if (previousStatus === 'AI' && result.status === 'AI' && result.message) {
+      if (!user && phone) {
+        try {
+          await this.leads.capture({
+            businessId,
+            phone,
+            name: contactName ?? null,
+            source: 'WHATSAPP',
+            message: text?.slice(0, 500) || null,
+          });
+        } catch {}
+      }
       try {
         const provider = await this.providers.getForBusiness(businessId);
         const sent = await provider.sendText({

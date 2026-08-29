@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -75,9 +76,18 @@ function objectiveLabel(value: string) {
 
 export function LeadDetailView({ id }: { id: string }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ['lead', id],
     queryFn: () => api<LeadDetail>(`/admin/leads/${id}`),
+  });
+  const remove = useMutation({
+    mutationFn: () => api(`/admin/leads/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['leads'] });
+      router.push('/leads');
+    },
   });
 
   async function refresh() {
@@ -151,8 +161,23 @@ export function LeadDetailView({ id }: { id: string }) {
               Ver alumno
             </Link>
           ) : null}
+          {confirmDelete ? (
+            <>
+              <button type="button" className="min-h-11 px-3 text-sm rounded-lg bg-rose text-white disabled:opacity-50" disabled={remove.isPending} onClick={() => remove.mutate()}>
+                {remove.isPending ? 'Eliminando…' : 'Confirmar'}
+              </button>
+              <button type="button" className="btn-secondary min-h-11 px-3 text-sm" onClick={() => setConfirmDelete(false)} disabled={remove.isPending}>
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-secondary min-h-11 px-3 text-sm text-rose" onClick={() => setConfirmDelete(true)}>
+              Eliminar
+            </button>
+          )}
         </div>
       </header>
+      {remove.isError ? <p className="text-sm text-rose">{(remove.error as Error).message || 'No se pudo eliminar el lead.'}</p> : null}
 
       {suggested && data.status !== 'won' ? (
         <div className="rounded-2xl border border-accent/40 bg-accent/10 p-4 text-sm">

@@ -89,6 +89,7 @@ export function LeadsList() {
   const [contactable, setContactable] = useState<ContactableFilter>('all');
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -114,6 +115,15 @@ export function LeadsList() {
     queryKey: ['leads', status, contactable, searchQuery],
     queryFn: () => api<LeadRow[]>(leadsPath(status, contactable, searchQuery)),
     placeholderData: keepPreviousData,
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api<{ id: string }>(`/admin/leads/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      setConfirmId(null);
+      await queryClient.invalidateQueries({ queryKey: ['leads'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 
   return (
@@ -244,7 +254,7 @@ export function LeadsList() {
                       {lead.interest ? ` · ${lead.interest}` : ''}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
                     {lead.conversationId ? (
                       <Link
                         href={`/conversations?c=${lead.conversationId}`}
@@ -259,6 +269,34 @@ export function LeadsList() {
                     >
                       Ver detalle
                     </Link>
+                    {confirmId === lead.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="min-h-10 px-3 text-sm rounded-lg bg-rose text-white disabled:opacity-50"
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(lead.id)}
+                        >
+                          {remove.isPending ? 'Eliminando…' : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary min-h-10 px-3 text-sm"
+                          onClick={() => setConfirmId(null)}
+                          disabled={remove.isPending}
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-secondary min-h-10 px-3 text-sm text-rose"
+                        onClick={() => setConfirmId(lead.id)}
+                      >
+                        Eliminar
+                      </button>
+                    )}
                   </div>
                 </div>
                 <dl className="grid gap-2 text-sm sm:grid-cols-3">
@@ -275,6 +313,9 @@ export function LeadsList() {
                     <dd>{formatWhen(lead.nextFollowUpAt)}</dd>
                   </div>
                 </dl>
+                {remove.isError && confirmId === lead.id ? (
+                  <p className="text-sm text-rose mt-2">{(remove.error as Error).message || 'No se pudo eliminar el lead.'}</p>
+                ) : null}
               </li>
             ))}
           </ul>
