@@ -232,7 +232,7 @@ export class ConversationsService {
     });
   }
 
-  /** Oculta la conversación de la bandeja. El sync no la revive salvo mensaje nuevo del cliente. */
+  /** Oculta la conversación de la bandeja. No cierra el hilo: un mensaje nuevo del cliente la revive. */
   async hide(id: string, options?: RoleOptions) {
     const businessId = await this.businesses.getCurrentId();
     const conversation = await this.assertVisible(
@@ -245,7 +245,6 @@ export class ConversationsService {
       where: { id: conversation.id },
       data: {
         hiddenAt: new Date(),
-        status: 'CLOSED',
         unreadCount: 0,
         metadata: {
           ...((conversation.metadata &&

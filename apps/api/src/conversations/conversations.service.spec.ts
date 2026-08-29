@@ -151,6 +151,34 @@ describe('ConversationsService inbox', () => {
     );
   });
 
+  it('hides a conversation from the inbox without closing it', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'conv-1',
+      businessId: 'biz-1',
+      status: 'AI',
+      channel: 'WEB',
+      hiddenAt: null,
+      metadata: {},
+    });
+    prisma.conversation.update.mockResolvedValue({
+      id: 'conv-1',
+      status: 'AI',
+    });
+
+    const result = await service.hide('conv-1', { role: 'ADMIN' });
+    expect(result).toEqual({ ok: true, id: 'conv-1' });
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          hiddenAt: expect.any(Date),
+          unreadCount: 0,
+        }),
+      }),
+    );
+    const updateData = prisma.conversation.update.mock.calls[0][0].data;
+    expect(updateData.status).toBeUndefined();
+  });
+
   it('sends a human message and marks bot as HUMAN', async () => {
     prisma.conversation.findFirst.mockResolvedValue({
       id: 'conv-1',

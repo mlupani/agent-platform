@@ -74,7 +74,9 @@ export class AgentService {
     this.logger.log(`[AGENT 1/6] business+agent ${Date.now() - t1}ms model=${agentConfig.model} provider=${llmTarget.providerName}`);
 
     const t2 = Date.now();
-    const conversation = await this.resolveConversation(input, agentConfig.id);
+    const conversation = await this.reopenIfClosedOrHidden(
+      await this.resolveConversation(input, agentConfig.id),
+    );
     const confirmed = await this.resolveConfirmed(input, conversation.id);
     this.logger.log(`[AGENT 2/6] conversation ${Date.now() - t2}ms conv=${conversation.id} status=${conversation.status} confirmed=${confirmed}`);
 
@@ -675,6 +677,39 @@ export class AgentService {
       );
     }
     return fallback;
+  }
+
+  private async reopenIfClosedOrHidden<
+    T extends {
+      id: string;
+      status: string;
+      hiddenAt: Date | null;
+      metadata: Prisma.JsonValue;
+    },
+  >(conversation: T): Promise<T> {
+    if (conversation.status !== 'CLOSED' && conversation.hiddenAt == null) {
+      return conversation;
+    }
+
+    const metaBase =
+      conversation.metadata &&
+      typeof conversation.metadata === 'object' &&
+      !Array.isArray(conversation.metadata)
+        ? { ...(conversation.metadata as Record<string, unknown>) }
+        : {};
+    delete metaBase.hiddenReason;
+    delete metaBase.hiddenAt;
+    metaBase.reopenedAt = new Date().toISOString();
+    metaBase.reopenedReason = 'inbound_message';
+
+    return this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        hiddenAt: null,
+        ...(conversation.status === 'CLOSED' ? { status: 'AI' as const } : {}),
+        metadata: metaBase as Prisma.InputJsonValue,
+      },
+    }) as Promise<T>;
   }
 
   private async resolveConversation(

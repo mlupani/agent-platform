@@ -51,6 +51,8 @@ describe('AgentService', () => {
     channel: 'WEB',
     status: 'AI',
     summary: null,
+    hiddenAt: null,
+    metadata: {},
   };
 
   const prisma = {
@@ -128,7 +130,8 @@ describe('AgentService', () => {
   const guardrails = {
     sanitizeUserInput: jest.fn((value: string) => value.trim()),
     isBlockedConversationStatus: jest.fn(
-      (status: string) => status === 'HUMAN' || status === 'WAITING_HUMAN',
+      (status: string) =>
+        status === 'HUMAN' || status === 'WAITING_HUMAN' || status === 'CLOSED',
     ),
   };
   const costControl = {
@@ -213,6 +216,52 @@ describe('AgentService', () => {
         unreadCount: expect.anything(),
       }),
     });
+  });
+
+  it('reopens a CLOSED web conversation and answers with the agent', async () => {
+    prisma.conversation.findFirst
+      .mockResolvedValueOnce({
+        ...conversation,
+        status: 'CLOSED',
+        hiddenAt: new Date('2026-08-01T12:00:00.000Z'),
+      })
+      .mockResolvedValue({
+        ...conversation,
+        status: 'AI',
+        hiddenAt: null,
+      });
+    prisma.conversation.update.mockResolvedValue({
+      ...conversation,
+      status: 'AI',
+      hiddenAt: null,
+    });
+    (llm.chat as jest.Mock).mockResolvedValue({
+      content: 'Hola de nuevo',
+      toolCalls: [],
+      usage: { inputTokens: 10, outputTokens: 8 },
+      model: 'gpt-4.1-mini',
+      finishReason: 'stop',
+    });
+
+    const result = await service.run({
+      businessId: 'biz-1',
+      conversationId: 'conv-1',
+      message: 'Hola',
+      channel: 'WEB',
+    });
+
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'conv-1' },
+        data: expect.objectContaining({
+          hiddenAt: null,
+          status: 'AI',
+        }),
+      }),
+    );
+    expect(result.status).toBe('AI');
+    expect(result.message).toContain('Hola de nuevo');
+    expect(llm.chat).toHaveBeenCalled();
   });
 
   it('does not auto-reply when conversation is HUMAN but still stores the inbound message', async () => {
