@@ -1041,24 +1041,70 @@ export class SocialInboxService {
     const resolvedUserId =
       opts?.userId ?? (await this.findExistingSocialUser(businessId, inbound))?.id ?? null;
     const userId = resolvedUserId;
-    const existing = await this.prisma.conversation.findFirst({
+    let existing = await this.prisma.conversation.findFirst({
       where: {
         businessId,
         channel: inbound.channel,
         externalId: inbound.conversationId,
       },
     });
+    if (
+      !existing &&
+      inbound.participantId &&
+      inbound.participantId !== inbound.conversationId
+    ) {
+      existing = await this.findConversationByParticipant(
+        businessId,
+        inbound.channel,
+        inbound.participantId,
+      );
+      if (existing) {
+        await this.hideDuplicateParticipantConversations(
+          businessId,
+          inbound.channel,
+          inbound.participantId,
+          existing.id,
+        );
+        return this.prisma.conversation.update({
+          where: { id: existing.id },
+          data: {
+            externalId: inbound.conversationId,
+            userId,
+            ...(!inbound.fromMe
+              ? {
+                  contactName:
+                    inbound.participantName ?? inbound.participantUsername ?? undefined,
+                  contactUsername: inbound.participantUsername ?? undefined,
+                  contactAvatarUrl: inbound.participantPicture ?? undefined,
+                }
+              : {}),
+          },
+        });
+      }
+    }
     const contactName =
       inbound.participantName ?? inbound.participantUsername ?? undefined;
     if (existing) {
       if (existing.hiddenAt) return existing;
+      if (inbound.participantId) {
+        await this.hideDuplicateParticipantConversations(
+          businessId,
+          inbound.channel,
+          inbound.participantId,
+          existing.id,
+        );
+      }
       return this.prisma.conversation.update({
         where: { id: existing.id },
         data: {
           userId,
-          contactName,
-          contactUsername: inbound.participantUsername ?? undefined,
-          contactAvatarUrl: inbound.participantPicture ?? undefined,
+          ...(!inbound.fromMe
+            ? {
+                contactName,
+                contactUsername: inbound.participantUsername ?? undefined,
+                contactAvatarUrl: inbound.participantPicture ?? undefined,
+              }
+            : {}),
         },
       });
     }
@@ -1080,6 +1126,82 @@ export class SocialInboxService {
         },
       },
     });
+  }
+
+  private async findConversationByParticipant(
+    businessId: string,
+    channel: SocialInboxChannel,
+    participantId: string,
+  ) {
+    try {
+      const byJson = await this.prisma.conversation.findFirst({
+        where: {
+          businessId,
+          channel,
+          hiddenAt: null,
+          metadata: { path: ['externalUserId'], equals: participantId },
+        } as never,
+      });
+      if (byJson) return byJson;
+    } catch {}
+    try {
+      const anyConv = this.prisma.conversation as unknown as {
+        findMany?: (args: unknown) => Promise<unknown[]>;
+      };
+      if (typeof anyConv.findMany !== 'function') return null;
+      const candidates = (await anyConv.findMany({
+        where: { businessId, channel, hiddenAt: null },
+        take: 500,
+        orderBy: { updatedAt: 'desc' },
+      })) as Array<{ metadata: unknown } & Record<string, unknown>>;
+      return (
+        (candidates.find((c) => {
+          const meta =
+            c.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata)
+              ? (c.metadata as Record<string, unknown>)
+              : null;
+          return meta?.externalUserId === participantId;
+        }) as never) ?? null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private async hideDuplicateParticipantConversations(
+    businessId: string,
+    channel: SocialInboxChannel,
+    participantId: string,
+    keepId: string,
+  ): Promise<void> {
+    try {
+      const anyConv = this.prisma.conversation as unknown as {
+        findMany?: (args: unknown) => Promise<unknown[]>;
+        update?: (args: unknown) => Promise<unknown>;
+      };
+      if (typeof anyConv.findMany !== 'function' || typeof anyConv.update !== 'function')
+        return;
+      const candidates = (await anyConv.findMany({
+        where: { businessId, channel, hiddenAt: null, id: { not: keepId } },
+        take: 200,
+        orderBy: { updatedAt: 'desc' },
+      })) as Array<{ id: string; metadata: unknown }>;
+      const dupIds: string[] = [];
+      for (const c of candidates) {
+        const meta =
+          c.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata)
+            ? (c.metadata as Record<string, unknown>)
+            : null;
+        if (meta?.externalUserId === participantId) dupIds.push(c.id);
+      }
+      if (!dupIds.length) return;
+      for (const id of dupIds) {
+        await anyConv.update({
+          where: { id },
+          data: { hiddenAt: new Date(), status: 'CLOSED' },
+        });
+      }
+    } catch {}
   }
 
   private async hydrateVoiceText(
