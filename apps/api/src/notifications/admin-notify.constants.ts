@@ -13,3 +13,5 @@ export const DEFAULT_ADMIN_NOTIFY_EVENTS: AdminNotifyEvent[] = [
   'lead.created',
   'client.auto_created',
 ];
+
+export const MAX_ADMIN_NOTIFY_EMAILS = 10;

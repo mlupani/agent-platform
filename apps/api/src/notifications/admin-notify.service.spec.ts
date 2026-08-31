@@ -37,7 +37,7 @@ describe('AdminNotifyService', () => {
 
     await expect(service.getPublic('biz-1')).resolves.toEqual({
       enabled: false,
-      email: null,
+      emails: [],
       events: ['appointment.created', 'lead.created', 'client.auto_created'],
       emailConfigured: true,
     });
@@ -47,15 +47,43 @@ describe('AdminNotifyService', () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue(null);
 
     await expect(
-      service.upsert('biz-1', { enabled: true, email: '' }),
+      service.upsert('biz-1', { enabled: true, emails: [] }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.adminNotifyConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('saves and dedupes multiple emails', async () => {
+    prisma.adminNotifyConfig.findUnique.mockResolvedValue(null);
+    prisma.adminNotifyConfig.upsert.mockResolvedValue({});
+    prisma.adminNotifyConfig.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        enabled: true,
+        emails: ['ana@studio.com', 'otro@studio.com'],
+        events: ['appointment.created', 'lead.created', 'client.auto_created'],
+      });
+
+    await service.upsert('biz-1', {
+      enabled: true,
+      emails: ['Ana@studio.com', 'otro@studio.com', 'ana@studio.com'],
+    });
+
+    expect(prisma.adminNotifyConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          emails: ['ana@studio.com', 'otro@studio.com'],
+        }),
+        update: expect.objectContaining({
+          emails: ['ana@studio.com', 'otro@studio.com'],
+        }),
+      }),
+    );
   });
 
   it('does not send when disabled', async () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue({
       enabled: false,
-      email: 'dueña@studio.com',
+      emails: ['dueña@studio.com'],
       events: ['appointment.created'],
     });
 
@@ -73,7 +101,7 @@ describe('AdminNotifyService', () => {
   it('skips events that are not enabled', async () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue({
       enabled: true,
-      email: 'dueña@studio.com',
+      emails: ['dueña@studio.com'],
       events: ['lead.created'],
     });
 
@@ -91,7 +119,7 @@ describe('AdminNotifyService', () => {
   it('sends an appointment email to the configured address', async () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue({
       enabled: true,
-      email: 'dueña@studio.com',
+      emails: ['dueña@studio.com'],
       events: ['appointment.created'],
     });
 
@@ -117,10 +145,32 @@ describe('AdminNotifyService', () => {
     expect(email.send.mock.calls[0][0].text).toContain('clase de prueba');
   });
 
+  it('sends the same aviso to every configured email', async () => {
+    prisma.adminNotifyConfig.findUnique.mockResolvedValue({
+      enabled: true,
+      emails: ['dueña@studio.com', 'socio@studio.com'],
+      events: ['appointment.created'],
+    });
+
+    await service.notifyAppointmentCreated({
+      businessId: 'biz-1',
+      id: 'apt-1',
+      contactName: 'Ana',
+      startsAt: new Date('2026-08-28T13:00:00.000Z'),
+      timezone: 'UTC',
+    });
+
+    expect(email.send).toHaveBeenCalledTimes(2);
+    expect(email.send.mock.calls.map((call) => call[0].to)).toEqual([
+      'dueña@studio.com',
+      'socio@studio.com',
+    ]);
+  });
+
   it('sends lead and auto-client emails', async () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue({
       enabled: true,
-      email: 'dueña@studio.com',
+      emails: ['dueña@studio.com'],
       events: ['lead.created', 'client.auto_created'],
     });
 
@@ -148,7 +198,7 @@ describe('AdminNotifyService', () => {
   it('does not throw if sending fails', async () => {
     prisma.adminNotifyConfig.findUnique.mockResolvedValue({
       enabled: true,
-      email: 'dueña@studio.com',
+      emails: ['dueña@studio.com'],
       events: ['lead.created'],
     });
     email.send.mockRejectedValue(new Error('smtp down'));

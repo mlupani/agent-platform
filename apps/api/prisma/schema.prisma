@@ -743,7 +743,7 @@ model AdminNotifyConfig {
   businessId String   @unique
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   enabled    Boolean  @default(false)
-  email      String?
+  emails     String[] @default([])
   /// appointment.created | appointment.cancelled | appointment.rescheduled | lead.created | client.auto_created
   events     String[] @default(["appointment.created", "lead.created", "client.auto_created"])
   createdAt  DateTime @default(now())

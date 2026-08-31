@@ -335,7 +335,7 @@ export interface LeadLifecycleConfig {
 
 export interface AdminNotifyConfig {
   enabled: boolean;
-  email: string | null;
+  emails: string[];
   events: string[];
   emailConfigured: boolean;
 }

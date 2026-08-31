@@ -2,7 +2,7 @@ import type { AdminNotifyEvent } from './admin-notify.constants';
 
 export interface AdminNotifyPublicConfig {
   enabled: boolean;
-  email: string | null;
+  emails: string[];
   events: AdminNotifyEvent[];
   emailConfigured: boolean;
 }

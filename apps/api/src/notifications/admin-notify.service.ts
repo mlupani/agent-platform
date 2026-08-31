@@ -6,6 +6,7 @@ import { EmailService } from '../email/email.service';
 import {
   ADMIN_NOTIFY_EVENTS,
   DEFAULT_ADMIN_NOTIFY_EVENTS,
+  MAX_ADMIN_NOTIFY_EMAILS,
   type AdminNotifyEvent,
 } from './admin-notify.constants';
 import type {
@@ -32,7 +33,7 @@ export class AdminNotifyService {
     ]);
     return {
       enabled: row?.enabled ?? false,
-      email: row?.email ?? null,
+      emails: this.normalizeEmails(row?.emails ?? [], { strict: false }),
       events: this.normalizeEvents(row?.events ?? DEFAULT_ADMIN_NOTIFY_EVENTS),
       emailConfigured: Boolean(transport),
     };
@@ -42,28 +43,28 @@ export class AdminNotifyService {
     businessId: string,
     input: {
       enabled?: boolean;
-      email?: string | null;
+      emails?: string[];
       events?: string[];
     },
   ): Promise<AdminNotifyPublicConfig> {
     const current = await this.getPublic(businessId);
-    const email =
-      input.email !== undefined
-        ? this.normalizeEmail(input.email)
-        : current.email;
+    const emails =
+      input.emails !== undefined
+        ? this.normalizeEmails(input.emails)
+        : current.emails;
     const enabled = input.enabled ?? current.enabled;
     const events = this.normalizeEvents(input.events ?? current.events);
 
-    if (enabled && !email) {
+    if (enabled && !emails.length) {
       throw new BadRequestException(
-        'Definí un email para recibir avisos de operaciones sensibles.',
+        'Definí al menos un email para recibir avisos de operaciones sensibles.',
       );
     }
 
     await this.prisma.adminNotifyConfig.upsert({
       where: { businessId },
-      create: { businessId, enabled, email, events },
-      update: { enabled, email, events },
+      create: { businessId, enabled, emails, events },
+      update: { enabled, emails, events },
     });
 
     return this.getPublic(businessId);
@@ -221,22 +222,40 @@ export class AdminNotifyService {
       const config = await this.prisma.adminNotifyConfig.findUnique({
         where: { businessId },
       });
-      if (!config?.enabled || !config.email) return;
+      const emails = this.normalizeEmails(config?.emails ?? [], {
+        strict: false,
+      });
+      if (!config?.enabled || !emails.length) return;
       if (!this.normalizeEvents(config.events).includes(event)) return;
 
       const message = build();
-      await this.email.send(
-        {
-          to: config.email,
-          subject: message.subject,
-          text: message.text,
-          html: message.html,
-        },
-        businessId,
+      const results = await Promise.allSettled(
+        emails.map((to) =>
+          this.email.send(
+            {
+              to,
+              subject: message.subject,
+              text: message.text,
+              html: message.html,
+            },
+            businessId,
+          ),
+        ),
       );
-      this.logger.log(
-        `Aviso ${event} enviado business=${businessId} to=${config.email}`,
-      );
+      const sent = results.filter((r) => r.status === 'fulfilled').length;
+      results.forEach((result, index) => {
+        if (result.status !== 'rejected') return;
+        this.logger.warn(
+          `Aviso ${event} falló business=${businessId} to=${emails[index]}: ${
+            result.reason instanceof Error ? result.reason.message : 'unknown'
+          }`,
+        );
+      });
+      if (sent) {
+        this.logger.log(
+          `Aviso ${event} enviado business=${businessId} to=${emails.join(', ')} (${sent}/${emails.length})`,
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `Aviso ${event} falló business=${businessId}: ${
@@ -257,14 +276,28 @@ export class AdminNotifyService {
     return unique.length ? unique : [...DEFAULT_ADMIN_NOTIFY_EVENTS];
   }
 
-  private normalizeEmail(value: string | null): string | null {
-    if (value == null) return null;
-    const email = value.trim().toLowerCase();
-    if (!email) return null;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  private normalizeEmails(
+    value: string[],
+    options?: { strict?: boolean },
+  ): string[] {
+    const strict = options?.strict !== false;
+    const unique: string[] = [];
+    for (const raw of value) {
+      const email = raw.trim().toLowerCase();
+      if (!email) continue;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (strict) {
+          throw new BadRequestException(`Email de aviso inválido: ${raw.trim()}`);
+        }
+        continue;
+      }
+      if (!unique.includes(email)) unique.push(email);
+      if (unique.length >= MAX_ADMIN_NOTIFY_EMAILS) break;
+    }
+    if (strict && value.some((item) => item.trim()) && !unique.length) {
       throw new BadRequestException('Email de aviso inválido');
     }
-    return email;
+    return unique;
   }
 
   private formatWhen(date: Date, timezone?: string | null): string {

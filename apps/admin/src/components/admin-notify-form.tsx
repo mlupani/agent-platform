@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { api } from '@/lib/api';
 import type { AdminNotifyConfig } from '@/lib/types';
 
@@ -13,6 +13,16 @@ const EVENT_META = [
   { id: 'client.auto_created', label: 'Cliente automático', hint: 'Cuando un lead se convierte solo' },
 ] as const;
 
+const MAX_EMAILS = 10;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseEmailDraft(raw: string): string[] {
+  return raw
+    .split(/[,;]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export function AdminNotifyForm() {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
@@ -21,7 +31,9 @@ export function AdminNotifyForm() {
   });
 
   const [enabled, setEnabled] = useState(false);
-  const [email, setEmail] = useState('');
+  const [emails, setEmails] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [events, setEvents] = useState<string[]>([
     'appointment.created',
     'lead.created',
@@ -32,20 +44,22 @@ export function AdminNotifyForm() {
   if (data && hydratedKey === null) {
     setHydratedKey('loaded');
     setEnabled(data.enabled);
-    setEmail(data.email ?? '');
+    setEmails(data.emails ?? []);
     setEvents(data.events);
   }
 
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (nextEmails: string[]) =>
       api<AdminNotifyConfig>('/admin/notify', {
         method: 'PUT',
-        body: JSON.stringify({ enabled, email: email.trim() || null, events }),
+        body: JSON.stringify({ enabled, emails: nextEmails, events }),
       }),
     onSuccess: async (result) => {
       setEnabled(result.enabled);
-      setEmail(result.email ?? '');
+      setEmails(result.emails ?? []);
       setEvents(result.events);
+      setDraft('');
+      setDraftError(null);
       await queryClient.invalidateQueries({ queryKey: ['admin-notify'] });
     },
   });
@@ -54,6 +68,46 @@ export function AdminNotifyForm() {
     setEvents((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
+  }
+
+  function mergeDraft(base: string[]): string[] | null {
+    const parsed = parseEmailDraft(draft);
+    if (!parsed.length) {
+      setDraftError(null);
+      return base;
+    }
+    const invalid = parsed.find((item) => !EMAIL_RE.test(item));
+    if (invalid) {
+      setDraftError(`Email inválido: ${invalid}`);
+      return null;
+    }
+    const next = [...base];
+    for (const email of parsed) {
+      if (next.includes(email)) continue;
+      if (next.length >= MAX_EMAILS) {
+        setDraftError(`Máximo ${MAX_EMAILS} emails.`);
+        return null;
+      }
+      next.push(email);
+    }
+    setDraft('');
+    setDraftError(null);
+    return next;
+  }
+
+  function addEmails() {
+    const next = mergeDraft(emails);
+    if (next) setEmails(next);
+  }
+
+  function removeEmail(email: string) {
+    setEmails((prev) => prev.filter((item) => item !== email));
+  }
+
+  function onDraftKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addEmails();
   }
 
   if (isLoading) {
@@ -73,8 +127,8 @@ export function AdminNotifyForm() {
           <h3 className="font-medium">Avisos por email</h3>
           <p className="text-sm text-muted mt-1 max-w-xl">
             Recibí un email cuando el agente agenda una clase, se genera un
-            lead o se crea un cliente automático. Configurá el email destino y
-            elegí qué eventos queres recibir.
+            lead o se crea un cliente automático. Configurá uno o más emails
+            destino y elegí qué eventos queres recibir.
           </p>
         </div>
         <label className="inline-flex items-center gap-2 text-sm min-h-10 cursor-pointer">
@@ -102,20 +156,63 @@ export function AdminNotifyForm() {
         </p>
       ) : null}
 
-      <label className="block space-y-1 text-sm max-w-md">
-        <span className="text-muted">Email destino</span>
-        <input
-          type="email"
-          placeholder="vos@negocio.com"
-          className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
-          disabled={!enabled}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <span className="block text-xs text-muted">
-          Un solo email por negocio. Usá una casilla que revises seguido.
-        </span>
-      </label>
+      <div className="space-y-2 max-w-md">
+        <span className="block text-sm text-muted">Emails destino</span>
+        {emails.length ? (
+          <ul className="flex flex-wrap gap-1.5">
+            {emails.map((email) => (
+              <li
+                key={email}
+                className="inline-flex items-center gap-1 rounded-full border border-line bg-panel-2 pl-2.5 pr-1 py-0.5 text-sm"
+              >
+                <span className="max-w-[220px] truncate">{email}</span>
+                <button
+                  type="button"
+                  disabled={!enabled}
+                  onClick={() => removeEmail(email)}
+                  className="rounded-full w-6 h-6 inline-flex items-center justify-center text-muted hover:text-text disabled:opacity-50 cursor-pointer"
+                  aria-label={`Quitar ${email}`}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted">Todavía no hay emails.</p>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="otro@negocio.com"
+            className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+            disabled={!enabled || emails.length >= MAX_EMAILS}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (draftError) setDraftError(null);
+            }}
+            onKeyDown={onDraftKeyDown}
+          />
+          <button
+            type="button"
+            disabled={!enabled || !draft.trim() || emails.length >= MAX_EMAILS}
+            onClick={() => addEmails()}
+            className="shrink-0 rounded-lg border border-line bg-panel px-3 py-2 text-sm min-h-10 disabled:opacity-50 cursor-pointer"
+          >
+            Agregar
+          </button>
+        </div>
+        {draftError ? (
+          <p className="text-xs text-amber-700">{draftError}</p>
+        ) : (
+          <span className="block text-xs text-muted">
+            Podés agregar hasta {MAX_EMAILS}. Separá con coma para pegar varios.
+          </span>
+        )}
+      </div>
 
       <div className="space-y-2">
         <p className="text-sm text-muted">Eventos</p>
@@ -180,9 +277,14 @@ export function AdminNotifyForm() {
         className="rounded-lg bg-accent text-white px-4 py-2 text-sm min-h-10 hover:opacity-90 disabled:opacity-60"
         disabled={
           save.isPending ||
-          (enabled && (!email.trim() || eventsEmpty))
+          (enabled && (!emails.length || eventsEmpty))
         }
-        onClick={() => save.mutate()}
+        onClick={() => {
+          const next = mergeDraft(emails);
+          if (!next) return;
+          setEmails(next);
+          save.mutate(next);
+        }}
       >
         {save.isPending ? 'Guardando…' : 'Guardar avisos'}
       </button>
