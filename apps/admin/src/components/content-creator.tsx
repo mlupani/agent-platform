@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { api, apiForm } from '@/lib/api';
 import { ContentKnowledgePanel } from '@/components/content-knowledge-panel';
 
@@ -278,6 +278,127 @@ interface LightboxMedia {
   label?: string;
 }
 
+function safeVideoFilename(raw: string) {
+  const base =
+    raw
+      .replace(/\.[^.]+$/, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'video';
+  return `${base}.mp4`;
+}
+
+function withCloudinaryAttachment(url: string, filename: string) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('cloudinary.com')) return null;
+    if (!parsed.pathname.includes('/upload/')) return null;
+    const name = filename.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    parsed.pathname = parsed.pathname.replace(
+      '/upload/',
+      `/upload/fl_attachment:${name}/`,
+    );
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function triggerAnchorDownload(href: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  a.rel = 'noopener';
+  a.target = '_blank';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function downloadVideoFile(url: string, filename: string) {
+  const name = safeVideoFilename(filename);
+  const attached = withCloudinaryAttachment(url, name);
+  if (attached) {
+    triggerAnchorDownload(attached, name);
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('download failed');
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    triggerAnchorDownload(objectUrl, name);
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    triggerAnchorDownload(url, name);
+  }
+}
+
+function DownloadIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} aria-hidden>
+      <path
+        fill="currentColor"
+        d="M10 2.5a.75.75 0 0 1 .75.75v8.19l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM3.75 14.5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"
+      />
+    </svg>
+  );
+}
+
+function DownloadVideoButton({
+  url,
+  filename,
+  variant = 'text',
+}: {
+  url: string;
+  filename: string;
+  variant?: 'text' | 'lightbox';
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function onClick(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await downloadVideoFile(url, filename);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (variant === 'lightbox') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy}
+        className="absolute top-4 right-16 z-20 rounded-full bg-white/15 hover:bg-white/25 text-white w-10 h-10 inline-flex items-center justify-center disabled:opacity-60 cursor-pointer"
+        aria-label="Descargar video"
+        title="Descargar video"
+      >
+        {busy ? <BusySpinner className="h-4 w-4 border-white/30 border-t-white" /> : <DownloadIcon />}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted hover:text-text hover:bg-panel min-h-8 cursor-pointer disabled:opacity-60"
+      aria-label="Descargar video"
+    >
+      {busy ? <BusySpinner className="h-3.5 w-3.5" /> : <DownloadIcon className="h-3.5 w-3.5" />}
+      {busy ? 'Descargando…' : 'Descargar'}
+    </button>
+  );
+}
+
 function LightboxVideo({ src, label }: { src: string; label?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
 
@@ -363,6 +484,13 @@ function MediaLightbox({
       >
         ×
       </button>
+      {media.video ? (
+        <DownloadVideoButton
+          url={media.url}
+          filename={media.label || 'video'}
+          variant="lightbox"
+        />
+      ) : null}
       <div
         className="relative z-10 max-h-[92vh] max-w-[min(96vw,1120px)]"
         onClick={(event) => event.stopPropagation()}
@@ -974,25 +1102,33 @@ export function ContentCreator() {
                       )}
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openContent(item)}
-                    className="w-full text-left p-3 space-y-1"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate">
-                        {item.headline || item.topic || 'Sin título'}
+                  <div className="p-3 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => openContent(item)}
+                      className="w-full text-left space-y-1"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate">
+                          {item.headline || item.topic || 'Sin título'}
+                        </p>
+                        <span
+                          className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusClass(item.status)}`}
+                        >
+                          {STATUS_LABEL[item.status] ?? item.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted line-clamp-2">
+                        {item.caption || '—'}
                       </p>
-                      <span
-                        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusClass(item.status)}`}
-                      >
-                        {STATUS_LABEL[item.status] ?? item.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted line-clamp-2">
-                      {item.caption || '—'}
-                    </p>
-                  </button>
+                    </button>
+                    {thumb && thumbVideo && item.status !== 'GENERATING' ? (
+                      <DownloadVideoButton
+                        url={thumb}
+                        filename={item.headline || item.topic || 'video'}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -1580,8 +1716,14 @@ export function ContentCreator() {
                         />
                       </button>
                     )}
-                    <figcaption className="px-2 py-1.5 text-[11px] text-muted">
-                      {assetRoleLabel(asset, isVideo)}
+                    <figcaption className="px-2 py-1.5 text-[11px] text-muted flex items-center justify-between gap-2">
+                      <span>{assetRoleLabel(asset, isVideo)}</span>
+                      {isVideo ? (
+                        <DownloadVideoButton
+                          url={asset.storageUrl}
+                          filename={`${detail.headline || detail.topic || 'video'}-${assetRoleLabel(asset, true)}`}
+                        />
+                      ) : null}
                     </figcaption>
                   </figure>
                   );
