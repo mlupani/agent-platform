@@ -11,6 +11,83 @@ import { ContentKnowledgePanel } from '@/components/content-knowledge-panel';
 const ELEVENLABS_ENABLED =
   (process.env.NEXT_PUBLIC_ELEVENLABS_ENABLED ?? '').trim().toLowerCase() === 'true';
 
+// Modelos de video disponibles, agrupados por provider.
+const VIDEO_MODEL_GROUPS: {
+  provider: 'kie' | 'fal' | 'veo';
+  label: string;
+  models: { value: string; label: string }[];
+}[] = [
+  {
+    provider: 'kie',
+    label: 'kie.ai',
+    models: [
+      { value: 'kling-3.0-omni', label: 'Kling 3.0 Omni — audio nativo + multi-shot, 3–15s' },
+      { value: 'kling-2.6', label: 'Kling 2.6 — audio nativo, 5 o 10s' },
+      { value: 'gemini-omni-flash-1-1', label: 'Gemini Omni Flash 1.1 — audio nativo, 4/6/8/10s, hasta 4K' },
+      { value: 'bytedance/seedance-1.5-pro', label: 'Seedance 1.5 Pro — 4–12s' },
+      { value: 'bytedance/seedance-2', label: 'Seedance 2 — 4–15s' },
+      { value: 'bytedance/seedance-2-fast', label: 'Seedance 2 Fast — más rápido' },
+    ],
+  },
+  {
+    provider: 'fal',
+    label: 'fal.ai',
+    models: [
+      {
+        value: 'fal-ai/kling-video/v1/standard/text-to-video',
+        label: 'Kling v1 Standard (text-to-video)',
+      },
+    ],
+  },
+  {
+    provider: 'veo',
+    label: 'Veo (Google)',
+    models: [
+      { value: 'veo-3.1-lite-generate-preview', label: 'Veo 3.1 Lite — 4, 6 u 8s' },
+    ],
+  },
+];
+
+const VIDEO_MODEL_TO_PROVIDER: Record<string, 'kie' | 'fal' | 'veo'> =
+  Object.fromEntries(
+    VIDEO_MODEL_GROUPS.flatMap((g) => g.models.map((m) => [m.value, g.provider])),
+  );
+
+function VideoModelSelect({
+  value,
+  emptyLabel,
+  className,
+  onChange,
+}: {
+  value: string;
+  emptyLabel: string;
+  className: string;
+  onChange: (value: string) => void;
+}) {
+  const known = value !== '' && value in VIDEO_MODEL_TO_PROVIDER;
+  return (
+    <select
+      className={className}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{emptyLabel}</option>
+      {VIDEO_MODEL_GROUPS.map((group) => (
+        <optgroup key={group.provider} label={group.label}>
+          {group.models.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+      {value !== '' && !known ? (
+        <option value={value}>{`Personalizado: ${value}`}</option>
+      ) : null}
+    </select>
+  );
+}
+
 interface ContentAsset {
   id: string;
   type?: string;
@@ -1368,20 +1445,22 @@ export function ContentCreator() {
                   </label>
                   <label className="block space-y-1">
                     <span className="text-muted">Modelo (opcional)</span>
-                    <input
+                    <VideoModelSelect
                       className="w-full rounded-lg border border-line bg-panel px-3 py-2"
+                      emptyLabel="Por defecto (negocio / env)"
                       value={videoModel}
-                      onChange={(e) => setVideoModel(e.target.value)}
-                      placeholder="bytedance/seedance-1.5-pro"
+                      onChange={(v) => {
+                        setVideoModel(v);
+                        const p = VIDEO_MODEL_TO_PROVIDER[v];
+                        if (p) setVideoProvider(p);
+                      }}
                     />
                   </label>
                 </div>
                 <p className="text-xs text-muted">
-                  Escribí el modelo y cambialo al momento. Vacío usa el configurado por negocio o{' '}
-                  <code className="mono text-[11px]">KIE_VIDEO_MODEL</code> del .env. Ej:{' '}
-                  <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code>,{' '}
-                  <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code>,{' '}
-                  <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code>
+                  Elegí el modelo y cambialo al momento. Al elegir uno se ajusta el
+                  provider. Vacío usa el configurado por negocio o{' '}
+                  <code className="mono text-[11px]">KIE_VIDEO_MODEL</code> del .env.
                 </p>
               </div>
             </>
@@ -2091,10 +2170,10 @@ export function ContentCreator() {
           <div>
             <p className="text-sm font-medium">Video — modelo por defecto</p>
             <p className="text-xs text-muted mt-1">
-              Se usa cuando generás VIDEO sin escribir modelo arriba. Vacío usa{' '}
+              Se usa cuando generás VIDEO sin elegir modelo arriba. Vacío usa{' '}
               <code className="mono text-[11px]">.env</code> (<code className="mono text-[11px]">KIE_VIDEO_MODEL</code> /{' '}
               <code className="mono text-[11px]">FAL_VIDEO_MODEL</code> / <code className="mono text-[11px]">VEO_VIDEO_MODEL</code>).
-              Escribí y guardá para cambiarlo al momento sin redeploy.
+              Guardá para cambiarlo al momento sin redeploy.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -2116,22 +2195,22 @@ export function ContentCreator() {
             </label>
             <label className="block space-y-1 text-sm">
               <span className="text-muted">Modelo</span>
-              <input
-                type="text"
-                placeholder="bytedance/seedance-1.5-pro"
+              <VideoModelSelect
                 className="w-full rounded-lg border border-line bg-panel px-3 py-2 disabled:opacity-50"
+                emptyLabel="Por defecto (env)"
                 value={preferredVideoModel}
-                onChange={(e) => {
+                onChange={(v) => {
                   setAutoDirty(true);
-                  setPreferredVideoModel(e.target.value);
+                  setPreferredVideoModel(v);
+                  const p = VIDEO_MODEL_TO_PROVIDER[v];
+                  if (p) setPreferredVideoProvider(p);
                 }}
               />
             </label>
           </div>
           <p className="text-xs text-muted">
-            Ej: <code className="mono text-[11px]">bytedance/seedance-1.5-pro</code> (kie),{' '}
-            <code className="mono text-[11px]">fal-ai/kling-video/v1/standard/text-to-video</code> (fal),{' '}
-            <code className="mono text-[11px]">veo-3.1-lite-generate-preview</code> (veo). Vacío = usa .env.
+            Al elegir un modelo se ajusta el provider. Kling 3.0 Omni y Kling 2.6
+            traen audio nativo. Vacío = usa <code className="mono text-[11px]">.env</code>.
           </p>
         </div>
 

@@ -19,6 +19,21 @@ describe('video duration', () => {
     expect(clampDurationForKie('bytedance/seedance-2.0', 15)).toBe(15);
   });
 
+  it('clampa Kling 2.6 a 5 o 10 y Kling 3.0 a 3–15', () => {
+    expect(clampDurationForKie('kling-2.6/text-to-video', 15)).toBe(10);
+    expect(clampDurationForKie('kling-2.6/text-to-video', 10)).toBe(10);
+    expect(clampDurationForKie('kling-2.6/image-to-video', 5)).toBe(5);
+    expect(clampDurationForKie('kling-3.0/video', 15)).toBe(15);
+    expect(clampDurationForKie('kling-3.0/video', 2)).toBe(3);
+  });
+
+  it('clampa Gemini Omni a 4, 6, 8 o 10', () => {
+    expect(clampDurationForKie('gemini-omni-video', 5)).toBe(4);
+    expect(clampDurationForKie('gemini-omni-video', 10)).toBe(10);
+    expect(clampDurationForKie('gemini-omni-video', 15)).toBe(10);
+    expect(clampDurationForKie('gemini-omni-video', 7)).toBe(6);
+  });
+
   it('clampa Kling v1 de fal a 5 o 10', () => {
     expect(
       clampDurationForFal('fal-ai/kling-video/v1/standard/text-to-video', 15),

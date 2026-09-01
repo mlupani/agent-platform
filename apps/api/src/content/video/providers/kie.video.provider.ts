@@ -16,7 +16,10 @@ import { clampDurationForKie } from '../video-duration';
 import {
   buildKieMarketInput,
   DEFAULT_KIE_VIDEO_MODEL,
+  isGeminiOmniModel,
+  isKlingModel,
   resolveKieVideoModel,
+  resolveKlingModelForRefs,
 } from '../kie-market-input';
 import {
   VideoGenerationFailedError,
@@ -36,9 +39,12 @@ export class KieVideoProvider implements VideoGenerationProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly model: string;
+  private readonly klingMode: string;
   private readonly timeoutMs: number;
   private readonly pollMs: number;
   private readonly estimatedCost: number;
+  private readonly klingEstimatedCost: number;
+  private readonly geminiOmniEstimatedCost: number;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('KIE_API_KEY')?.trim() || '';
@@ -50,6 +56,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
     if (configured && configured !== this.model) {
       this.logger.log(`Kie model alias ${configured} → ${this.model}`);
     }
+    this.klingMode = this.config.get<string>('KIE_KLING3_MODE')?.trim() || '';
     this.timeoutMs = Number(
       this.config.get<string>('VIDEO_TIMEOUT_MS') || 12 * 60 * 1000,
     );
@@ -58,6 +65,12 @@ export class KieVideoProvider implements VideoGenerationProvider {
     );
     this.estimatedCost = Number(
       this.config.get<string>('KIE_VIDEO_ESTIMATED_COST') || 0.08,
+    );
+    this.klingEstimatedCost = Number(
+      this.config.get<string>('KIE_KLING_ESTIMATED_COST') || 0.28,
+    );
+    this.geminiOmniEstimatedCost = Number(
+      this.config.get<string>('KIE_GEMINI_OMNI_ESTIMATED_COST') || 0.5,
     );
   }
 
@@ -74,14 +87,25 @@ export class KieVideoProvider implements VideoGenerationProvider {
     }
 
     const started = Date.now();
-    const prompt = input.prompt.slice(0, 2500);
     const aspectRatio = input.aspectRatio ?? '9:16';
-    const effectiveModel = input.model?.trim()
+    const requestedModel = input.model?.trim()
       ? resolveKieVideoModel(input.model.trim())
       : this.model;
-    if (input.model?.trim() && input.model.trim() !== effectiveModel) {
-      this.logger.log(`Kie model alias ${input.model.trim()} → ${effectiveModel}`);
+    if (input.model?.trim() && input.model.trim() !== requestedModel) {
+      this.logger.log(
+        `Kie model alias ${input.model.trim()} → ${requestedModel}`,
+      );
     }
+    const hasRefs = (input.referenceImageUrls ?? []).filter(Boolean).length > 0;
+    const effectiveModel = this.isVeoModel(requestedModel)
+      ? requestedModel
+      : resolveKlingModelForRefs(requestedModel, hasRefs);
+    if (effectiveModel !== requestedModel) {
+      this.logger.log(
+        `Kie Kling image-to-video: ${requestedModel} → ${effectiveModel}`,
+      );
+    }
+    const prompt = input.prompt.slice(0, this.maxPromptLen(effectiveModel));
     const durationSeconds = clampDurationForKie(
       effectiveModel,
       input.durationSeconds ?? 5,
@@ -98,7 +122,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
             effectiveModel,
           );
 
-      const result = await this.pollTask(taskId);
+      const result = await this.pollTask(taskId, effectiveModel);
       if (!result.videoUrl) {
         throw new VideoGenerationFailedError(
           this.name,
@@ -119,7 +143,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
         provider: this.name,
         model: effectiveModel,
         prompt: input.prompt,
-        estimatedCost: this.estimatedCost,
+        estimatedCost: this.estimatedCostFor(effectiveModel),
         durationMs: Date.now() - started,
       };
     } catch (error) {
@@ -137,6 +161,17 @@ export class KieVideoProvider implements VideoGenerationProvider {
 
   private isVeoModel(model: string): boolean {
     return /^veo/i.test(model);
+  }
+
+  /** Kling 2.6 limita el prompt a 1000 chars; el resto acepta hasta 2500. */
+  private maxPromptLen(model: string): number {
+    return /kling-2\.6/i.test(model) ? 1000 : 2500;
+  }
+
+  private estimatedCostFor(model: string): number {
+    if (isGeminiOmniModel(model)) return this.geminiOmniEstimatedCost;
+    if (isKlingModel(model)) return this.klingEstimatedCost;
+    return this.estimatedCost;
   }
 
   private authHeaders(): Record<string, string> {
@@ -161,6 +196,7 @@ export class KieVideoProvider implements VideoGenerationProvider {
         generateAudio: Boolean(input.generateAudio),
         resolution: input.resolution,
         referenceImageUrls: input.referenceImageUrls,
+        klingMode: this.klingMode || undefined,
       }),
     };
     this.logger.log(`Kie createTask model=${model}`);
@@ -226,10 +262,13 @@ export class KieVideoProvider implements VideoGenerationProvider {
     return taskId;
   }
 
-  private async pollTask(taskId: string): Promise<KieTaskResult> {
+  private async pollTask(
+    taskId: string,
+    model: string,
+  ): Promise<KieTaskResult> {
     const deadline = Date.now() + this.timeoutMs;
     while (Date.now() < deadline) {
-      const result = this.isVeoModel(this.model)
+      const result = this.isVeoModel(model)
         ? await this.readVeoStatus(taskId)
         : await this.readMarketStatus(taskId);
 

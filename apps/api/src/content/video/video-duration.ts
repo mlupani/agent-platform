@@ -10,15 +10,34 @@ export function parseVideoDuration(
   return fallback;
 }
 
-/** Seedance 2: 4–15s. Seedance 1.5 Pro: 4–12s. Kling 3.x: 3–15s. */
+const GEMINI_OMNI_DURATIONS = [4, 6, 8, 10] as const;
+
+/**
+ * Seedance 2: 4–15s. Seedance 1.5 Pro: 4–12s. Kling 2.6: 5 o 10. Kling 3.x: 3–15s.
+ * Gemini Omni: 4 | 6 | 8 | 10 (el panel manda 5/10/15).
+ */
 export function clampDurationForKie(model: string, seconds: number): number {
   const m = model.toLowerCase();
   if (/seedance-2/i.test(m))
     return Math.min(15, Math.max(4, Math.round(seconds)));
   if (m.includes('seedance'))
     return Math.min(12, Math.max(4, Math.round(seconds)));
+  if (/kling-2\.6/i.test(m)) return Math.round(seconds) <= 5 ? 5 : 10;
   if (m.includes('kling'))
     return Math.min(15, Math.max(3, Math.round(seconds)));
+  if (/gemini-omni/i.test(m)) {
+    const n = Math.round(seconds);
+    let best: number = GEMINI_OMNI_DURATIONS[0];
+    let dist = Number.POSITIVE_INFINITY;
+    for (const option of GEMINI_OMNI_DURATIONS) {
+      const delta = Math.abs(option - n);
+      if (delta < dist) {
+        dist = delta;
+        best = option;
+      }
+    }
+    return best;
+  }
   return Math.min(15, Math.max(4, Math.round(seconds)));
 }
 
