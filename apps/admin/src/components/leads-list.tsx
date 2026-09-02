@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { ChannelBadge } from '@/components/channel-icons';
 import type { LeadRow } from '@/lib/types';
 
-type LeadChannel = 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK';
+type LeadChannel = 'MANUAL' | 'WEB' | 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'VOICE';
 type StatusFilter = 'all' | LeadRow['status'] | string;
 type ContactableFilter = 'all' | 'yes' | 'no';
 
@@ -17,6 +17,7 @@ const CHANNEL_LABEL: Record<string, string> = {
   WHATSAPP: 'WhatsApp',
   INSTAGRAM: 'Instagram',
   FACEBOOK: 'Messenger',
+  VOICE: 'Llamada',
   TELEGRAM: 'Telegram',
   PLAYGROUND: 'Playground',
   MANUAL: 'Carga manual',
@@ -47,6 +48,7 @@ const ORIGIN_OPTIONS: Array<{ value: LeadChannel; label: string }> = [
   { value: 'INSTAGRAM', label: 'Instagram' },
   { value: 'FACEBOOK', label: 'Messenger' },
   { value: 'WEB', label: 'Chat web' },
+  { value: 'VOICE', label: 'Llamada' },
 ];
 
 function channelLabel(channel: string | null) {
