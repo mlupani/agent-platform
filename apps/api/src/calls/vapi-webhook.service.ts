@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import type { Business, VapiCallConfig } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
@@ -43,11 +44,19 @@ export class VapiWebhookService {
     private readonly leads: LeadsService,
   ) {}
 
-  /** `true` sólo si el header trae el mismo secret que guardó el negocio. */
+  /**
+   * `true` sólo si el header trae el mismo secret que guardó el negocio.
+   * Comparación en tiempo constante (mismo patrón que `social-webhook.service`):
+   * el endpoint es público y `===` cortocircuita en el primer byte distinto.
+   */
   async verifySecret(headerValue: string | undefined): Promise<boolean> {
     if (!headerValue) return false;
     const secret = await this.callConfig.getWebhookSecret();
-    return Boolean(secret) && headerValue === secret;
+    if (!secret) return false;
+    const a = Buffer.from(headerValue);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
   }
 
   /**

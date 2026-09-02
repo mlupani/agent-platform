@@ -41,6 +41,14 @@ describe('VapiWebhookService', () => {
     expect(await service.verifySecret('the-secret')).toBe(true);
     expect(await service.verifySecret('otro')).toBe(false);
     expect(await service.verifySecret(undefined)).toBe(false);
+    // Distinta longitud: timingSafeEqual lanzaría, hay que cortar antes.
+    expect(await service.verifySecret('the-secret-mas-largo')).toBe(false);
+    expect(await service.verifySecret('')).toBe(false);
+  });
+
+  it('verifySecret rechaza si el negocio no tiene secret guardado', async () => {
+    callConfig.getWebhookSecret.mockResolvedValueOnce(null as never);
+    expect(await service.verifySecret('lo-que-sea')).toBe(false);
   });
 
   it('assistant-request habilitado devuelve assistant transitorio custom-llm', async () => {

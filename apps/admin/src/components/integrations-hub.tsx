@@ -412,8 +412,8 @@ export function IntegrationsHub() {
                   ok={calls.data?.agentEnabled !== false}
                   label={
                     calls.data?.agentEnabled !== false
-                      ? 'Asistente activo'
-                      : 'Asistente inactivo'
+                      ? 'Agente activo'
+                      : 'Agente inactivo'
                   }
                 />
               ) : null}

@@ -205,7 +205,7 @@ export function VapiCallConfigForm() {
             checked={agentEnabled}
             onChange={(e) => setAgentEnabled(e.target.checked)}
           />
-          Asistente activo
+          Agente activo
         </label>
 
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
