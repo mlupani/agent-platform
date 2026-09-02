@@ -8,7 +8,12 @@ describe('VapiWebhookService', () => {
     getWebhookSecret: jest.fn(async () => 'the-secret'),
     resolveWebhookUrl: jest.fn(() => 'https://api.x.com/api/webhooks/vapi'),
   };
-  const callLog = { startInboundCall: jest.fn(), updateStatus: jest.fn(), finalizeFromReport: jest.fn() };
+  const callLog = {
+    startInboundCall: jest.fn(),
+    updateStatus: jest.fn(),
+    finalizeFromReport: jest.fn(),
+    markHang: jest.fn(),
+  };
   const businesses = { getCurrentId: jest.fn(async () => 'biz-1') };
   const prismaBusiness = { business: { findUnique: jest.fn() } };
   const leads = { capture: jest.fn() };
@@ -194,6 +199,8 @@ describe('VapiWebhookService', () => {
     const out = await service.handleEvent({ type: 'hang', call: { id: 'call_1' } } as never);
     expect(out).toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('call_1'));
+    // El hang es la señal de que la latencia de voz se pasó: se persiste.
+    expect(callLog.markHang).toHaveBeenCalledWith('call_1');
     warnSpy.mockRestore();
   });
 });

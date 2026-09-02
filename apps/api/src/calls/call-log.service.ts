@@ -58,17 +58,44 @@ export class CallLogService {
         : status === 'ended'
           ? 'ended'
           : status;
+    let log: { businessId: string; conversationId: string | null };
     try {
-      await this.prisma.callLog.update({
+      log = await this.prisma.callLog.update({
         where: { vapiCallId },
         data: {
           status: normalized,
           ...(normalized === 'in-progress' ? { startedAt: new Date() } : {}),
           ...(normalized === 'ended' ? { endedAt: new Date() } : {}),
         },
+        select: { businessId: true, conversationId: true },
       });
     } catch (error) {
       this.logNonThrowingFailure('updateStatus', vapiCallId, error);
+      return;
+    }
+
+    // La bandeja necesita ver el avance de la llamada en vivo, no sólo al cierre.
+    if (log.conversationId) {
+      this.realtime.conversationUpdated(log.businessId, {
+        conversationId: log.conversationId,
+        callStatus: normalized,
+      });
+    }
+  }
+
+  /**
+   * Marca en el `CallLog` que Vapi reportó un `hang` (el modelo tardó demasiado
+   * en responder). Es la señal de que el presupuesto de latencia de voz se pasó,
+   * así que queda persistida y no sólo en los logs. Nunca re-lanza.
+   */
+  async markHang(vapiCallId: string): Promise<void> {
+    try {
+      await this.prisma.callLog.update({
+        where: { vapiCallId },
+        data: { metadata: { hang: true } },
+      });
+    } catch (error) {
+      this.logNonThrowingFailure('markHang', vapiCallId, error);
     }
   }
 

@@ -37,11 +37,61 @@ describe('CallLogService', () => {
   });
 
   it('updateStatus mapea ended y setea endedAt', async () => {
+    prisma.callLog.update.mockResolvedValue({
+      businessId: 'biz-1',
+      conversationId: 'conv_1',
+    });
     await service.updateStatus('call_1', 'ended');
     const arg = prisma.callLog.update.mock.calls[0][0];
     expect(arg.where).toEqual({ vapiCallId: 'call_1' });
     expect(arg.data.status).toBe('ended');
     expect(arg.data.endedAt).toBeInstanceOf(Date);
+  });
+
+  it('updateStatus emite realtime para que la bandeja siga la llamada en vivo', async () => {
+    prisma.callLog.update.mockResolvedValue({
+      businessId: 'biz-1',
+      conversationId: 'conv_1',
+    });
+
+    await service.updateStatus('call_1', 'in-progress');
+
+    expect(realtime.conversationUpdated).toHaveBeenCalledWith('biz-1', {
+      conversationId: 'conv_1',
+      callStatus: 'in-progress',
+    });
+  });
+
+  it('updateStatus sin conversación asociada no emite realtime', async () => {
+    prisma.callLog.update.mockResolvedValue({
+      businessId: 'biz-1',
+      conversationId: null,
+    });
+
+    await service.updateStatus('call_1', 'in-progress');
+
+    expect(realtime.conversationUpdated).not.toHaveBeenCalled();
+  });
+
+  it('markHang persiste metadata.hang en el CallLog', async () => {
+    prisma.callLog.update.mockResolvedValue({});
+
+    await service.markHang('call_1');
+
+    expect(prisma.callLog.update).toHaveBeenCalledWith({
+      where: { vapiCallId: 'call_1' },
+      data: { metadata: { hang: true } },
+    });
+  });
+
+  it('markHang tolera una call desconocida (P2025) sin romper', async () => {
+    prisma.callLog.update.mockRejectedValue(
+      Object.assign(new Error('not found'), { code: 'P2025' }),
+    );
+
+    await expect(service.markHang('ghost')).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ghost'));
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('finalizeFromReport completa el log y cierra la conversación', async () => {

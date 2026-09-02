@@ -78,6 +78,7 @@ export class VapiWebhookService {
         return {};
       case 'hang':
         this.logger.warn(`Vapi hang en call=${message.call?.id ?? '?'}`);
+        if (message.call?.id) await this.callLog.markHang(message.call.id);
         return {};
       default:
         return {};
