@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { GoogleCalendarConfigForm } from '@/components/google-calendar-config-form';
+import { VapiCallConfigForm } from '@/components/vapi-call-config-form';
 import { WebChatConfigForm } from '@/components/web-chat-config-form';
 import { WhatsAppConfigForm } from '@/components/whatsapp-config-form';
 import { ZernioSocialForm } from '@/components/zernio-social-form';
@@ -11,6 +12,7 @@ import {
   FacebookIcon,
   InstagramIconMono,
   TikTokIcon,
+  VoiceChannelIcon,
   WebChannelIcon,
   WhatsAppIcon,
 } from '@/components/channel-icons';
@@ -23,7 +25,8 @@ type Panel =
   | 'facebook'
   | 'tiktok'
   | 'web'
-  | 'calendar';
+  | 'calendar'
+  | 'calls';
 
 interface WhatsAppPublicConfig {
   status: string;
@@ -100,6 +103,14 @@ export function IntegrationsHub() {
     queryKey: ['web-chat-config'],
     queryFn: () => api<WebChatPublicConfig | null>('/admin/web-chat'),
   });
+  const calls = useQuery({
+    queryKey: ['vapi-call-config'],
+    queryFn: () =>
+      api<{ status: string; enabled: boolean; agentEnabled: boolean } | null>(
+        '/admin/calls',
+      ),
+  });
+  const callsConnected = calls.data?.status === 'connected';
 
   const waConnected = wa.data?.status === 'connected';
   const igConnection = social.data?.connections.find(
@@ -127,6 +138,7 @@ export function IntegrationsHub() {
     if (panel === 'tiktok') return 'TikTok';
     if (panel === 'web') return 'Web';
     if (panel === 'calendar') return 'Google Calendar';
+    if (panel === 'calls') return 'Llamadas';
     return 'Integraciones';
   }, [panel]);
 
@@ -158,6 +170,7 @@ export function IntegrationsHub() {
         {panel === 'tiktok' ? <ZernioSocialForm platform="tiktok" /> : null}
         {panel === 'web' ? <WebChatConfigForm /> : null}
         {panel === 'calendar' ? <GoogleCalendarConfigForm /> : null}
+        {panel === 'calls' ? <VapiCallConfigForm /> : null}
       </div>
     );
   }
@@ -374,6 +387,42 @@ export function IntegrationsHub() {
           <p className="mt-1 text-sm text-muted">
             Conectá tu agenda para que el asistente pueda ver disponibilidad, reservar turnos y evitar
             choques de citas.
+          </p>
+          <div className="mt-4 flex justify-end text-muted group-hover:text-text">
+            →
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPanel('calls')}
+          className="panel rounded-2xl p-5 text-left hover:border-text/20 transition group cursor-pointer"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent">
+              <VoiceChannelIcon className="h-5 w-5" title="Llamadas" />
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <StatusPill
+                ok={callsConnected}
+                label={callsConnected ? 'Conectado' : 'Desconectado'}
+              />
+              {callsConnected ? (
+                <StatusPill
+                  ok={calls.data?.agentEnabled !== false}
+                  label={
+                    calls.data?.agentEnabled !== false
+                      ? 'Asistente activo'
+                      : 'Asistente inactivo'
+                  }
+                />
+              ) : null}
+            </div>
+          </div>
+          <h3 className="mt-4 font-medium">Llamadas</h3>
+          <p className="mt-1 text-sm text-muted">
+            Conectá un número de Vapi para que el asistente atienda llamadas
+            entrantes.
           </p>
           <div className="mt-4 flex justify-end text-muted group-hover:text-text">
             →
