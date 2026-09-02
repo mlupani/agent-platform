@@ -90,6 +90,52 @@ describe('VapiBridgeService', () => {
     expect(body.toLowerCase()).toMatch(/problema|repet/);
   });
 
+  it('body nulo no lanza y aún produce una respuesta', async () => {
+    const res = mockRes();
+    await expect(
+      service.handleChatCompletion(null as never, res as never),
+    ).resolves.toBeUndefined();
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(res.end).toHaveBeenCalled();
+    const body = res.chunks.join('');
+    expect(body).toContain('data: [DONE]');
+  });
+
+  it('turno sin mensaje de usuario: no llama al agente pero emite stop + [DONE]', async () => {
+    const res = mockRes();
+    await service.handleChatCompletion(
+      {
+        stream: true,
+        call: { id: 'call_1' },
+        metadata: { businessId: 'biz-1' },
+        messages: [
+          { role: 'system', content: 'x' },
+          { role: 'user', content: '   ' },
+        ],
+      } as never,
+      res as never,
+    );
+    expect(agent.run).not.toHaveBeenCalled();
+    const body = res.chunks.join('');
+    expect(body).toContain('"finish_reason":"stop"');
+    expect(body).toContain('data: [DONE]');
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('si res.write explota, no lanza', async () => {
+    const res = mockRes();
+    res.write.mockImplementationOnce(() => {
+      throw new Error('socket dead');
+    });
+    await expect(
+      service.handleChatCompletion(
+        { stream: true, call: { id: 'call_1' }, metadata: { businessId: 'biz-1' },
+          messages: [{ role: 'user', content: 'hola' }] } as never,
+        res as never,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('crea la conversación VOICE si no existe', async () => {
     prisma.conversation.findFirst.mockResolvedValue(null);
     prisma.conversation.create.mockResolvedValue({ id: 'conv_new', contactPhone: null });
