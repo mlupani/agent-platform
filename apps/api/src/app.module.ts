@@ -29,6 +29,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { ContentModule } from './content/content.module';
 import { SocialModule } from './social/social.module';
 import { VoiceModule } from './voice/voice.module';
+import { CallsModule } from './calls/calls.module';
 import { CompositionModule } from './composition/composition.module';
 import { PacksModule } from './packs/packs.module';
 import { StudentsModule } from './students/students.module';
@@ -80,6 +81,7 @@ import { AppService } from './app.service';
     ContentModule,
     SocialModule,
     VoiceModule,
+    CallsModule,
     CompositionModule,
     PacksModule,
     StudentsModule,
