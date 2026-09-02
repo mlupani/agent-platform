@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { VapiWebhookService } from './vapi-webhook.service';
+import { END_CALL_PHRASES, VapiWebhookService } from './vapi-webhook.service';
 
 describe('VapiWebhookService', () => {
   const prisma = { conversation: { findFirst: jest.fn(), create: jest.fn() } };
@@ -57,6 +57,17 @@ describe('VapiWebhookService', () => {
     });
     expect(callLog.startInboundCall).toHaveBeenCalledWith(expect.objectContaining({ vapiCallId: 'call_1' }));
     expect(leads.capture).toHaveBeenCalledWith(expect.objectContaining({ phone: '+549110', source: 'VOICE' }));
+  });
+
+  it('el asistente transitorio puede cortar la llamada (endCallPhrases + tool endCall)', async () => {
+    const out: any = await service.handleEvent({
+      type: 'assistant-request',
+      call: { id: 'call_1' },
+    } as never);
+
+    expect(out.assistant.endCallPhrases).toEqual(END_CALL_PHRASES);
+    expect(END_CALL_PHRASES.length).toBeGreaterThan(0);
+    expect(out.assistant.model.tools).toEqual([{ type: 'endCall' }]);
   });
 
   it('assistant-request devuelve error si el asistente está desactivado', async () => {

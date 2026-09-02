@@ -1,5 +1,6 @@
 import { PromptBuilderService } from './prompt-builder.service';
 import { DEFAULT_CONFIGURED_MESSAGES } from '../../common/constants';
+import { END_CALL_PHRASES } from '../../calls/vapi-webhook.service';
 
 describe('PromptBuilderService', () => {
   const builder = new PromptBuilderService();
@@ -170,5 +171,15 @@ describe('PromptBuilderService — canal VOICE', () => {
     } as never);
     expect(prompt).toMatch(/llamada telef/i);
     expect(prompt).toMatch(/breves/i);
+  });
+
+  it('la frase de cierre del prompt es una de las endCallPhrases del asistente', () => {
+    const prompt = service.buildFromContext({
+      ...(baseCtx as object),
+      channel: 'VOICE',
+    } as never);
+    // Si alguien cambia una de las dos puntas, el asistente no puede cortar.
+    expect(prompt).toContain(END_CALL_PHRASES[0]);
+    expect(prompt).not.toMatch(/herramienta de fin de llamada/i);
   });
 });

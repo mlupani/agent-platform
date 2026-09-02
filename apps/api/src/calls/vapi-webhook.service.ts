@@ -12,6 +12,20 @@ import type { VapiServerMessage } from './calls.types';
 const DISABLED_MESSAGE = 'El asistente de voz no está disponible en este momento.';
 
 /**
+ * Frases de cierre que cortan la llamada cuando las DICE el asistente.
+ * Nuestro bridge custom-llm sólo emite `delta.content` (nunca `tool_calls`), así
+ * que el modelo no puede disparar la tool `endCall` por sí mismo: el corte real
+ * lo hace Vapi al detectar una de estas frases en el habla del asistente.
+ * Tienen que seguir espejando la frase que pide el prompt telefónico
+ * (`PromptBuilderService.channelSection`).
+ */
+export const END_CALL_PHRASES = [
+  'que tengas un buen día',
+  'que tenga un buen día',
+  'hasta luego',
+];
+
+/**
  * Maneja los eventos de servidor de Vapi (`assistant-request`, `status-update`,
  * `end-of-call-report`, `hang`). Ante `assistant-request` devolvemos un
  * asistente transitorio cuyo custom-llm apunta de vuelta a nuestro webhook, así
@@ -193,9 +207,14 @@ export class VapiWebhookService {
         model: 'agent-core',
         url: webhookUrl,
         headers: { 'x-vapi-secret': config.webhookSecret },
+        // Tool nativa: hoy el bridge no emite `tool_calls`, así que el corte lo
+        // resuelven las `endCallPhrases`. Queda declarada para que funcione solo
+        // si más adelante el bridge propaga las tool calls del modelo.
+        tools: [{ type: 'endCall' }],
       },
       voice: { provider: config.voiceProvider, voiceId: config.voiceId, version: 2 },
       transcriber,
+      endCallPhrases: END_CALL_PHRASES,
       server: { url: webhookUrl, secret: config.webhookSecret },
       metadata: { businessId: config.businessId, source: 'inbound' },
       analysisPlan: { summaryPlan: { enabled: true } },

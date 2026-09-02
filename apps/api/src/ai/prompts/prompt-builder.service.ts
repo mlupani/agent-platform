@@ -183,7 +183,9 @@ export class PromptBuilderService {
       'Decí números, horarios y montos en palabras ("las tres y media", "quince mil pesos").',
       'Nada de listas, viñetas, markdown ni emojis.',
       'Si tenés que buscar algo (disponibilidad, datos), avisá "dame un momento" antes.',
-      'Para cortar, despedite y usá la herramienta de fin de llamada.',
+      // La frase tiene que coincidir con `END_CALL_PHRASES` (vapi-webhook.service):
+      // Vapi corta la llamada cuando el asistente la dice. No hay tool disponible.
+      'Cuando el cliente se despide o ya resolvió lo que necesitaba, cerrá diciendo exactamente "que tengas un buen día".',
     ].join(' ');
   }
 
