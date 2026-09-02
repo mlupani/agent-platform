@@ -151,4 +151,22 @@ describe('VapiBridgeService', () => {
     }));
     expect(callLog.startInboundCall).toHaveBeenCalled();
   });
+
+  it('no usa nuestro número como contacto si el llamante viene oculto', async () => {
+    prisma.conversation.findFirst.mockResolvedValue(null);
+    prisma.conversation.create.mockResolvedValue({ id: 'conv_new', contactPhone: null });
+    const res = mockRes();
+    await service.handleChatCompletion(
+      { stream: true, call: { id: 'call_3' }, metadata: { businessId: 'biz-1' },
+        phoneNumber: { number: '+5491199999999' },
+        messages: [{ role: 'user', content: 'hola' }] } as never,
+      res as never,
+    );
+    expect(prisma.conversation.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ contactPhone: null }),
+    }));
+    expect(callLog.startInboundCall).toHaveBeenCalledWith(expect.objectContaining({
+      fromNumber: null, toNumber: '+5491199999999',
+    }));
+  });
 });

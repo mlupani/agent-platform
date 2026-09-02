@@ -115,8 +115,12 @@ export class VapiWebhookService {
     // el asistente transitorio sólo necesita `config` + `business`, así que un
     // fallo de bookkeeping se loguea y no bloquea la respuesta.
     const callId = message.call?.id ?? '';
-    const phone =
-      message.call?.customer?.number ?? message.call?.phoneNumber?.number ?? null;
+    // OJO: `customer.number` es el LLAMANTE y `phoneNumber.number` es NUESTRO
+    // número. No pueden mezclarse: con identificador oculto guardaríamos el
+    // número del negocio como contacto y como teléfono del lead.
+    const phone = message.call?.customer?.number ?? null;
+    const toNumber =
+      message.phoneNumber?.number ?? message.call?.phoneNumber?.number ?? null;
 
     if (callId) {
       try {
@@ -126,6 +130,7 @@ export class VapiWebhookService {
           vapiCallId: callId,
           conversationId: conversation.id,
           fromNumber: phone,
+          toNumber,
         });
         if (phone) {
           try {

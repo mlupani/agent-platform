@@ -44,9 +44,13 @@ export interface VapiServerMessage {
   type: string;
   call?: {
     id?: string;
+    /** El LLAMANTE. Puede faltar si el número viene oculto. */
     customer?: { number?: string };
+    /** NUESTRO número de Vapi (el que discaron). Nunca es el del llamante. */
     phoneNumber?: { number?: string };
   };
+  /** Vapi también manda el objeto del número al tope del mensaje. Es el nuestro. */
+  phoneNumber?: { number?: string };
   status?: string;
   endedReason?: string;
   cost?: number;
@@ -72,6 +76,8 @@ export interface VapiChatCompletionBody {
   messages?: VapiChatMessage[];
   call?: { id?: string };
   metadata?: Record<string, unknown>;
+  /** NUESTRO número de Vapi (el que discaron). Nunca es el del llamante. */
   phoneNumber?: { number?: string };
+  /** El LLAMANTE. Puede faltar si el número viene oculto. */
   customer?: { number?: string };
 }

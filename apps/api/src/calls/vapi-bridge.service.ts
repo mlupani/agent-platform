@@ -58,12 +58,14 @@ export class VapiBridgeService {
           (typeof safeBody.metadata?.businessId === 'string' &&
             safeBody.metadata.businessId) ||
           (await this.businesses.getCurrentId());
-        const phone =
-          safeBody.customer?.number ?? safeBody.phoneNumber?.number ?? null;
+        // `customer.number` es el LLAMANTE; `phoneNumber.number` es NUESTRO
+        // número. Mezclarlos guardaría el número del negocio como contacto.
+        const phone = safeBody.customer?.number ?? null;
         const conversation = await this.resolveConversation(
           businessId,
           callId,
           phone,
+          safeBody.phoneNumber?.number ?? null,
         );
 
         const lastUser = [...(safeBody.messages ?? [])]
@@ -133,6 +135,7 @@ export class VapiBridgeService {
     businessId: string,
     callId: string,
     phone: string | null,
+    toNumber: string | null = null,
   ) {
     const existing = await this.prisma.conversation.findFirst({
       where: { businessId, channel: 'VOICE', externalId: callId },
@@ -154,6 +157,7 @@ export class VapiBridgeService {
       vapiCallId: callId,
       conversationId: created.id,
       fromNumber: phone,
+      toNumber,
     });
     return created;
   }

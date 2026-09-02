@@ -70,6 +70,44 @@ describe('VapiWebhookService', () => {
     expect(out.assistant.model.tools).toEqual([{ type: 'endCall' }]);
   });
 
+  it('no confunde nuestro número con el del llamante (identificador oculto)', async () => {
+    // Sin `customer.number`: el llamante es desconocido. `phoneNumber` es NUESTRO
+    // número y no puede terminar como contacto ni como teléfono del lead.
+    await service.handleEvent({
+      type: 'assistant-request',
+      call: { id: 'call_1', phoneNumber: { number: '+5491199999999' } },
+      phoneNumber: { number: '+5491199999999' },
+    } as never);
+
+    expect(prisma.conversation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ contactPhone: null }),
+      }),
+    );
+    expect(callLog.startInboundCall).toHaveBeenCalledWith(
+      expect.objectContaining({ fromNumber: null, toNumber: '+5491199999999' }),
+    );
+    expect(leads.capture).not.toHaveBeenCalled();
+  });
+
+  it('separa fromNumber (llamante) de toNumber (nuestro número)', async () => {
+    await service.handleEvent({
+      type: 'assistant-request',
+      call: { id: 'call_1', customer: { number: '+549110' } },
+      phoneNumber: { number: '+5491199999999' },
+    } as never);
+
+    expect(callLog.startInboundCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromNumber: '+549110',
+        toNumber: '+5491199999999',
+      }),
+    );
+    expect(leads.capture).toHaveBeenCalledWith(
+      expect.objectContaining({ phone: '+549110' }),
+    );
+  });
+
   it('assistant-request devuelve error si el asistente está desactivado', async () => {
     callConfig.getForRuntime.mockResolvedValue({ ...enabledConfig, agentEnabled: false });
     const sinAgente = await service.handleEvent({ type: 'assistant-request', call: { id: 'c' } } as never);
