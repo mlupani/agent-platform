@@ -161,7 +161,14 @@ export class CallConfigService {
         apiKey,
         config.phoneNumberId!,
       );
+      // El body del PATCH es una unión discriminada por `provider` (twilio,
+      // vonage, telnyx, byo-phone-number, vapi...). Sin el discriminador Vapi no
+      // sabe qué DTO validar. Mandamos sólo ese campo del GET previo: el resto
+      // del objeto remoto trae campos de sólo lectura (id, orgId, createdAt).
       await this.vapi.updatePhoneNumber(apiKey, config.phoneNumberId!, {
+        ...(typeof remote.provider === 'string'
+          ? { provider: remote.provider }
+          : {}),
         assistantId: null,
         squadId: null,
         server: { url: this.resolveWebhookUrl(), secret: config.webhookSecret },

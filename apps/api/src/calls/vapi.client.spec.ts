@@ -46,6 +46,38 @@ describe('VapiClient', () => {
     expect(JSON.parse(init.body)).toEqual({ assistantId: null });
   });
 
+  it('getPhoneNumber + updatePhoneNumber conservan el discriminador provider', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'pn_1', provider: 'twilio', number: '+5491100000000' }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) });
+
+    const remote = await client.getPhoneNumber('key', 'pn_1');
+    await client.updatePhoneNumber('key', 'pn_1', {
+      provider: remote.provider,
+      assistantId: null,
+      squadId: null,
+      server: { url: 'https://api.x.com/api/webhooks/vapi', secret: 's' },
+    });
+
+    const [getUrl, getInit] = fetchMock.mock.calls[0];
+    expect(getUrl).toBe('https://api.vapi.ai/phone-number/pn_1');
+    expect(getInit.method).toBe('GET');
+
+    const [patchUrl, patchInit] = fetchMock.mock.calls[1];
+    expect(patchUrl).toBe('https://api.vapi.ai/phone-number/pn_1');
+    expect(patchInit.method).toBe('PATCH');
+    // El PATCH de /phone-number es una unión discriminada por `provider`.
+    expect(JSON.parse(patchInit.body)).toMatchObject({
+      provider: 'twilio',
+      assistantId: null,
+      squadId: null,
+    });
+  });
+
   it('lanza error legible si Vapi responde no-2xx', async () => {
     fetchMock.mockResolvedValue({
       ok: false,

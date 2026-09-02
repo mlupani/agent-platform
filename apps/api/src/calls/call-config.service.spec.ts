@@ -115,6 +115,8 @@ describe('CallConfigService', () => {
       'k',
       'pn_9',
       expect.objectContaining({
+        // El PATCH es una unión discriminada: sin `provider` Vapi rechaza el body.
+        provider: 'twilio',
         assistantId: null,
         squadId: null,
         server: {
@@ -123,6 +125,26 @@ describe('CallConfigService', () => {
         },
       }),
     );
+  });
+
+  it('no manda provider si el GET previo no lo trae', async () => {
+    prisma.vapiCallConfig.findUnique.mockResolvedValue({
+      businessId: 'biz-1', vapiApiKeyEnc: 'enc:k', webhookSecret: 's',
+      voiceProvider: 'vapi', voiceId: 'Elliot', enabled: false, agentEnabled: true,
+    });
+    prisma.vapiCallConfig.upsert.mockImplementation(async () => ({
+      businessId: 'biz-1', vapiApiKeyEnc: 'enc:k', webhookSecret: 's',
+      phoneNumberId: 'pn_9', phoneNumberE164: null, voiceProvider: 'vapi', voiceId: 'Elliot',
+      transcriberLanguage: null, firstMessage: null, enabled: true, agentEnabled: true,
+      status: 'connected', lastError: null, lastSyncedAt: null,
+    }));
+    vapi.getPhoneNumber.mockResolvedValue({ id: 'pn_9', number: '+5491100000000' });
+    vapi.updatePhoneNumber.mockResolvedValue(undefined);
+
+    await service.upsert({ phoneNumberId: 'pn_9', enabled: true });
+
+    const body = vapi.updatePhoneNumber.mock.calls[0][2];
+    expect(body).not.toHaveProperty('provider');
   });
 
   it('upsert no rompe el guardado si Vapi falla; deja status error', async () => {
