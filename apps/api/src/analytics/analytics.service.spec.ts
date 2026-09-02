@@ -126,6 +126,7 @@ describe('AnalyticsService.dashboard', () => {
         expect.objectContaining({ channel: 'INSTAGRAM', count: 1, leads: 0 }),
         expect.objectContaining({ channel: 'FACEBOOK', count: 0, leads: 0 }),
         expect.objectContaining({ channel: 'WEB', count: 0, leads: 0 }),
+        expect.objectContaining({ channel: 'VOICE', count: 0, leads: 0 }),
       ]),
     );
     expect(result.daily.length).toBeGreaterThanOrEqual(28);
