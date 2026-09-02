@@ -11,10 +11,11 @@ import { CallLogService } from './call-log.service';
 import { VapiBridgeService } from './vapi-bridge.service';
 import { VapiWebhookService } from './vapi-webhook.service';
 import { CallsAdminController } from './calls-admin.controller';
+import { VapiWebhookController } from './vapi-webhook.controller';
 
 @Module({
   imports: [PrismaModule, BusinessesModule, RealtimeModule, AiModule, LeadsModule],
-  controllers: [CallsAdminController],
+  controllers: [CallsAdminController, VapiWebhookController],
   providers: [
     SecretsService,
     VapiClient,
