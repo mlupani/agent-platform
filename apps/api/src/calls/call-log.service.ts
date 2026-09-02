@@ -7,6 +7,9 @@ import { RealtimeEventsService } from '../realtime/realtime.events.service';
  * actualiza su estado durante la conversación y lo completa con el reporte final,
  * cerrando además la `Conversation` asociada.
  */
+/** Códigos de Prisma que significan "el registro no existe (todavía)". */
+const NOT_FOUND_CODES = new Set(['P2025', 'P2016']);
+
 @Injectable()
 export class CallLogService {
   private readonly logger = new Logger(CallLogService.name);
@@ -44,8 +47,9 @@ export class CallLogService {
 
   /**
    * Actualiza el estado de la llamada. Normaliza `in-progress`/`ended` y setea
-   * `startedAt`/`endedAt` según corresponda. Si el `CallLog` todavía no existe
-   * (la llamada puede no haber entrado aún), se ignora con un `warn`.
+   * `startedAt`/`endedAt` según corresponda. Nunca re-lanza: si el `CallLog`
+   * todavía no existe (P2025/P2016) se ignora con `warn`; cualquier otro fallo
+   * se registra a nivel `error`.
    */
   async updateStatus(vapiCallId: string, status: string): Promise<void> {
     const normalized =
@@ -64,17 +68,16 @@ export class CallLogService {
         },
       });
     } catch (error) {
-      this.logger.warn(
-        `updateStatus(${vapiCallId}) ignorado: ${(error as Error).message}`,
-      );
+      this.logNonThrowingFailure('updateStatus', vapiCallId, error);
     }
   }
 
   /**
    * Completa el `CallLog` con el reporte final de Vapi (motivo, tiempos, costo,
    * transcript, resumen) y, si tiene `conversationId`, cierra la `Conversation`
-   * y emite `realtime.conversationUpdated`. Tolera un `vapiCallId` desconocido
-   * (P2025) sin lanzar.
+   * y emite `realtime.conversationUpdated`. Nunca re-lanza: un `vapiCallId`
+   * desconocido (P2025/P2016) se ignora con `warn`; cualquier otro fallo se
+   * registra a nivel `error`. En ambos casos el cierre de conversación se saltea.
    */
   async finalizeFromReport(params: {
     vapiCallId: string;
@@ -109,9 +112,7 @@ export class CallLogService {
         select: { businessId: true, conversationId: true },
       });
     } catch (error) {
-      this.logger.warn(
-        `finalizeFromReport(${params.vapiCallId}) ignorado: ${(error as Error).message}`,
-      );
+      this.logNonThrowingFailure('finalizeFromReport', params.vapiCallId, error);
       return;
     }
 
@@ -129,5 +130,26 @@ export class CallLogService {
         status: 'CLOSED',
       });
     }
+  }
+
+  /**
+   * Registra un fallo de escritura que NO se re-lanza (los webhooks de Vapi
+   * deben responder 200 siempre). Distingue el caso esperado "el registro no
+   * existe todavía" (P2025/P2016) → `warn`, de cualquier otro fallo real
+   * (caída de DB, query malformada, bug) → `error`, para que no se pierda en
+   * silencio en producción.
+   */
+  private logNonThrowingFailure(
+    method: string,
+    vapiCallId: string,
+    error: unknown,
+  ): void {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as { code?: string })?.code;
+    if (code && NOT_FOUND_CODES.has(code)) {
+      this.logger.warn(`${method}(${vapiCallId}) ignorado (registro inexistente): ${message}`);
+      return;
+    }
+    this.logger.error(`${method}(${vapiCallId}) falló sin re-lanzar: ${message}`);
   }
 }

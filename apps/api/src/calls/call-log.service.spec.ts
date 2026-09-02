@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { CallLogService } from './call-log.service';
 
 describe('CallLogService', () => {
@@ -8,7 +9,19 @@ describe('CallLogService', () => {
   const realtime = { conversationUpdated: jest.fn() };
   const service = new CallLogService(prisma as never, realtime as never);
 
-  beforeEach(() => jest.clearAllMocks());
+  let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
 
   it('startInboundCall es idempotente (upsert por vapiCallId)', async () => {
     await service.startInboundCall({
@@ -56,8 +69,26 @@ describe('CallLogService', () => {
     expect(realtime.conversationUpdated).toHaveBeenCalledWith('biz-1', expect.objectContaining({ conversationId: 'conv_1' }));
   });
 
-  it('finalizeFromReport tolera call desconocida sin romper', async () => {
+  it('finalizeFromReport tolera call desconocida (P2025) sin romper y loguea warn', async () => {
     prisma.callLog.update.mockRejectedValue(Object.assign(new Error('not found'), { code: 'P2025' }));
     await expect(service.finalizeFromReport({ vapiCallId: 'ghost' })).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ghost'));
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+  });
+
+  it('finalizeFromReport ante un fallo real (no P2025) no re-lanza pero loguea error', async () => {
+    prisma.callLog.update.mockRejectedValue(new Error('connection refused'));
+    await expect(service.finalizeFromReport({ vapiCallId: 'call_1' })).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('connection refused'));
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+    expect(realtime.conversationUpdated).not.toHaveBeenCalled();
+  });
+
+  it('updateStatus ante un fallo real (no P2025) no re-lanza pero loguea error', async () => {
+    prisma.callLog.update.mockRejectedValue(new Error('connection refused'));
+    await expect(service.updateStatus('call_1', 'ended')).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('connection refused'));
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
