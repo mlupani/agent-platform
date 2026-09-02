@@ -35,6 +35,27 @@ export interface UpsertVapiCallInput {
   agentEnabled?: boolean;
 }
 
+/**
+ * Evento de servidor que Vapi POSTea a nuestro webhook: `assistant-request`,
+ * `status-update`, `end-of-call-report`, `hang`, etc. Sólo tipamos los campos
+ * que consumimos; el resto llega pero se ignora.
+ */
+export interface VapiServerMessage {
+  type: string;
+  call?: {
+    id?: string;
+    customer?: { number?: string };
+    phoneNumber?: { number?: string };
+  };
+  status?: string;
+  endedReason?: string;
+  cost?: number;
+  startedAt?: string;
+  endedAt?: string;
+  artifact?: { transcript?: string };
+  analysis?: { summary?: string };
+}
+
 /** Mensaje del payload OpenAI `/chat/completions` que manda Vapi (custom-llm). */
 export interface VapiChatMessage {
   role: string;
