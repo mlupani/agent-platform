@@ -25,15 +25,20 @@ describe('CallConfigService', () => {
     updatePhoneNumber: jest.fn(),
   };
 
-  const service = new CallConfigService(
-    prisma as never,
-    secrets as never,
-    businesses as never,
-    env as never,
-    vapi as never,
-  );
+  // Instancia nueva por test: `getForRuntime` cachea en memoria y el estado no
+  // puede filtrarse de un test al siguiente.
+  let service: CallConfigService;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new CallConfigService(
+      prisma as never,
+      secrets as never,
+      businesses as never,
+      env as never,
+      vapi as never,
+    );
+  });
 
   it('getPublic nunca expone la API key ni el webhookSecret', async () => {
     prisma.vapiCallConfig.findUnique.mockResolvedValue({
@@ -175,5 +180,60 @@ describe('CallConfigService', () => {
     env.get.mockImplementation((k: string) => (k === 'VAPI_API_KEY' ? 'env-key' : undefined));
 
     expect(await service.getApiKey()).toBe('env-key');
+  });
+
+  it('getWebhookSecret cachea: el segundo llamado no vuelve a la DB', async () => {
+    prisma.vapiCallConfig.findUnique.mockResolvedValue({
+      businessId: 'biz-1',
+      webhookSecret: 'ssh',
+    });
+
+    expect(await service.getWebhookSecret()).toBe('ssh');
+    expect(await service.getWebhookSecret()).toBe('ssh');
+
+    // Cada turno de la llamada verifica el secret: sin cache eran 2 queries
+    // por turno y un hipo de la DB cortaba la llamada con un 500.
+    expect(prisma.vapiCallConfig.findUnique).toHaveBeenCalledTimes(1);
+    expect(businesses.getCurrentId).toHaveBeenCalledTimes(1);
+  });
+
+  it('upsert invalida la cache (activar/desactivar es instantáneo)', async () => {
+    prisma.vapiCallConfig.findUnique.mockResolvedValue({
+      businessId: 'biz-1',
+      webhookSecret: 'ssh',
+      vapiApiKeyEnc: null,
+      voiceProvider: 'vapi',
+      voiceId: 'Elliot',
+      enabled: true,
+      agentEnabled: true,
+    });
+    prisma.vapiCallConfig.upsert.mockImplementation(async ({ update }: any) => ({
+      businessId: 'biz-1', vapiApiKeyEnc: null, webhookSecret: 'ssh',
+      phoneNumberId: null, phoneNumberE164: null, voiceProvider: 'vapi', voiceId: 'Elliot',
+      transcriberLanguage: null, firstMessage: null, status: 'disconnected',
+      lastError: null, lastSyncedAt: null, ...update,
+    }));
+
+    await service.getForRuntime();
+    expect(prisma.vapiCallConfig.findUnique).toHaveBeenCalledTimes(1);
+
+    await service.upsert({ agentEnabled: false });
+    await service.getForRuntime();
+
+    // findUnique corrió otra vez: 1 (cache fría) + 1 (upsert) + 1 (post-upsert).
+    expect(prisma.vapiCallConfig.findUnique).toHaveBeenCalledTimes(3);
+  });
+
+  it('setStatus invalida la cache', async () => {
+    prisma.vapiCallConfig.findUnique.mockResolvedValue({
+      businessId: 'biz-1',
+      webhookSecret: 'ssh',
+    });
+
+    await service.getForRuntime('biz-1');
+    await service.setStatus('biz-1', 'error', 'boom');
+    await service.getForRuntime('biz-1');
+
+    expect(prisma.vapiCallConfig.findUnique).toHaveBeenCalledTimes(2);
   });
 });

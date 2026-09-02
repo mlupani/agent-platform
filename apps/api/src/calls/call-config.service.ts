@@ -13,6 +13,12 @@ import type {
 } from './calls.types';
 
 /**
+ * Cuánto vive la config cacheada. Corto a propósito: sólo tiene que cubrir la
+ * ráfaga de turnos de una llamada, no ser una fuente de verdad.
+ */
+const CONFIG_CACHE_TTL_MS = 30_000;
+
+/**
  * Config 1:1 por negocio para llamadas de voz con Vapi.
  * Mismo patrón que WhatsAppConfigService: cifra la API key, nunca la expone
  * en la config pública y mantiene el webhookSecret una sola vez.
@@ -20,6 +26,25 @@ import type {
 @Injectable()
 export class CallConfigService {
   private readonly logger = new Logger(CallConfigService.name);
+
+  /**
+   * Cache en memoria de la config por negocio. `verifySecret` corre en CADA
+   * turno de la llamada (webhook + bridge) y hacía 2 queries sin cachear: un
+   * hipo de la DB tiraba 500 y Vapi cortaba la conversación a mitad de camino.
+   * Se invalida en `upsert()` y `syncPhoneNumber()`.
+   */
+  private readonly configCache = new Map<
+    string,
+    { config: VapiCallConfig | null; expiresAt: number }
+  >();
+
+  /**
+   * Cache del negocio actual. `businesses.getCurrentId()` es un `findFirst`, la
+   * OTRA query por turno: sin esto el cache de la config sólo saca la mitad de
+   * las idas a la DB. La plataforma es single-business, así que el id es
+   * estable; el TTL alcanza como red.
+   */
+  private currentIdCache: { id: string; expiresAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -38,10 +63,38 @@ export class CallConfigService {
     return `${base.replace(/\/$/, '')}/api/webhooks/vapi`;
   }
 
-  /** Config cruda de Prisma para uso interno (workers, webhooks). */
+  /**
+   * Config cruda de Prisma para uso interno (workers, webhooks). Cacheada
+   * `CONFIG_CACHE_TTL_MS` porque los webhooks de Vapi la piden en cada turno.
+   */
   async getForRuntime(businessId?: string): Promise<VapiCallConfig | null> {
-    const id = businessId ?? (await this.businesses.getCurrentId());
-    return this.prisma.vapiCallConfig.findUnique({ where: { businessId: id } });
+    const id = businessId ?? (await this.currentBusinessId());
+    const cached = this.configCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) return cached.config;
+
+    const config = await this.prisma.vapiCallConfig.findUnique({
+      where: { businessId: id },
+    });
+    this.configCache.set(id, {
+      config,
+      expiresAt: Date.now() + CONFIG_CACHE_TTL_MS,
+    });
+    return config;
+  }
+
+  /** Id del negocio actual, cacheado con el mismo TTL que la config. */
+  private async currentBusinessId(): Promise<string> {
+    if (this.currentIdCache && this.currentIdCache.expiresAt > Date.now()) {
+      return this.currentIdCache.id;
+    }
+    const id = await this.businesses.getCurrentId();
+    this.currentIdCache = { id, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS };
+    return id;
+  }
+
+  /** Tira la config cacheada de un negocio (tras escribirla). */
+  private invalidateCache(businessId: string): void {
+    this.configCache.delete(businessId);
   }
 
   /** API key: primero la guardada (descifrada), si no cae a VAPI_API_KEY del entorno. */
@@ -84,6 +137,7 @@ export class CallConfigService {
       where: { businessId },
       data: { status, lastError: lastError ?? null },
     });
+    this.invalidateCache(businessId);
   }
 
   /** Crea/actualiza la config y, si hay número + API key, apunta el server.url en Vapi. */
@@ -126,6 +180,9 @@ export class CallConfigService {
       create: { businessId, status: 'disconnected', ...data },
       update: { ...data },
     });
+    // Activar/desactivar tiene que ser instantáneo: no dejar que la cache
+    // sirva el `enabled`/`agentEnabled` viejo durante el TTL.
+    this.invalidateCache(businessId);
 
     if (phoneNumberId && vapiApiKeyEnc) {
       config = await this.applyServerUrl(businessId, config);
@@ -187,6 +244,7 @@ export class CallConfigService {
           phoneNumberE164,
         },
       });
+      this.invalidateCache(businessId);
       return {
         ...config,
         status: 'connected',
