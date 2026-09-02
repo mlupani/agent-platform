@@ -34,3 +34,23 @@ export interface UpsertVapiCallInput {
   enabled?: boolean;
   agentEnabled?: boolean;
 }
+
+/** Mensaje del payload OpenAI `/chat/completions` que manda Vapi (custom-llm). */
+export interface VapiChatMessage {
+  role: string;
+  content?: string | null;
+}
+
+/**
+ * Body OpenAI `/chat/completions` que Vapi POSTea por cada turno del usuario.
+ * Incluye extras propios de Vapi (`call`, `metadata`, `phoneNumber`, `customer`).
+ */
+export interface VapiChatCompletionBody {
+  model?: string;
+  stream?: boolean;
+  messages?: VapiChatMessage[];
+  call?: { id?: string };
+  metadata?: Record<string, unknown>;
+  phoneNumber?: { number?: string };
+  customer?: { number?: string };
+}
