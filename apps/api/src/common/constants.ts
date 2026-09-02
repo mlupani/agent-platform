@@ -29,6 +29,7 @@ export const channelTypes = [
   'TELEGRAM',
   'INSTAGRAM',
   'FACEBOOK',
+  'VOICE',
 ] as const;
 export type ChannelType = (typeof channelTypes)[number];
 
