@@ -72,7 +72,9 @@ describe('ConversationsService inbox', () => {
           id: 'conv-1',
           businessId: 'biz-1',
           hiddenAt: null,
-          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'PLAYGROUND'] },
+          channel: {
+            in: ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'VOICE', 'PLAYGROUND'],
+          },
         }),
       }),
     );
@@ -106,7 +108,7 @@ describe('ConversationsService inbox', () => {
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { in: ['WEB', 'WHATSAPP', 'INSTAGRAM'] },
+          channel: { in: ['WEB', 'VOICE', 'WHATSAPP', 'INSTAGRAM'] },
         }),
       }),
     );
@@ -122,7 +124,7 @@ describe('ConversationsService inbox', () => {
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { in: ['WEB', 'PLAYGROUND', 'INSTAGRAM'] },
+          channel: { in: ['WEB', 'VOICE', 'PLAYGROUND', 'INSTAGRAM'] },
         }),
       }),
     );
@@ -270,9 +272,42 @@ describe('ConversationsService inbox', () => {
     expect(prisma.conversation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          channel: { in: ['WEB', 'FACEBOOK'] },
+          channel: { in: ['WEB', 'VOICE', 'FACEBOOK'] },
         }),
       }),
     );
+  });
+
+  it('incluye VOICE en la bandeja aunque Vapi no esté conectado', async () => {
+    prisma.whatsAppConfig.findUnique.mockResolvedValue({
+      status: 'disconnected',
+      sessionStatus: 'STOPPED',
+    });
+    prisma.socialConnection.findMany.mockResolvedValue([]);
+    prisma.conversation.findMany.mockResolvedValue([]);
+
+    await service.list(undefined, { role: 'USER' });
+
+    const where = prisma.conversation.findMany.mock.calls[0][0].where;
+    expect(where.channel.in).toContain('VOICE');
+  });
+
+  it('abre una conversación VOICE por id (deep link)', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'conv-voz',
+      businessId: 'biz-1',
+      channel: 'VOICE',
+      status: 'CLOSED',
+      hiddenAt: null,
+      user: null,
+      messages: [],
+      business: { id: 'biz-1', name: 'Lumina' },
+    });
+
+    const result = await service.get('conv-voz', { role: 'USER' });
+
+    expect(result.id).toBe('conv-voz');
+    const where = prisma.conversation.findFirst.mock.calls[0][0].where;
+    expect(where.channel.in).toContain('VOICE');
   });
 });

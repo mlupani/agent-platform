@@ -421,14 +421,19 @@ export class ConversationsService {
    * La bandeja sigue filtrando por conexión.
    */
   private threadChannelFilter(role?: AdminRole) {
-    const channels: string[] = ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK'];
+    const channels: string[] = ['WEB', 'WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'VOICE'];
     if (role === 'ADMIN') {
       channels.push(...ADMIN_ONLY_CONVERSATION_CHANNELS);
     }
     return { channel: { in: channels } };
   }
 
-  /** Solo canales con la integración conectada. WEB queda (no se reimporta). */
+  /**
+   * Solo canales con la integración conectada. WEB y VOICE quedan siempre: sus
+   * conversaciones las escribimos nosotros (widget / webhook de Vapi), no se
+   * reimportan desde el proveedor, así que una integración caída no ensucia la
+   * bandeja y las llamadas viejas siguen siendo legibles.
+   */
   private async inboxChannelFilter(businessId: string, role?: AdminRole) {
     const [wa, social] = await Promise.all([
       this.prisma.whatsAppConfig.findUnique({
@@ -445,7 +450,7 @@ export class ConversationsService {
       }),
     ]);
 
-    const channels: string[] = ['WEB'];
+    const channels: string[] = ['WEB', 'VOICE'];
     if (role === 'ADMIN') {
       channels.push(...ADMIN_ONLY_CONVERSATION_CHANNELS);
     }
