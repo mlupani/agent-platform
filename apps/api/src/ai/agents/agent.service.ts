@@ -302,6 +302,7 @@ export class AgentService {
         .join('\n\n'),
       knowledgeContext: this.rag.formatContext(ragChunks),
       enabledTools: agentConfig.enabledTools,
+      channel: input.channel,
       leadContext:
         (
           await this.leadContext.snapshot(business.id, conversation.id)
@@ -349,10 +350,11 @@ export class AgentService {
     const seenSuccessfulToolCalls = new Set<string>();
     let forceFinalAnswer = false;
     const tLlmLoop = Date.now();
-    this.logger.log(`[AGENT 6/6] llm loop start maxSteps=${agentConfig.maxSteps} model=${llmTarget.model} temp=${agentConfig.temperature}`);
+    const maxSteps = Math.max(1, input.maxStepsOverride ?? agentConfig.maxSteps);
+    this.logger.log(`[AGENT 6/6] llm loop start maxSteps=${maxSteps} model=${llmTarget.model} temp=${agentConfig.temperature}`);
 
     try {
-      while (steps < agentConfig.maxSteps) {
+      while (steps < maxSteps) {
         steps += 1;
         const tStep = Date.now();
         const response = await this.chatWithFallback(llmTarget, {

@@ -52,6 +52,8 @@ export interface AgentPromptContext {
   enabledTools: string[];
   leadContext?: string | null;
   studentContext?: string | null;
+  /** Canal de la conversación (WEB | WHATSAPP | VOICE | ...). Ajusta guías de formato. */
+  channel?: string;
 }
 
 /** @deprecated Prefer AgentPromptContext + buildFromContext */

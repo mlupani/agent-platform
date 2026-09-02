@@ -50,6 +50,7 @@ export class PromptBuilderService {
       this.servicesSection(ctx.servicesText),
       this.messagesSection(ctx.configuredMessages),
       this.behaviorSection(ctx),
+      this.channelSection(ctx),
       SAFETY_PROMPT,
       this.toolsSection(ctx),
       ctx.memoryContext
@@ -172,6 +173,18 @@ export class PromptBuilderService {
       );
     }
     return parts.join('\n\n');
+  }
+
+  private channelSection(ctx: AgentPromptContext): string | null {
+    if (ctx.channel !== 'VOICE') return null;
+    return [
+      'Estás en una llamada telefónica.',
+      'Respuestas breves y habladas: 1 a 3 frases, una sola pregunta por vez.',
+      'Decí números, horarios y montos en palabras ("las tres y media", "quince mil pesos").',
+      'Nada de listas, viñetas, markdown ni emojis.',
+      'Si tenés que buscar algo (disponibilidad, datos), avisá "dame un momento" antes.',
+      'Para cortar, despedite y usá la herramienta de fin de llamada.',
+    ].join(' ');
   }
 
   private toolsSection(ctx: AgentPromptContext): string {

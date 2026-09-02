@@ -12,6 +12,8 @@ export interface AgentRunInput {
   debug?: boolean;
   confirmed?: boolean;
   metadata?: Record<string, unknown>;
+  /** Tope de pasos del loop para este run (voz usa un valor más bajo por latencia). */
+  maxStepsOverride?: number;
 }
 
 export interface AgentDebugToolCall {

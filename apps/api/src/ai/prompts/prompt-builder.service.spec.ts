@@ -1,4 +1,5 @@
 import { PromptBuilderService } from './prompt-builder.service';
+import { DEFAULT_CONFIGURED_MESSAGES } from '../../common/constants';
 
 describe('PromptBuilderService', () => {
   const builder = new PromptBuilderService();
@@ -136,5 +137,38 @@ describe('PromptBuilderService', () => {
         },
       ]),
     ).toContain('Seguimiento');
+  });
+});
+
+describe('PromptBuilderService — canal VOICE', () => {
+  const service = new PromptBuilderService();
+  const baseCtx = {
+    assistantName: 'Asis',
+    tone: 'professional_warm',
+    business: {
+      name: 'Pilates X',
+      description: null,
+      type: 'GYM',
+      timezone: 'America/Argentina/Buenos_Aires',
+      language: 'es',
+    },
+    hoursText: '',
+    servicesText: '',
+    configuredMessages: DEFAULT_CONFIGURED_MESSAGES,
+    enabledTools: [],
+  } as never;
+
+  it('sin channel el prompt no menciona la llamada', () => {
+    const prompt = service.buildFromContext(baseCtx);
+    expect(prompt).not.toMatch(/llamada telef/i);
+  });
+
+  it('channel VOICE agrega guía de conversación hablada', () => {
+    const prompt = service.buildFromContext({
+      ...(baseCtx as object),
+      channel: 'VOICE',
+    } as never);
+    expect(prompt).toMatch(/llamada telef/i);
+    expect(prompt).toMatch(/breves/i);
   });
 });
