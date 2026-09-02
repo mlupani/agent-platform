@@ -160,7 +160,7 @@ tools, RAG y memoria que WhatsApp/web).
    `${API_URL}/api/webhooks/vapi` y limpia el assistant asignado: cada llamada
    dispara un `assistant-request` que respondemos con un assistant transitorio
    `custom-llm` apuntando de vuelta a la API.
-4. Toggle **Habilitado** / **Asistente activo** para prender o pausar sin tocar Vapi.
+4. Toggle **Habilitado** / **Agente activo** para prender o pausar sin tocar Vapi.
 
 Flujo: `Llamada → Vapi (voz) → /api/webhooks/vapi/chat/completions → Agent Core → Vapi → Llamada`.
 Las llamadas aparecen en **Conversaciones** como canal *Llamada* con su transcripción;

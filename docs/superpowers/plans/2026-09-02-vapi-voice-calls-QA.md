@@ -25,13 +25,26 @@ Requiere: cuenta Vapi con crédito, un número comprado, API pública accesible
 - [ ] Preguntar por horarios/servicios → responde corto, hablado, sin listas.
 - [ ] Pedir un turno → ejecuta tools (checkAvailability/createAppointment); tolera la
       demora ("dame un momento").
+- [ ] Despedirse: el asistente cierra con "que tengas un buen día" y **Vapi corta la
+      llamada** (`endCallPhrases`). Si no corta, revisar que la frase del prompt siga
+      igual a `END_CALL_PHRASES` en `vapi-webhook.service.ts`.
 - [ ] Cortar. En Conversaciones aparece la conversación canal *Llamada* con la
       transcripción turno a turno.
+- [ ] La conversación *Llamada* también se abre por link directo (`/conversations/<id>`).
+- [ ] Llamar con identificador oculto: `CallLog.fromNumber` queda null y **no** se guarda
+      el número del negocio como contacto ni como teléfono del lead. `toNumber` sí trae
+      nuestro número.
 - [ ] `GET /admin/calls/logs` (o la tabla): la llamada con `durationSeconds`, `costUsd`,
       `summary`, `endedReason`.
-- [ ] Toggle **Asistente activo** off → llamar → Vapi corta con el mensaje de no disponible.
+- [ ] Dashboard → mix de canales: la llamada suma en *Llamada*.
+- [ ] Toggle **Agente activo** off → llamar → Vapi corta con el mensaje de no disponible.
+      (El cambio es instantáneo: la cache de config se invalida al guardar.)
 - [ ] Toggle **Habilitado** off → idem.
 - [ ] Observabilidad: hay `AgentExecution` por turno (Playground / analytics).
+- [ ] **Latencia p95 por turno.** Medir el tiempo entre el fin del habla del usuario y el
+      primer audio del asistente, sobre >= 10 turnos reales (simples y con tools). Si el
+      p95 se va de ~3 s, configurar los mensajes de espera (filler) del lado de Vapi y/o
+      bajar `VOICE_MAX_STEPS`. Señal de alarma ya persistida: `CallLog.metadata.hang`.
 
 ## Hardening pendiente (post-MVP)
 
@@ -49,9 +62,8 @@ Requiere: cuenta Vapi con crédito, un número comprado, API pública accesible
       cargar la config tira 500 a Vapi en el `assistant-request` (en vez de un `{ error }`
       controlado). Cuando pasa eso toda la plataforma está caída y la llamada falla igual,
       pero por consistencia con el contrato never-500: envolver la carga de config en el
-      branch `assistant-request` de `handleEvent`.
-- [ ] **Copy de cards.** La card "Llamadas" del hub dice "Asistente activo/inactivo";
-      las otras cards dicen "Agente activo/inactivo". Uniformar si se quiere consistencia.
+      branch `assistant-request` de `handleEvent`. (La cache de `CallConfigService` ya
+      redujo la superficie: la config no se relee en cada turno.)
 - [ ] **`finalizeFromReport` segundo `conversation.update` fuera del try/catch** — un
       `conversationId` que apunta a una conversación borrada tira después de haber
       actualizado el `CallLog`. El webhook controller no lo envuelve. Bajo impacto.
