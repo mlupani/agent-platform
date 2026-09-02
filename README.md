@@ -122,6 +122,7 @@ Ver `.env.example` completo. Resumen:
 | `ZERNIO_API_KEY` | Publicación Instagram + TikTok (Bearer) |
 | `ZERNIO_WEBHOOK_SECRET` | HMAC de webhooks Zernio (`X-Zernio-Signature`) |
 | `ZERNIO_REDIRECT_URI` | Callback OAuth (`/api/social/oauth/callback`) |
+| `VAPI_API_KEY` | Fallback global de la API key de Vapi (normalmente se carga desde el admin) |
 
 Nunca commitees `.env` real.
 
@@ -146,6 +147,24 @@ Publicación de contenido (feed, stories, reels, TikTok) usa **Zernio**, no WAHA
 Límites: TikTok es video 3 s–10 min, sin DMs. Instagram stories/reels/feed según lo que Zernio permita. WhatsApp Status sigue por WAHA. Instagram Direct entra por el inbox de Zernio (misma conexión de publicación).
 
 Para agregar mañana un `MetaSocialProvider`: nueva clase + registro en la factory. `ContentService` no habla con Zernio directo.
+
+### Llamadas entrantes (Vapi)
+
+El asistente atiende llamadas telefónicas reusando el Agent Core (mismo prompt,
+tools, RAG y memoria que WhatsApp/web).
+
+1. Creá una cuenta en [Vapi](https://vapi.ai) y un número (Phone Numbers).
+2. Admin → **Integraciones → Llamadas**: pegá la API key privada de Vapi, elegí el
+   número, la voz y el idioma. Guardá.
+3. Al guardar, el API apunta el `server.url` de ese número a
+   `${API_URL}/api/webhooks/vapi` y limpia el assistant asignado: cada llamada
+   dispara un `assistant-request` que respondemos con un assistant transitorio
+   `custom-llm` apuntando de vuelta a la API.
+4. Toggle **Habilitado** / **Asistente activo** para prender o pausar sin tocar Vapi.
+
+Flujo: `Llamada → Vapi (voz) → /api/webhooks/vapi/chat/completions → Agent Core → Vapi → Llamada`.
+Las llamadas aparecen en **Conversaciones** como canal *Llamada* con su transcripción;
+el resumen, duración y costo quedan en el registro de llamada (`end-of-call-report`).
 
 ### Conversaciones
 
