@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { VapiCallConfig } from '@prisma/client';
+import type { Business, VapiCallConfig } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessesService } from '../businesses/businesses.service';
 import { LeadsService } from '../leads/leads.service';
@@ -84,32 +84,51 @@ export class VapiWebhookService {
     }
 
     const businessId = config.businessId;
-    const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+    // Cargar el negocio es requisito: si la DB está caída (throw) o el negocio
+    // no existe, degradamos con un "no disponible" en vez de tirar 500 a Vapi.
+    let business: Business | null;
+    try {
+      business = await this.prisma.business.findUnique({ where: { id: businessId } });
+    } catch (error) {
+      this.logger.error(
+        `assistant-request: no se pudo cargar el negocio ${businessId}: ${(error as Error).message}`,
+      );
+      return { error: DISABLED_MESSAGE };
+    }
     if (!business) return { error: DISABLED_MESSAGE };
 
+    // El registro de la llamada (conversación + CallLog + lead) es best-effort:
+    // el asistente transitorio sólo necesita `config` + `business`, así que un
+    // fallo de bookkeeping se loguea y no bloquea la respuesta.
     const callId = message.call?.id ?? '';
     const phone =
       message.call?.customer?.number ?? message.call?.phoneNumber?.number ?? null;
 
     if (callId) {
-      const conversation = await this.upsertConversation(businessId, callId, phone);
-      await this.callLog.startInboundCall({
-        businessId,
-        vapiCallId: callId,
-        conversationId: conversation.id,
-        fromNumber: phone,
-      });
-      if (phone) {
-        try {
-          await this.leads.capture({
-            businessId,
-            conversationId: conversation.id,
-            phone,
-            source: 'VOICE',
-          });
-        } catch (error) {
-          this.logger.warn(`leads.capture (voz) falló: ${(error as Error).message}`);
+      try {
+        const conversation = await this.upsertConversation(businessId, callId, phone);
+        await this.callLog.startInboundCall({
+          businessId,
+          vapiCallId: callId,
+          conversationId: conversation.id,
+          fromNumber: phone,
+        });
+        if (phone) {
+          try {
+            await this.leads.capture({
+              businessId,
+              conversationId: conversation.id,
+              phone,
+              source: 'VOICE',
+            });
+          } catch (error) {
+            this.logger.warn(`leads.capture (voz) falló: ${(error as Error).message}`);
+          }
         }
+      } catch (error) {
+        this.logger.warn(
+          `assistant-request: bookkeeping de la llamada ${callId} falló: ${(error as Error).message}`,
+        );
       }
     }
 
@@ -148,11 +167,16 @@ export class VapiWebhookService {
     business: { name: string; defaultMessages: unknown },
   ): Record<string, unknown> {
     const webhookUrl = this.callConfig.resolveWebhookUrl();
+    const rawWelcome =
+      typeof business.defaultMessages === 'object' && business.defaultMessages
+        ? (business.defaultMessages as Record<string, unknown>).welcome
+        : undefined;
+    // Sólo un `welcome` string sirve como firstMessage; cualquier otra cosa en
+    // la columna Json cae al default (Vapi rechazaría un firstMessage no-string).
     const welcome =
-      (typeof business.defaultMessages === 'object' &&
-        business.defaultMessages &&
-        (business.defaultMessages as Record<string, string>).welcome) ||
-      DEFAULT_CONFIGURED_MESSAGES.welcome;
+      typeof rawWelcome === 'string' && rawWelcome
+        ? rawWelcome
+        : DEFAULT_CONFIGURED_MESSAGES.welcome;
 
     const transcriber: Record<string, unknown> = {
       provider: 'deepgram',

@@ -61,9 +61,51 @@ describe('VapiWebhookService', () => {
 
   it('assistant-request devuelve error si el asistente está desactivado', async () => {
     callConfig.getForRuntime.mockResolvedValue({ ...enabledConfig, agentEnabled: false });
+    const sinAgente = await service.handleEvent({ type: 'assistant-request', call: { id: 'c' } } as never);
+    expect(sinAgente).toEqual({ error: expect.any(String) });
+    expect(sinAgente.assistant).toBeUndefined();
+
+    callConfig.getForRuntime.mockResolvedValue({ ...enabledConfig, enabled: false });
+    const deshabilitado = await service.handleEvent({ type: 'assistant-request', call: { id: 'c' } } as never);
+    expect(deshabilitado).toEqual({ error: expect.any(String) });
+    expect(deshabilitado.assistant).toBeUndefined();
+  });
+
+  it('assistant-request: un fallo de bookkeeping no bloquea el assistant', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    prisma.conversation.create.mockRejectedValue(new Error('db down'));
+
+    const out: any = await service.handleEvent({
+      type: 'assistant-request',
+      call: { id: 'call_1', customer: { number: '+549110' } },
+    } as never);
+
+    expect(out.assistant).toMatchObject({ model: { provider: 'custom-llm' } });
+    expect(out.error).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('assistant-request: si no se puede cargar el negocio devuelve error', async () => {
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    prismaBusiness.business.findUnique.mockRejectedValue(new Error('db down'));
+
     const out = await service.handleEvent({ type: 'assistant-request', call: { id: 'c' } } as never);
+
     expect(out).toEqual({ error: expect.any(String) });
     expect(out.assistant).toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
+  it('firstMessage cae al default si defaultMessages.welcome no es string', async () => {
+    prismaBusiness.business.findUnique.mockResolvedValue({
+      id: 'biz-1', name: 'Pilates X', defaultMessages: { welcome: 42 },
+    });
+
+    const out: any = await service.handleEvent({ type: 'assistant-request', call: { id: 'c' } } as never);
+
+    expect(typeof out.assistant.firstMessage).toBe('string');
+    expect(out.assistant.firstMessage).toBe('Hola, soy el asistente virtual. ¿En qué puedo ayudarte?');
   });
 
   it('transcriber sin language cuando transcriberLanguage es null', async () => {
