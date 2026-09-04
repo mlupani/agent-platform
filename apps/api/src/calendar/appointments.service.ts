@@ -443,21 +443,38 @@ export class AppointmentsService {
       serviceName = service.name;
     }
 
-    const slots = await this.availability.getAvailableSlots({
-      businessId: params.businessId,
-      date: params.date,
-      durationMinutes: duration,
-      timezone: business.timezone,
-      serviceId: params.serviceId,
-    });
+    const [slots, dayStarts] = await Promise.all([
+      this.availability.getAvailableSlots({
+        businessId: params.businessId,
+        date: params.date,
+        durationMinutes: duration,
+        timezone: business.timezone,
+        serviceId: params.serviceId,
+      }),
+      this.availability.getDayClassStarts({
+        businessId: params.businessId,
+        date: params.date,
+        timezone: business.timezone,
+      }),
+    ]);
 
     const zone = business.timezone || 'UTC';
     const today = DateTime.now().setZone(zone).startOf('day');
+    const now = DateTime.now().setZone(zone);
     const day = DateTime.fromISO(params.date, { zone }).startOf('day');
     const dayValid = day.isValid;
     const dayLabel = dayValid ? day.setLocale('es').toFormat('cccc') : null;
     const isPast = dayValid && day < today;
     const isToday = dayValid && day.equals(today);
+
+    // Clases que existen ese día pero ya no tienen cupo (y todavía no arrancaron).
+    const availableStarts = new Set(slots.map((s) => s.start));
+    const fullSlots = dayStarts.filter(
+      (s) =>
+        s.remaining <= 0 &&
+        !availableStarts.has(s.start) &&
+        DateTime.fromISO(s.startIso) > now,
+    );
 
     return {
       date: params.date,
@@ -470,6 +487,7 @@ export class AppointmentsService {
       serviceId: params.serviceId ?? null,
       serviceName: serviceName ?? null,
       slots,
+      fullSlots,
       googleConnected: await this.google.isConnected(params.businessId),
       warning: isPast
         ? `La fecha ${params.date} ya pasó (hoy es ${today.toISODate()}). Pedí otra fecha futura.`

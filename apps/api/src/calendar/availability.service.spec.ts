@@ -157,6 +157,42 @@ describe('AvailabilityService', () => {
     expect(slots.map((s) => s.start)).not.toContain('09:00');
   });
 
+  it('getDayClassStarts includes classes that are already full', async () => {
+    const zone = 'America/Argentina/Buenos_Aires';
+    const start = DateTime.fromISO('2027-03-08T18:00:00', { zone });
+    prisma.classTemplate.findMany.mockResolvedValue([
+      {
+        startTime: '18:00',
+        capacity: 2,
+        service: { id: 'svc-1', capacity: 2, durationMinutes: 60 },
+      },
+    ]);
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        serviceId: 'svc-1',
+        startsAt: start.toUTC().toJSDate(),
+        endsAt: start.plus({ minutes: 60 }).toUTC().toJSDate(),
+        service: { capacity: 2, durationMinutes: 60 },
+      },
+      {
+        serviceId: 'svc-1',
+        startsAt: start.toUTC().toJSDate(),
+        endsAt: start.plus({ minutes: 60 }).toUTC().toJSDate(),
+        service: { capacity: 2, durationMinutes: 60 },
+      },
+    ]);
+
+    const starts = await service.getDayClassStarts({
+      businessId: 'biz-1',
+      date: '2027-03-08',
+      timezone: zone,
+    });
+
+    expect(starts).toEqual([
+      expect.objectContaining({ start: '18:00', remaining: 0, capacity: 2 }),
+    ]);
+  });
+
   it('does not let google busy of the same class hide remaining seats', async () => {
     prisma.businessHour.findUnique.mockResolvedValue({
       isClosed: false,

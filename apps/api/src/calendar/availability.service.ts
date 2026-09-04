@@ -168,6 +168,47 @@ export class AvailabilityService {
     return slots;
   }
 
+  /**
+   * Todas las clases/turnos que arrancan ese día con su ocupación, incluidas
+   * las que ya están completas (remaining <= 0). Sirve para poder decirle al
+   * cliente "esa clase está llena" en vez de tratar el horario como inexistente.
+   */
+  async getDayClassStarts(params: {
+    businessId: string;
+    date: string;
+    timezone: string;
+  }): Promise<
+    Array<{
+      start: string;
+      startIso: string;
+      remaining: number;
+      capacity: number;
+    }>
+  > {
+    const zone = params.timezone;
+    const day = DateTime.fromISO(params.date, { zone }).startOf('day');
+    if (!day.isValid) {
+      throw new Error('Fecha inválida. Usá YYYY-MM-DD.');
+    }
+    const dayStart = day.toUTC().toJSDate();
+    const dayEnd = day.endOf('day').toUTC().toJSDate();
+    const occupancies = await this.loadOccupancies(
+      params.businessId,
+      day,
+      dayStart,
+      dayEnd,
+      zone,
+    );
+    return occupancies
+      .map((session) => ({
+        start: session.startsAt.toFormat('HH:mm'),
+        startIso: session.startsAt.toISO()!,
+        remaining: Math.max(0, session.remaining),
+        capacity: session.capacity,
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start));
+  }
+
   private evaluateSlot(params: {
     start: DateTime;
     end: DateTime;

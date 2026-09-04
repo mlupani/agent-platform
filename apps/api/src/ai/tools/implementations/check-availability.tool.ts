@@ -95,6 +95,13 @@ export class CheckAvailabilityTool implements AgentTool {
       };
     }
 
+    const fullSlots = result.fullSlots ?? [];
+    const dayName = result.dayLabel || result.date;
+    const alternatives = result.slots
+      .map((s) => `${s.start} · ${s.remaining}/${s.capacity} lugares`)
+      .join(', ');
+    const fullTimes = fullSlots.map((s) => s.start).join(', ');
+
     // Si el cliente pidió hora puntual, filtrar y responder específico
     if (requestedTime) {
       const slot = result.slots.find((s) => s.start === requestedTime);
@@ -105,21 +112,38 @@ export class CheckAvailabilityTool implements AgentTool {
             ...result,
             requestedTime,
             requestedSlot: slot,
-            hint: `El horario ${requestedTime} del ${result.dayLabel || result.date} tiene ${slot.remaining}/${slot.capacity} lugares libres (servicio ${result.serviceName ?? result.serviceId ?? 'general'}). Confirmá que el cliente quiere ESE horario y si dice que sí, llamá createAppointment con startsAt=${slot.startIso}. Si no, ofrecé 2–3 alternativas del mismo día.`,
+            hint: `El horario ${requestedTime} del ${dayName} tiene ${slot.remaining}/${slot.capacity} lugares libres (servicio ${result.serviceName ?? result.serviceId ?? 'general'}). Confirmá que el cliente quiere ESE horario y si dice que sí, llamá createAppointment con startsAt=${slot.startIso}. Si no, ofrecé 2–3 alternativas del mismo día.`,
           },
         };
       }
-      // hora pedida no es un inicio habitual → informar y ofrecer alternativas sin inventar
+
+      // La clase existe a esa hora pero ya no tiene cupo → decirlo claro, no "horario raro"
+      const full = fullSlots.find((s) => s.start === requestedTime);
+      if (full) {
+        return {
+          success: true,
+          data: {
+            ...result,
+            requestedTime,
+            requestedSlot: null,
+            classFull: true,
+            hint: result.slots.length
+              ? `La clase de las ${requestedTime} del ${dayName} ya está completa (${full.capacity}/${full.capacity} lugares ocupados): no tiene cupo. Decíselo al cliente con esas palabras y ofrecé 2–4 alternativas reales del mismo día: ${alternatives}. No vuelvas a llamar checkAvailability para esta fecha.`
+              : `La clase de las ${requestedTime} del ${dayName} ya está completa (sin cupo) y no quedan otras clases con lugar ese día. Decíselo así al cliente y ofrecé otra fecha o derivá a un humano. No vuelvas a llamar checkAvailability para esta fecha.`,
+          },
+        };
+      }
+
+      // No hay ninguna clase que arranque a esa hora
       return {
         success: true,
         data: {
           ...result,
           requestedTime,
           requestedSlot: null,
-          hint:
-            result.slots.length === 0
-              ? `El horario ${requestedTime} no es un inicio habitual ese día y no hay otros turnos libres. Probá otra fecha o derivá a un humano.`
-              : `El horario ${requestedTime} no es un inicio habitual ese día. Ofrecé 2–4 alternativas reales de ${result.dayLabel || result.date} de esta lista (con remaining/capacity): ${result.slots.map((s) => `${s.start} · ${s.remaining}/${s.capacity}`).join(', ')}. No inventes ${requestedTime} como disponible y no llames de nuevo checkAvailability para la misma fecha.`,
+          hint: result.slots.length
+            ? `Ese día no hay ninguna clase que empiece a las ${requestedTime}. Aclarale al cliente que no hay clase a esa hora y ofrecé 2–4 alternativas reales del ${dayName}: ${alternatives}. No inventes ${requestedTime} como disponible ni vuelvas a llamar checkAvailability para esta fecha.`
+            : `Ese día no hay ninguna clase a las ${requestedTime} ni otros horarios con lugar. Ofrecé otra fecha o derivá a un humano. No vuelvas a llamar checkAvailability para esta fecha.`,
         },
       };
     }
@@ -130,8 +154,10 @@ export class CheckAvailabilityTool implements AgentTool {
         ...result,
         hint:
           result.slots.length === 0
-            ? 'Sin turnos libres ese día (horarios del negocio y/o calendario). Probá otra fecha o derivá a un humano.'
-            : `Respondé YA al cliente con 2–4 opciones de ${result.dayLabel || result.date}, indicando lugares (ej. 09:00 · 7 lugares) si el slot trae remaining/capacity. No vuelvas a llamar getServices ni checkAvailability para la misma fecha.`,
+            ? fullSlots.length
+              ? `Todas las clases del ${dayName} ya están completas (${fullTimes}): no queda cupo. Decíselo al cliente y ofrecé otra fecha.`
+              : 'Sin turnos libres ese día (horarios del negocio y/o calendario). Probá otra fecha o derivá a un humano.'
+            : `Respondé YA al cliente con 2–4 opciones de ${dayName}, indicando lugares (ej. 09:00 · 7 lugares) si el slot trae remaining/capacity. No vuelvas a llamar getServices ni checkAvailability para la misma fecha.`,
       },
     };
   }

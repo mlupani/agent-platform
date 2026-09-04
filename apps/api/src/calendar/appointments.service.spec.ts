@@ -18,7 +18,10 @@ describe('AppointmentsService', () => {
     classTemplateFindMany: jest.fn(),
     servicePass: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   } as any;
-  const availability = { getAvailableSlots: jest.fn() };
+  const availability = {
+    getAvailableSlots: jest.fn(),
+    getDayClassStarts: jest.fn(),
+  };
   const google = {
     isConnected: jest.fn().mockResolvedValue(false),
     createEvent: jest.fn().mockResolvedValue('evt-1'),
@@ -53,6 +56,7 @@ describe('AppointmentsService', () => {
     });
     prisma.classTemplate.findFirst.mockResolvedValue(null);
     prisma.appointment.findMany.mockResolvedValue([]);
+    availability.getDayClassStarts.mockResolvedValue([]);
     packs.getBalance.mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5, activePacks: [], allPacks: [] });
     conversions.maybeConvertFromSignal.mockResolvedValue(undefined);
   });
@@ -83,6 +87,43 @@ describe('AppointmentsService', () => {
     );
     expect(result.slots).toHaveLength(1);
     expect(result.serviceName).toBe('Consulta');
+  });
+
+  it('checkAvailability expone en fullSlots las clases sin cupo que aún no arrancaron', async () => {
+    prisma.service.findFirst.mockResolvedValue(null);
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '19:00',
+        end: '20:00',
+        startIso: '2099-09-10T19:00:00.000-03:00',
+        endIso: '2099-09-10T20:00:00.000-03:00',
+        remaining: 2,
+        capacity: 6,
+      },
+    ]);
+    availability.getDayClassStarts.mockResolvedValue([
+      {
+        start: '18:00',
+        startIso: '2099-09-10T18:00:00.000-03:00',
+        remaining: 0,
+        capacity: 6,
+      },
+      {
+        start: '19:00',
+        startIso: '2099-09-10T19:00:00.000-03:00',
+        remaining: 2,
+        capacity: 6,
+      },
+    ]);
+
+    const result = await service.checkAvailability({
+      businessId: 'biz-1',
+      date: '2099-09-10',
+    });
+
+    expect(result.fullSlots).toEqual([
+      expect.objectContaining({ start: '18:00', remaining: 0, capacity: 6 }),
+    ]);
   });
 
   it('create rejects unavailable slot', async () => {
