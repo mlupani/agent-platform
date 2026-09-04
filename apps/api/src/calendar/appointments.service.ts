@@ -1238,16 +1238,15 @@ export class AppointmentsService {
     for (const uid of userIds) {
       const list = grouped.get(uid) ?? [];
       if (!list.length) continue;
-      const total = list.reduce((acc: number, p: any) => acc + p.sessionsPaid, 0);
-      const used = list.reduce((acc: number, p: any) => acc + p.sessionsUsed, 0);
+      // packs vigentes solamente: uno ya agotado (COMPLETED) no debe sumarse a un pack nuevo
+      const active = list.filter((p: any) => p.status === 'ACTIVE');
+      if (!active.length) continue;
+      const total = active.reduce((acc: number, p: any) => acc + p.sessionsPaid, 0);
+      const used = active.reduce((acc: number, p: any) => acc + p.sessionsUsed, 0);
       const remaining = Math.max(0, total - used);
       if (total <= 0) continue;
-      // ordenar para obtener pack principal (activo más antiguo)
-      const sorted = [...list].sort((a, b) => {
-        if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
-        if (b.status === 'ACTIVE' && a.status !== 'ACTIVE') return 1;
-        return a.createdAt.getTime() - b.createdAt.getTime();
-      });
+      // pack principal: el activo más antiguo (se consume primero)
+      const sorted = [...active].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       const primary = sorted[0];
       const next = remaining > 0 ? Math.min(used + 1, total) : used;
       // display como 2/4 ; si total es suma de packs mostrar suma, pero preferir primary size si hay uno dominante

@@ -256,6 +256,7 @@ export function PersonSheet({
 }
 
 function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [showPay, setShowPay] = useState(false);
   const { data: balance, isLoading: balLoading } = useQuery({
     queryKey: ['packs-balance', client.id],
@@ -263,9 +264,20 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
       api<{
         availableClasses: number;
         hasAvailableClasses: boolean;
-        activePacks: Array<{ remainingClasses: number; totalClasses: number; usedClasses: number; name: string }>;
+        activePacks: Array<{ id: string; remainingClasses: number; totalClasses: number; usedClasses: number; name: string }>;
         allPacks: Array<{ totalClasses: number; usedClasses: number }>;
       }>(`/admin/users/${client.id}/balance`),
+  });
+
+  const consumePass = useMutation({
+    mutationFn: (passId: string) => api(`/admin/payments/passes/${passId}/use`, { method: 'POST' }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['packs-balance', client.id] }),
+        queryClient.invalidateQueries({ queryKey: ['payments'] }),
+        queryClient.invalidateQueries({ queryKey: ['payments-stats'] }),
+      ]);
+    },
   });
 
   const { data: history, isLoading: histLoading } = useQuery({
@@ -348,7 +360,20 @@ function AlumnoFicha({ client, onClose }: { client: ClientRow; onClose: () => vo
           <Link href={`/pagos?clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center text-xs text-accent hover:underline px-2 py-1" onClick={onClose}>
             Gestionar packs
           </Link>
+          {balance?.activePacks?.length ? (
+            <button
+              type="button"
+              className="btn-secondary min-h-8 px-2.5 text-xs"
+              disabled={consumePass.isPending}
+              onClick={() => consumePass.mutate(balance.activePacks[0].id)}
+            >
+              {consumePass.isPending ? 'Usando…' : 'Usar clase'}
+            </button>
+          ) : null}
         </div>
+        {consumePass.isError ? (
+          <p className="text-xs text-rose">{(consumePass.error as Error).message || 'No se pudo descontar la clase.'}</p>
+        ) : null}
       </div>
       {showPay ? <AddPaymentModal clientId={client.id} onClose={() => setShowPay(false)} /> : null}
 

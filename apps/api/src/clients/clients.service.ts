@@ -104,13 +104,14 @@ export class ClientsService {
     }
     for (const [userId, list] of passesByUser.entries()) {
       const active = list.filter((p) => p.status === 'ACTIVE');
-      const src = active.length ? active : list;
       // usar el pack más reciente activo o el último creado
+      const src = active.length ? active : list;
       const sorted = [...src].sort((a, b) => b.sessionsPaid - a.sessionsPaid);
       const primary = sorted[0];
-      const total = list.reduce((acc, p) => acc + p.sessionsPaid, 0);
-      const remaining = list.reduce((acc, p) => acc + Math.max(0, p.sessionsPaid - p.sessionsUsed), 0);
-      const used = list.reduce((acc, p) => acc + p.sessionsUsed, 0);
+      // packs vigentes solamente: uno ya agotado (COMPLETED) no debe sumarse a un pack nuevo
+      const total = active.reduce((acc, p) => acc + p.sessionsPaid, 0);
+      const remaining = active.reduce((acc, p) => acc + Math.max(0, p.sessionsPaid - p.sessionsUsed), 0);
+      const used = active.reduce((acc, p) => acc + p.sessionsUsed, 0);
       packByUser.set(userId, { name: primary?.service?.name ?? null, total, remaining, used });
     }
 

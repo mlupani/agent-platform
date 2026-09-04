@@ -14,7 +14,7 @@ describe('AppointmentsService', () => {
       findUniqueOrThrow: jest.fn(),
     },
     appointmentReminderLog: { deleteMany: jest.fn() },
-    classTemplate: { findFirst: jest.fn().mockResolvedValue(null) },
+    classTemplate: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     classTemplateFindMany: jest.fn(),
     servicePass: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   } as any;
@@ -262,5 +262,49 @@ describe('AppointmentsService', () => {
       }),
     );
     expect(appointment.id).toBe('apt-1');
+  });
+
+  it('listClasses no mezcla un pack agotado (COMPLETED) con el pack activo nuevo al calcular clase X/Y', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-1',
+        userId: 'user-1',
+        contactName: 'Ana',
+        contactPhone: '54911',
+        contactEmail: null,
+        status: 'confirmed',
+        notes: null,
+        isTrial: false,
+        startsAt: new Date('2099-09-10T13:00:00.000Z'),
+        endsAt: new Date('2099-09-10T14:00:00.000Z'),
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60, capacity: 6 },
+      },
+    ]);
+    prisma.servicePass.findMany.mockResolvedValue([
+      {
+        userId: 'user-1',
+        sessionsPaid: 12,
+        sessionsUsed: 12,
+        status: 'COMPLETED',
+        createdAt: new Date('2099-08-01T00:00:00.000Z'),
+        service: { name: 'Pack 12 clases' },
+      },
+      {
+        userId: 'user-1',
+        sessionsPaid: 12,
+        sessionsUsed: 0,
+        status: 'ACTIVE',
+        createdAt: new Date('2099-09-01T00:00:00.000Z'),
+        service: { name: 'Pack 12 clases' },
+      },
+    ]);
+
+    const result = await service.listClasses('biz-1', '2099-09-10', '2099-09-11');
+
+    const attendee = result.sessions[0].attendees[0];
+    expect(attendee.packProgress).toEqual(
+      expect.objectContaining({ total: 12, used: 0, remaining: 12 }),
+    );
+    expect(attendee.classLabel).toBe('clase 1/12');
   });
 });
