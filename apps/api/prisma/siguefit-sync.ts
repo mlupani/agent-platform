@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DateTime } from 'luxon';
 
-import { parseDelimited, toRecords } from '../src/siguefit/csv';
+import { parseDelimited, toRecords, decodeCsv } from '../src/siguefit/csv';
 import { parseTurnoRows } from '../src/siguefit/parse';
 import { matchStudents } from '../src/siguefit/match';
 import {
@@ -100,7 +100,7 @@ async function main() {
     args.tz || business.timezone || 'America/Argentina/Buenos_Aires';
 
   const text = stripBom(
-    readFileSync(resolve(process.cwd(), args.file), 'utf8'),
+    decodeCsv(readFileSync(resolve(process.cwd(), args.file))),
   );
   const { rows, issues: parseIssues } = parseTurnoRows(
     toRecords(parseDelimited(text)),

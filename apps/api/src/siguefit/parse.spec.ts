@@ -70,8 +70,14 @@ describe('parseClockTime', () => {
     expect(parseClockTime('17:30')).toEqual({ hour: 17, minute: 30 });
   });
 
+  it('parses a bare hour like "9" (SigueFit export Hora column has no minutes)', () => {
+    expect(parseClockTime('9')).toEqual({ hour: 9, minute: 0 });
+    expect(parseClockTime('17')).toEqual({ hour: 17, minute: 0 });
+  });
+
   it('returns null for out-of-range or junk', () => {
     expect(parseClockTime('25:00')).toBeNull();
+    expect(parseClockTime('24')).toBeNull();
     expect(parseClockTime('')).toBeNull();
   });
 });
@@ -130,5 +136,43 @@ describe('parseTurnoRows', () => {
     ]);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/Ana/);
+  });
+
+  describe('formato real del export de SigueFit (sin columna Comentarios)', () => {
+    // El export de "Turnos" trae el X/Y en "Observaciones" (no hay
+    // "Comentarios"), la hora como número pelado ("9", no "9:00") y la
+    // ausencia en su propia columna "Ausente" con el literal "Ausente".
+    const real = [
+      {
+        fecha: '01/09/2026',
+        dia: 'Martes',
+        hora: '9',
+        cliente: 'Maria Laura Risi',
+        'es prueba': '',
+        ausente: '',
+        observaciones: '3/8',
+      },
+      {
+        fecha: '01/09/2026',
+        dia: 'Martes',
+        hora: '10',
+        cliente: 'Ornela Faerverger',
+        'es prueba': '',
+        ausente: 'Ausente',
+        observaciones: '8/8 aca',
+      },
+    ];
+
+    it('toma el X/Y de Observaciones cuando no hay columna Comentarios', () => {
+      const { rows } = parseTurnoRows(real);
+      expect(rows[0].progress).toEqual({ taken: 3, size: 8 });
+      expect(rows[0].time).toEqual({ hour: 9, minute: 0 });
+    });
+
+    it('marca ausente por la columna dedicada, no solo por texto libre', () => {
+      const { rows } = parseTurnoRows(real);
+      expect(rows[1].absent).toBe(true);
+      expect(rows[1].progress).toEqual({ taken: 8, size: 8 });
+    });
   });
 });

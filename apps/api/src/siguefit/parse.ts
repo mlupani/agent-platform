@@ -97,10 +97,15 @@ function build(year: number, month: number, day: number): YMD | null {
 }
 
 export function parseClockTime(value: string): HM | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec((value ?? '').trim());
+  const raw = (value ?? '').trim();
+  // "9:00" / "17:30"
+  const withMinutes = /^(\d{1,2}):(\d{2})$/.exec(raw);
+  // el export de "Turnos" trae la hora pelada: "9", "17" (sin minutos)
+  const bareHour = withMinutes ? null : /^(\d{1,2})$/.exec(raw);
+  const match = withMinutes ?? bareHour;
   if (!match) return null;
   const hour = Number(match[1]);
-  const minute = Number(match[2]);
+  const minute = match[2] ? Number(match[2]) : 0;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return { hour, minute };
 }
@@ -131,8 +136,19 @@ export function parseTurnoRows(records: Array<Record<string, string>>): {
     );
     if (!rawName) continue;
 
-    const rawComment = pick(record, 'comentarios', 'comentario');
+    // El export de "Turnos" no siempre trae "Comentarios": el X/Y suele venir
+    // en "Observaciones" en su lugar. Probamos ambos, en ese orden.
+    const rawComment = pick(
+      record,
+      'comentarios',
+      'comentario',
+      'observaciones',
+      'observacion',
+    );
     const observation = pick(record, 'observacion', 'observaciones');
+    // "Ausente" también puede venir como columna propia (valor literal
+    // "Ausente"), no solo como texto libre dentro de Observaciones.
+    const absentFlag = pick(record, 'ausente');
     const dateText = pick(record, 'fecha');
     const timeText = pick(record, 'hora');
 
@@ -145,9 +161,11 @@ export function parseTurnoRows(records: Array<Record<string, string>>): {
       issues.push(`Hora ilegible "${timeText}" para ${rawName}`);
     }
 
-    const absent = /\bausente\b|\bno\s+(vino|asisti[oó])\b/i.test(
-      `${observation} ${rawComment}`,
-    );
+    const absent =
+      Boolean(absentFlag) ||
+      /\bausente\b|\bno\s+(vino|asisti[oó])\b/i.test(
+        `${observation} ${rawComment}`,
+      );
 
     rows.push({
       rawName,

@@ -151,6 +151,84 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     expect(agent.run).not.toHaveBeenCalled();
   });
 
+  it('no duplica la respuesta del bot cuando el eco de WAHA llega antes de guardar el externalId (race)', async () => {
+    // Reproduce el reporte de "el asistente repite el mensaje 2 veces": WAHA
+    // notifica el eco de nuestro propio envío (fromMe=true) en el chat real del
+    // cliente, y esa notificación le gana la carrera a nuestro propio código
+    // (que recién adjunta el externalId al mensaje AI después de que resuelve
+    // sendText). Sin guardia por contenido, esto crea una segunda fila de
+    // mensaje idéntica (mal etiquetada como HUMAN).
+    config.findBySessionName.mockResolvedValue({
+      businessId: 'biz-1',
+      sessionName: 'default',
+      enabled: true,
+    });
+    redis.acquireLock.mockResolvedValue(true);
+
+    const aiMessage = {
+      id: 'ai-msg-1',
+      conversationId: 'conv-1',
+      sender: 'AI',
+      content: 'Los horarios son de 9 a 18.',
+      externalId: null,
+      createdAt: new Date(),
+    };
+    prisma.message.findFirst
+      .mockResolvedValueOnce(null) // lookup por externalId: este evento aún no se vio
+      .mockResolvedValueOnce(aiMessage); // lookup por contenido reciente: es el eco
+    prisma.message.create.mockResolvedValue({
+      id: 'dup-msg-1',
+      conversationId: 'conv-1',
+      sender: 'HUMAN',
+      content: 'Los horarios son de 9 a 18.',
+      createdAt: new Date(),
+    });
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.conversation.findMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        status: 'AI',
+        hiddenAt: null,
+        metadata: {},
+        externalId: '5491164369670@c.us',
+        contactPhone: '5491164369670',
+        contactName: 'Ana',
+      },
+    ]);
+    prisma.conversation.update.mockResolvedValue({
+      id: 'conv-1',
+      status: 'AI',
+      hiddenAt: null,
+      metadata: {},
+      externalId: '5491164369670@c.us',
+    });
+
+    const result = await service.handleWahaEvent({
+      event: 'message.any',
+      session: 'default',
+      payload: {
+        id: 'true_5491164369670@c.us_ECHO1',
+        from: '5491164369670@c.us',
+        to: '5491164369670@c.us',
+        fromMe: true,
+        body: 'Los horarios son de 9 a 18.',
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toEqual({ processed: 0 });
+    expect(prisma.message.create).not.toHaveBeenCalled();
+    expect(prisma.message.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ai-msg-1' },
+        data: expect.objectContaining({
+          externalId: 'true_5491164369670@c.us_ECHO1',
+          status: 'sent',
+        }),
+      }),
+    );
+  });
+
   it('ignores WhatsApp status/stories broadcasts', async () => {
     config.findBySessionName.mockResolvedValue({
       businessId: 'biz-1',

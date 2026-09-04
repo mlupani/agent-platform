@@ -95,14 +95,43 @@ export function parseDelimited(text: string, delimiter?: string): string[][] {
 const foldKey = (s: string): string =>
   s.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
 
+const NAME_HINTS = ['cliente', 'nombre', 'alumno', 'alumna'];
+
+/**
+ * El export de "Turnos" de SigueFit trae 1-2 filas de metadata antes del
+ * encabezado real (rango de fechas exportado, filtros). Buscamos la primera
+ * fila que parezca un encabezado (tiene columna de fecha Y columna de
+ * nombre) en vez de asumir que es la fila 0.
+ */
+function looksLikeHeaderRow(cells: string[]): boolean {
+  const folded = cells.map(foldKey);
+  const hasDate = folded.some((c) => c.includes('fecha'));
+  const hasName = folded.some((c) =>
+    NAME_HINTS.some((hint) => c.includes(hint)),
+  );
+  return hasDate && hasName;
+}
+
 export function toRecords(rows: string[][]): Array<Record<string, string>> {
   if (rows.length === 0) return [];
-  const headers = rows[0].map(foldKey);
-  return rows.slice(1).map((cells) => {
+  const headerIdx = rows.findIndex(looksLikeHeaderRow);
+  const headers = rows[headerIdx === -1 ? 0 : headerIdx].map(foldKey);
+  return rows.slice((headerIdx === -1 ? 0 : headerIdx) + 1).map((cells) => {
     const record: Record<string, string> = {};
     headers.forEach((key, idx) => {
       record[key] = (cells[idx] ?? '').trim();
     });
     return record;
   });
+}
+
+/**
+ * Los exports de SigueFit vienen en Windows-1252 (Excel en español), no
+ * UTF-8. Decodificamos como UTF-8 y, si aparece el carácter de reemplazo
+ * (bytes inválidos), volvemos a decodificar como latin1 — que coincide con
+ * Windows-1252 para las letras acentuadas que usamos (á é í ó ú ñ).
+ */
+export function decodeCsv(buffer: Buffer): string {
+  const utf8 = buffer.toString('utf8');
+  return utf8.includes('�') ? buffer.toString('latin1') : utf8;
 }

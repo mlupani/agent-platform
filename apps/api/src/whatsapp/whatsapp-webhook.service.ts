@@ -292,6 +292,33 @@ export class WhatsAppWebhookService {
     // fromMe en chat "Yo": tratarlo como mensaje de prueba → corre el agente
     if (fromMe && !selfChat) {
       if (existing) return false;
+
+      // Eco de nuestra propia respuesta: WAHA puede notificar este webhook
+      // ANTES de que nuestro propio código (tras sendText) termine de adjuntar
+      // el externalId al mensaje AI ya persistido — es una carrera, no algo
+      // determinístico. Sin este chequeo por contenido, esa carrera crea una
+      // segunda fila idéntica mal etiquetada como HUMAN ("el asistente repite
+      // el mensaje 2 veces"). Mismo criterio que ya se usa para el chat "Yo".
+      const recentAi = await this.prisma.message.findFirst({
+        where: {
+          conversationId: conversation.id,
+          businessId,
+          sender: 'AI',
+          content: text,
+          createdAt: { gte: new Date(Date.now() - 30_000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recentAi) {
+        if (!recentAi.externalId) {
+          await this.prisma.message.update({
+            where: { id: recentAi.id },
+            data: { externalId, status: 'sent' },
+          });
+        }
+        return false;
+      }
+
       const createdAt = this.timestampToDate(
         typeof payload.timestamp === 'number' ? payload.timestamp : null,
       );

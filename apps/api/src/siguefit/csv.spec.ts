@@ -1,4 +1,4 @@
-import { parseDelimited, toRecords } from './csv';
+import { parseDelimited, toRecords, decodeCsv } from './csv';
 
 describe('parseDelimited', () => {
   it('splits comma-separated rows into cells', () => {
@@ -59,5 +59,34 @@ describe('toRecords', () => {
         observacion: 'Ausente',
       },
     ]);
+  });
+
+  it('skips a metadata preamble before the real header row (SigueFit export)', () => {
+    const rows = [
+      ['Desde:', '01/09/2026', '', 'Hasta:', '30/09/2026', '', 'Todos'],
+      ['Fecha', 'Hora', 'Cliente', 'Observaciones'],
+      ['01/09/2026', '9', 'Lucia Maciel', '3/8'],
+    ];
+    expect(toRecords(rows)).toEqual([
+      {
+        fecha: '01/09/2026',
+        hora: '9',
+        cliente: 'Lucia Maciel',
+        observaciones: '3/8',
+      },
+    ]);
+  });
+});
+
+describe('decodeCsv', () => {
+  it('decodes a plain utf8 buffer as-is', () => {
+    expect(decodeCsv(Buffer.from('Día;Cliente\n', 'utf8'))).toBe(
+      'Día;Cliente\n',
+    );
+  });
+
+  it('falls back to latin1 when utf8 decoding produces replacement characters (SigueFit exports Windows-1252)', () => {
+    const buf = Buffer.from('Día;Marcela Cuño\n', 'latin1');
+    expect(decodeCsv(buf)).toBe('Día;Marcela Cuño\n');
   });
 });
