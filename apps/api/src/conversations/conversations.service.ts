@@ -340,6 +340,7 @@ export class ConversationsService {
         conversation.status === 'AI' || conversation.status === 'WAITING_HUMAN'
           ? 'HUMAN'
           : undefined,
+      statusReason: 'human_replied',
     });
 
     const channel = this.channels.get(conversation.channel);
@@ -376,6 +377,7 @@ export class ConversationsService {
       sender: MessageSender;
       incrementUnread?: boolean;
       forceStatus?: ConversationStatus;
+      statusReason?: string;
       contactName?: string;
       contactPhone?: string;
     },
@@ -384,6 +386,13 @@ export class ConversationsService {
       where: { id: conversationId },
     });
     if (!conversation) return;
+
+    const meta =
+      conversation.metadata &&
+      typeof conversation.metadata === 'object' &&
+      !Array.isArray(conversation.metadata)
+        ? (conversation.metadata as Record<string, unknown>)
+        : {};
 
     await this.prisma.conversation.update({
       where: { id: conversationId },
@@ -395,6 +404,15 @@ export class ConversationsService {
         status: options.forceStatus,
         contactName: options.contactName ?? undefined,
         contactPhone: options.contactPhone ?? undefined,
+        ...(options.forceStatus && options.statusReason
+          ? {
+              metadata: {
+                ...meta,
+                statusReason: options.statusReason,
+                statusChangedAt: new Date().toISOString(),
+              },
+            }
+          : {}),
       },
     });
   }

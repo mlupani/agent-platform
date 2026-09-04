@@ -24,11 +24,25 @@ export class RequestHumanAssistanceTool implements AgentTool {
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
     const data = schema.parse(input);
 
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: context.conversationId, businessId: context.businessId },
+      select: { metadata: true },
+    });
+    const baseMeta =
+      conversation?.metadata &&
+      typeof conversation.metadata === 'object' &&
+      !Array.isArray(conversation.metadata)
+        ? (conversation.metadata as Record<string, unknown>)
+        : {};
+
     await this.prisma.conversation.updateMany({
       where: { id: context.conversationId, businessId: context.businessId },
       data: {
         status: 'WAITING_HUMAN',
         metadata: {
+          ...baseMeta,
+          statusReason: 'agent_handoff',
+          statusChangedAt: new Date().toISOString(),
           handoffReason: data.reason ?? 'user_request',
           handoffAt: new Date().toISOString(),
         },

@@ -2,6 +2,7 @@ import {
   AUDIO_UNTRANSCRIBED,
   formatVoiceMessage,
   isAudioAttachment,
+  isPlaceholderCaption,
   isWahaAudioPayload,
   rewriteWahaFileUrl,
   transcriptionLanguage,
@@ -55,6 +56,11 @@ describe('inbound-audio', () => {
     expect(isAudioAttachment({ type: 'image', url: 'https://cdn/a.jpg' })).toBe(
       false,
     );
+  });
+
+  it('treats a bare [Contacto] as a placeholder caption', () => {
+    expect(isPlaceholderCaption('[Contacto]')).toBe(true);
+    expect(isPlaceholderCaption('[Contacto] Ana · +5491100000000')).toBe(false);
   });
 
   it('normalizes language to ISO-639-1', () => {

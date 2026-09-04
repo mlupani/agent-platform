@@ -14,3 +14,7 @@ apps/api/generated
 .DS_Store
 uploads
 *.tsbuildinfo
+
+# Exports de SigueFit para el sync semanal (datos de alumnas, no versionar)
+apps/api/prisma/siguefit-data/
+

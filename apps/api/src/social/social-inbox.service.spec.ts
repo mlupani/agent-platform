@@ -53,6 +53,24 @@ describe('parseInboxEvent', () => {
     expect(inbound?.text).toBe('[Adjunto]');
   });
 
+  it('parsea una tarjeta de contacto compartida en vez de dejar [Adjunto]', () => {
+    const inbound = parseInboxEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_contact',
+        conversationId: 'conv_1',
+        attachments: [
+          { type: 'contact', name: 'Julieta Lujan Da Silva', phone: '+54 11 6436-9670' },
+        ],
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+    expect(inbound?.text).toBe(
+      '[Contacto] Julieta Lujan Da Silva · +54 11 6436-9670',
+    );
+  });
+
   it('expone adjuntos de audio para transcribir', () => {
     const inbound = parseInboxEvent({
       event: 'message.received',
@@ -479,6 +497,141 @@ describe('SocialInboxService', () => {
       conversationId: 'conv_z',
       message: 'Respuesta del agente',
     });
+  });
+
+  it('no corre el bot si la conversación fue derivada a una persona (WAITING_HUMAN)', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      status: 'WAITING_HUMAN',
+      hiddenAt: null,
+      userId: null,
+      metadata: {},
+    });
+    prisma.conversation.update.mockResolvedValue({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      status: 'WAITING_HUMAN',
+      hiddenAt: null,
+      userId: null,
+      metadata: {},
+    });
+    prisma.message.create.mockResolvedValue({
+      id: 'msg-local',
+      content: 'Hola, sigo esperando',
+      sender: 'CLIENT',
+      createdAt: new Date(),
+    });
+
+    const applied = await service.handleMessageEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_wh',
+        conversationId: 'conv_1',
+        text: 'Hola, sigo esperando',
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+
+    expect(applied).toBe(true);
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(provider.sendInboxMessage).not.toHaveBeenCalled();
+    expect(prisma.message.create).toHaveBeenCalled();
+  });
+
+  it('reabrir una conversación oculta no reactiva el bot si estaba tomada por una persona', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      status: 'WAITING_HUMAN',
+      hiddenAt: new Date('2026-09-03T10:00:00.000Z'),
+      userId: null,
+      metadata: {},
+    });
+    prisma.conversation.update.mockImplementation(async ({ data }: any) => ({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      hiddenAt: null,
+      status: data.status ?? 'WAITING_HUMAN',
+      userId: null,
+      metadata: {},
+    }));
+    prisma.message.create.mockResolvedValue({
+      id: 'msg-local',
+      content: 'Hola?',
+      sender: 'CLIENT',
+      createdAt: new Date(),
+    });
+
+    await service.handleMessageEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_reopen',
+        conversationId: 'conv_1',
+        text: 'Hola?',
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+
+    const reopenCall = prisma.conversation.update.mock.calls.find(
+      (c: [{ data?: { hiddenAt?: unknown } }]) => c[0]?.data?.hiddenAt === null,
+    );
+    expect(reopenCall?.[0].data.status).not.toBe('AI');
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(provider.sendInboxMessage).not.toHaveBeenCalled();
+  });
+
+  it('un mensaje manual del estudio por Instagram pausa el bot (status HUMAN)', async () => {
+    prisma.conversation.findFirst.mockResolvedValue({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      status: 'AI',
+      hiddenAt: null,
+      userId: null,
+      metadata: {},
+    });
+    prisma.conversation.update.mockResolvedValue({
+      id: 'local-conv',
+      externalId: 'conv_1',
+      channel: 'INSTAGRAM',
+      status: 'AI',
+      hiddenAt: null,
+      userId: null,
+      metadata: {},
+    });
+    prisma.message.findFirst.mockResolvedValue(null); // no es eco de una respuesta del bot
+    prisma.message.create.mockResolvedValue({
+      id: 'msg-human',
+      content: 'Hola Julieta, te ayudo yo',
+      sender: 'HUMAN',
+      createdAt: new Date(),
+    });
+
+    await service.handleMessageEvent({
+      event: 'message.sent',
+      message: {
+        id: 'msg_staff',
+        conversationId: 'conv_1',
+        direction: 'outgoing',
+        text: 'Hola Julieta, te ayudo yo',
+        sender: { id: 'studio' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+
+    const humanPause = prisma.conversation.update.mock.calls.find(
+      (c: [{ data?: { status?: unknown } }]) => c[0]?.data?.status === 'HUMAN',
+    );
+    expect(humanPause).toBeDefined();
+    expect(humanPause?.[0].data.metadata.statusReason).toBe('human_replied');
+    expect(agent.run).not.toHaveBeenCalled();
   });
 
   it('borra las conversaciones de Instagram al purgar el canal', async () => {

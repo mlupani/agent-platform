@@ -181,6 +181,35 @@ describe('ZernioSocialProvider', () => {
     );
   });
 
+  it('mapea una tarjeta de contacto compartida a texto legible', async () => {
+    mockSdk.messages.getInboxConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            id: 'msg_contact',
+            conversationId: 'conv_1',
+            direction: 'incoming',
+            attachments: [
+              {
+                type: 'contact',
+                name: 'Julieta Lujan Da Silva',
+                phone: '+54 11 6436-9670',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const provider = new ZernioSocialProvider(config as never);
+    const messages = await provider.listInboxMessages({
+      accountId: 'acc_ig',
+      conversationId: 'conv_1',
+    });
+    expect(messages[0].text).toBe(
+      '[Contacto] Julieta Lujan Da Silva · +54 11 6436-9670',
+    );
+  });
+
   it('envía un DM de Instagram al inbox de Zernio', async () => {
     mockSdk.messages.sendInboxMessage.mockResolvedValue({
       data: { data: { messageId: 'mid_1' } },

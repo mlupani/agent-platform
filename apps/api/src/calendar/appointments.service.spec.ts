@@ -106,6 +106,81 @@ describe('AppointmentsService', () => {
     expect(prisma.appointment.create).not.toHaveBeenCalled();
   });
 
+  it('reservar de nuevo la misma prueba (misma conversación/horario) devuelve el turno hecho, no "ya usaste tu prueba"', async () => {
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '17:30',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T17:30:00.000-03:00',
+      },
+    ]);
+    const yaReservado = {
+      id: 'apt-existing',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      endsAt: new Date('2099-09-08T20:30:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      status: 'confirmed',
+      isTrial: true,
+      contactName: 'Julieta',
+      contactPhone: '+54 9 11 6436-9670',
+      conversationId: 'conv-1',
+      service: null,
+    };
+    // El turno de prueba ya existe: lo encontraría tanto la idempotencia como el guard.
+    prisma.appointment.findFirst.mockResolvedValue(yaReservado);
+
+    const result = await service.create({
+      businessId: 'biz-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Julieta',
+      contactPhone: '1164369670',
+      isTrial: true,
+      conversationId: 'conv-1',
+    });
+
+    expect(result.id).toBe('apt-existing');
+    expect(prisma.appointment.create).not.toHaveBeenCalled();
+    expect(google.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('un turno de prueba cancelado no bloquea reservar otra prueba', async () => {
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '17:30',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T17:30:00.000-03:00',
+      },
+    ]);
+    // Sólo hay una prueba previa CANCELADA para este teléfono.
+    prisma.appointment.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where?.status?.notIn?.includes('cancelled')) return null;
+      return { id: 'apt-cancelada', status: 'cancelled', isTrial: true };
+    });
+    prisma.appointment.create.mockImplementation(
+      async ({ data }: { data: unknown }) => ({
+        id: 'apt-new',
+        ...(data as object),
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        endsAt: new Date('2099-09-08T20:30:00.000Z'),
+        service: null,
+      }),
+    );
+
+    const result = await service.create({
+      businessId: 'biz-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Julieta',
+      contactPhone: '1164369670',
+      isTrial: true,
+    });
+
+    expect(result.id).toBe('apt-new');
+  });
+
   it('create stores googleEventId when calendar returns id', async () => {
     prisma.service.findFirst.mockResolvedValue({
       id: 'svc-1',

@@ -9,6 +9,10 @@ import {
   parseAttachments,
   type SocialAudioAttachment,
 } from '../ai/transcription/inbound-audio';
+import {
+  formatSharedContactMessage,
+  parseSharedContact,
+} from '../ai/transcription/parse-shared-contact';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
@@ -562,12 +566,17 @@ export class SocialInboxService {
 
       if (conversation.hiddenAt) {
         if (inbound.fromMe) return false;
+        // Al desocultar NO reactivar el bot si la conversación estaba tomada por
+        // una persona (handoff del agente o respuesta manual): sólo CLOSED vuelve a AI.
+        const keepHumanHeld =
+          conversation.status === 'HUMAN' ||
+          conversation.status === 'WAITING_HUMAN';
         conversation = await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
             hiddenAt: null,
-            status: 'AI',
             unreadCount: 0,
+            ...(keepHumanHeld ? {} : { status: 'AI' }),
           },
         });
         this.realtime.conversationUpdated(businessId, {
@@ -579,7 +588,20 @@ export class SocialInboxService {
       }
 
       if (inbound.fromMe) {
-        return this.persistFromMe(businessId, conversation.id, inbound);
+        return this.persistFromMe(businessId, conversation, inbound);
+      }
+
+      // Conversación tomada por una persona: guardar el mensaje del cliente pero
+      // no correr el bot ni responder (evita que "reinicie" la conversación).
+      if (
+        conversation.status === 'HUMAN' ||
+        conversation.status === 'WAITING_HUMAN'
+      ) {
+        return this.persistClientWithoutAgent(
+          businessId,
+          conversation.id,
+          inbound,
+        );
       }
 
       if (!opts.runAgent) {
@@ -851,16 +873,18 @@ export class SocialInboxService {
 
   private async persistFromMe(
     businessId: string,
-    conversationId: string,
+    conversation: { id: string; status?: string; metadata?: unknown },
     inbound: SocialInboxInbound,
   ): Promise<boolean> {
+    const conversationId = conversation.id;
+    // Ventana amplia: el eco de Zernio de una respuesta del bot puede tardar.
     const recentAi = await this.prisma.message.findFirst({
       where: {
         conversationId,
         businessId,
         sender: 'AI',
         content: inbound.text,
-        createdAt: { gte: new Date(Date.now() - 60_000) },
+        createdAt: { gte: new Date(Date.now() - 10 * 60_000) },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -909,12 +933,31 @@ export class SocialInboxService {
         },
       },
     });
+    // Una persona del negocio respondió a mano: pausar el bot (como el botón
+    // "Pausar" del panel). Se reactiva desde el panel cuando el operador termina.
+    const pauseBot = conversation.status === 'AI';
+    const baseMeta =
+      conversation.metadata &&
+      typeof conversation.metadata === 'object' &&
+      !Array.isArray(conversation.metadata)
+        ? (conversation.metadata as Record<string, unknown>)
+        : {};
     await this.prisma.conversation.update({
       where: { id: conversationId },
       data: {
         lastMessageAt: new Date(),
         lastMessagePreview: inbound.text.slice(0, 280),
         lastMessageSender: 'HUMAN',
+        ...(pauseBot
+          ? {
+              status: 'HUMAN',
+              metadata: {
+                ...baseMeta,
+                statusReason: 'human_replied',
+                statusChangedAt: new Date().toISOString(),
+              },
+            }
+          : {}),
       },
     });
     this.realtime.conversationMessageCreated(businessId, {
@@ -923,11 +966,19 @@ export class SocialInboxService {
     });
     this.realtime.conversationUpdated(businessId, {
       conversationId,
+      status: pauseBot ? 'HUMAN' : undefined,
       lastMessageAt: message.createdAt,
       lastMessagePreview: inbound.text.slice(0, 280),
       lastMessageSender: 'HUMAN',
       channel: inbound.channel,
     });
+    if (pauseBot) {
+      this.realtime.conversationBotStatusChanged(businessId, {
+        conversationId,
+        status: 'HUMAN',
+        botActive: false,
+      });
+    }
     return true;
   }
 
@@ -1274,12 +1325,22 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
 
   const sender = asRecord(message?.sender);
   const participant = asRecord(conversation?.participant) ?? sender;
+  const rawAttachments = Array.isArray(message?.attachments)
+    ? (message?.attachments as unknown[])
+    : [];
   const parsedAttachments = parseAttachments(message?.attachments);
   const hasAttachments = parsedAttachments.length > 0;
+  const sharedContact = rawAttachments
+    .map((att) => parseSharedContact(att))
+    .find((contact) => contact !== null);
   const text =
     stringOf(message?.text) ??
     stringOf(message?.message) ??
-    (hasAttachments ? '[Adjunto]' : undefined);
+    (sharedContact
+      ? formatSharedContactMessage(sharedContact)
+      : hasAttachments
+        ? '[Adjunto]'
+        : undefined);
   if (!text) return null;
 
   const direction = stringOf(message?.direction);

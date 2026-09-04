@@ -22,7 +22,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "siguefit:sync": "tsx prisma/siguefit-sync.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

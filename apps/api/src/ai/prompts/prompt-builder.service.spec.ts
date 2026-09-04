@@ -49,6 +49,8 @@ describe('PromptBuilderService', () => {
     expect(prompt).toContain('getServices');
     expect(prompt).toContain('[Audio]');
     expect(prompt).toContain('[Audio no transcrito]');
+    expect(prompt).toContain('[Contacto]');
+    expect(prompt).toContain('[Adjunto]');
     expect(prompt).toContain('Abrimos de lunes a viernes');
     expect(prompt).toContain('2026-08-10');
     expect(prompt).toContain('2026-08-11');

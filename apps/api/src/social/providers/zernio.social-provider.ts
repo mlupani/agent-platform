@@ -11,6 +11,10 @@ import {
   safeSocialMessage,
 } from '../social.errors';
 import { parseAttachments } from '../../ai/transcription/inbound-audio';
+import {
+  formatSharedContactMessage,
+  parseSharedContact,
+} from '../../ai/transcription/parse-shared-contact';
 import type {
   SocialAccount,
   SocialAccountHealth,
@@ -395,10 +399,19 @@ export class ZernioSocialProvider implements SocialProvider {
   ): SocialInboxMessage | null {
     const attachments = row.attachments;
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    const sharedContact = hasAttachments
+      ? (attachments as unknown[])
+          .map((att) => parseSharedContact(att))
+          .find((contact) => contact !== null)
+      : undefined;
     const text =
       stringOf(row.message) ??
       stringOf(row.text) ??
-      (hasAttachments ? '[Adjunto]' : undefined);
+      (sharedContact
+        ? formatSharedContactMessage(sharedContact)
+        : hasAttachments
+          ? '[Adjunto]'
+          : undefined);
     const id = stringOf(row.id) ?? stringOf(row.messageId);
     if (!id || !text) return null;
     const direction = stringOf(row.direction);

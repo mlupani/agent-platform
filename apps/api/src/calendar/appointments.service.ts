@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { LeadConversionService } from '../leads/lead-conversion.service';
@@ -495,6 +496,46 @@ export class AppointmentsService {
       if (!service) throw new NotFoundException('Servicio no encontrado');
     }
 
+    const timezone = input.timezone || business.timezone;
+    const startsAt = DateTime.fromJSDate(input.startsAt).setZone(timezone);
+    if (!startsAt.isValid) {
+      throw new BadRequestException('startsAt inválido');
+    }
+    const startsAtUtc = startsAt.toUTC().toJSDate();
+
+    // Idempotencia: si ya existe un turno NO cancelado a la misma hora para esta
+    // misma persona (alumna, teléfono) o en esta misma conversación, devolverlo
+    // en vez de volver a crear (o de fallar el guard de prueba con el turno que
+    // se acaba de reservar en el turno de chat anterior).
+    const phoneDigits = (input.contactPhone ?? '').replace(/\D/g, '').slice(-8);
+    const idempotencyMatchers: Prisma.AppointmentWhereInput[] = [];
+    if (input.userId) idempotencyMatchers.push({ userId: input.userId });
+    if (phoneDigits)
+      idempotencyMatchers.push({ contactPhone: { contains: phoneDigits } });
+    if (input.conversationId)
+      idempotencyMatchers.push({ conversationId: input.conversationId });
+    if (idempotencyMatchers.length) {
+      const duplicate = await this.prisma.appointment.findFirst({
+        where: {
+          businessId: input.businessId,
+          startsAt: startsAtUtc,
+          status: { notIn: ['cancelled'] },
+          OR: idempotencyMatchers,
+        },
+        include: {
+          service: {
+            select: {
+              id: true,
+              name: true,
+              durationMinutes: true,
+              capacity: true,
+            },
+          },
+        },
+      });
+      if (duplicate) return duplicate;
+    }
+
     // Validación de saldo / trial antes de crear
     // si isTrial viene explícito, validar que no haya usado
     let effectiveIsTrial = !!input.isTrial;
@@ -506,16 +547,20 @@ export class AppointmentsService {
           where: { id: input.userId, businessId: input.businessId },
           select: { hasUsedTrial: true },
         });
-      } else if (input.contactPhone) {
-        const phoneDigits = input.contactPhone.replace(/\D/g, '').slice(-8);
+      } else if (phoneDigits) {
         trialUser = await this.prisma.user.findFirst({
           where: { businessId: input.businessId, phone: { contains: phoneDigits } },
           select: { hasUsedTrial: true, id: true },
         });
-        // también chequear appointments isTrial previos por teléfono
+        // también chequear appointments isTrial previos por teléfono (sin contar canceladas)
         if (!trialUser) {
           const prevTrial = await this.prisma.appointment.findFirst({
-            where: { businessId: input.businessId, contactPhone: { contains: phoneDigits }, isTrial: true },
+            where: {
+              businessId: input.businessId,
+              contactPhone: { contains: phoneDigits },
+              isTrial: true,
+              status: { notIn: ['cancelled'] },
+            },
           });
           if (prevTrial) throw new BadRequestException('Ya utilizaste tu clase de prueba. Para continuar necesitás contratar un pack.');
         }
@@ -524,18 +569,19 @@ export class AppointmentsService {
         throw new BadRequestException('Ya utilizaste tu clase de prueba. Para continuar necesitás contratar un pack.');
       }
       const prevTrialByUser = input.userId
-        ? await this.prisma.appointment.findFirst({ where: { businessId: input.businessId, userId: input.userId, isTrial: true } })
+        ? await this.prisma.appointment.findFirst({
+            where: {
+              businessId: input.businessId,
+              userId: input.userId,
+              isTrial: true,
+              status: { notIn: ['cancelled'] },
+            },
+          })
         : null;
       if (prevTrialByUser) throw new BadRequestException('Ya utilizaste tu clase de prueba.');
     }
     // propagar effectiveIsTrial al input para el resto del flujo
     (input as any).effectiveIsTrial = effectiveIsTrial;
-
-    const timezone = input.timezone || business.timezone;
-    const startsAt = DateTime.fromJSDate(input.startsAt).setZone(timezone);
-    if (!startsAt.isValid) {
-      throw new BadRequestException('startsAt inválido');
-    }
 
     // Spots son por horario, no por servicio: para prueba sin servicio no hace falta buscar servicio específico
     // La disponibilidad y el cupo se chequean por horario, packs 4 y 8 comparten el mismo spot

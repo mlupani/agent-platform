@@ -92,7 +92,10 @@ export const WEEKDAY_LABELS = [
 ] as const;
 
 export const DEFAULT_MEMORY_STRATEGY = {
-  recentMessages: 12,
+  // En conversaciones de reserva cada turno consume varios mensajes (respuesta
+  // del asistente + resultados de tools), así que 12 se agota rápido y el modelo
+  // "pierde" el contexto viejo. 20 da margen sin inflar demasiado el prompt.
+  recentMessages: 20,
   includeSummary: true,
   semanticTopK: 3,
 } as const;

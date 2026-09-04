@@ -144,6 +144,7 @@ export function isPlaceholderCaption(text?: string | null): boolean {
     !value ||
     value === '[Adjunto]' ||
     value === '[Media]' ||
+    value === '[Contacto]' ||
     value === AUDIO_PREFIX ||
     value === AUDIO_UNTRANSCRIBED
   );

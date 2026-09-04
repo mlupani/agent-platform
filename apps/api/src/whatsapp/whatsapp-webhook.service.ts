@@ -8,6 +8,12 @@ import {
   formatVoiceMessage,
   isWahaAudioPayload,
 } from '../ai/transcription/inbound-audio';
+import {
+  extractWahaVcards,
+  formatSharedContactMessage,
+  isWahaContactPayload,
+  parseSharedContact,
+} from '../ai/transcription/parse-shared-contact';
 import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp-provider.factory';
@@ -166,7 +172,8 @@ export class WhatsAppWebhookService {
     }
 
     const isAudio = isWahaAudioPayload(payload);
-    if (!caption && !isAudio) return false;
+    const isContact = isWahaContactPayload(payload);
+    if (!caption && !isAudio && !isContact) return false;
 
     const fresh = await this.claimExternalId(businessId, externalId);
     if (!fresh) {
@@ -180,7 +187,12 @@ export class WhatsAppWebhookService {
           messageId: externalId,
           caption,
         })
-      : caption;
+      : isContact
+        ? formatSharedContactMessage(
+            parseSharedContact(extractWahaVcards(payload)),
+            caption,
+          )
+        : caption;
     if (!text) return false;
 
     const selfChat = await this.isSelfChat(businessId, chatId);
@@ -231,7 +243,14 @@ export class WhatsAppWebhookService {
         conversation.metadata && typeof conversation.metadata === 'object'
           ? (conversation.metadata as Record<string, unknown>)
           : {};
-      if (meta.statusReason !== 'operator_paused') {
+      // No re-activar el bot si una persona pausó la conversación o respondió a
+      // mano, o si el agente la derivó a un humano.
+      const stickyReasons = [
+        'operator_paused',
+        'human_replied',
+        'agent_handoff',
+      ];
+      if (!stickyReasons.includes(String(meta.statusReason))) {
         const updated = await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
@@ -766,6 +785,10 @@ export class WhatsAppWebhookService {
           ? { ...(existing.metadata as Record<string, unknown>) }
           : {};
       const reopen = existing.status === 'CLOSED' || existing.hiddenAt != null;
+      // Un chat oculto/cerrado que ya estaba tomado por una persona (handoff del
+      // agente o respuesta manual) NO debe volver a AI al llegar un mensaje nuevo.
+      const humanHeld =
+        existing.status === 'HUMAN' || existing.status === 'WAITING_HUMAN';
       if (reopen) {
         delete metaBase.hiddenReason;
         delete metaBase.hiddenAt;
@@ -785,7 +808,7 @@ export class WhatsAppWebhookService {
             hiddenAt: null,
             ...(reopen
               ? {
-                  status: 'AI' as const,
+                  ...(humanHeld ? {} : { status: 'AI' as const }),
                   metadata: metaBase as Prisma.InputJsonValue,
                 }
               : {}),

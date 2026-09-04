@@ -10,6 +10,10 @@ import { RealtimeEventsService } from '../realtime/realtime.events.service';
 import { WhatsAppConfigService } from './whatsapp-config.service';
 import { LeadsService } from '../leads/leads.service';
 import {
+  formatSharedContactMessage,
+  parseSharedContact,
+} from '../ai/transcription/parse-shared-contact';
+import {
   alternateWhatsAppExternalIds,
   isWhatsAppLid,
   isWhatsAppLegacyPhoneId,
@@ -592,7 +596,9 @@ export class WahaConversationsSyncService {
     if (body) return body;
     if (item.hasMedia) return '[Media]';
     if (item.location) return '[Ubicación]';
-    if (item.vCards && item.vCards.length > 0) return '[Contacto]';
+    if (item.vCards && item.vCards.length > 0) {
+      return formatSharedContactMessage(parseSharedContact(item.vCards));
+    }
     return null;
   }
 
