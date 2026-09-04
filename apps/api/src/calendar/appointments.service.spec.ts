@@ -264,7 +264,7 @@ describe('AppointmentsService', () => {
     expect(appointment.id).toBe('apt-1');
   });
 
-  it('listClasses no mezcla un pack agotado (COMPLETED) con el pack activo nuevo al calcular clase X/Y', async () => {
+  it('listClasses no mezcla un pack agotado con el pack nuevo al calcular clase X/Y (status sigue en ACTIVE aunque esté sin clases)', async () => {
     prisma.appointment.findMany.mockResolvedValue([
       {
         id: 'apt-1',
@@ -285,7 +285,9 @@ describe('AppointmentsService', () => {
         userId: 'user-1',
         sessionsPaid: 12,
         sessionsUsed: 12,
-        status: 'COMPLETED',
+        // el flujo real de "Gestionar packs" (payments.service.ts) nunca pasa el status a
+        // COMPLETED al agotarse: se queda en ACTIVE para siempre.
+        status: 'ACTIVE',
         createdAt: new Date('2099-08-01T00:00:00.000Z'),
         service: { name: 'Pack 12 clases' },
       },

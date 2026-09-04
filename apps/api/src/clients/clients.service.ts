@@ -103,15 +103,16 @@ export class ClientsService {
       passesByUser.set(p.userId, list);
     }
     for (const [userId, list] of passesByUser.entries()) {
-      const active = list.filter((p) => p.status === 'ACTIVE');
-      // usar el pack más reciente activo o el último creado
-      const src = active.length ? active : list;
+      // packs vigentes: con clases restantes. `status` no es confiable acá — el flujo de
+      // "Gestionar packs" (payments.service.ts) nunca lo pasa a COMPLETED al agotarse.
+      const current = list.filter((p) => p.status !== 'CANCELLED' && p.sessionsPaid - p.sessionsUsed > 0);
+      // usar el pack más reciente vigente o, si no queda ninguno, el último creado (solo para el nombre)
+      const src = current.length ? current : list;
       const sorted = [...src].sort((a, b) => b.sessionsPaid - a.sessionsPaid);
       const primary = sorted[0];
-      // packs vigentes solamente: uno ya agotado (COMPLETED) no debe sumarse a un pack nuevo
-      const total = active.reduce((acc, p) => acc + p.sessionsPaid, 0);
-      const remaining = active.reduce((acc, p) => acc + Math.max(0, p.sessionsPaid - p.sessionsUsed), 0);
-      const used = active.reduce((acc, p) => acc + p.sessionsUsed, 0);
+      const total = current.reduce((acc, p) => acc + p.sessionsPaid, 0);
+      const remaining = current.reduce((acc, p) => acc + Math.max(0, p.sessionsPaid - p.sessionsUsed), 0);
+      const used = current.reduce((acc, p) => acc + p.sessionsUsed, 0);
       packByUser.set(userId, { name: primary?.service?.name ?? null, total, remaining, used });
     }
 

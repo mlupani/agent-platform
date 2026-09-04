@@ -1238,8 +1238,12 @@ export class AppointmentsService {
     for (const uid of userIds) {
       const list = grouped.get(uid) ?? [];
       if (!list.length) continue;
-      // packs vigentes solamente: uno ya agotado (COMPLETED) no debe sumarse a un pack nuevo
-      const active = list.filter((p: any) => p.status === 'ACTIVE');
+      // packs vigentes solamente: uno agotado (sin clases restantes) no debe sumarse a un pack nuevo.
+      // OJO: `status` no es confiable acá — el flujo de "Gestionar packs" (payments.service.ts)
+      // nunca lo pasa a COMPLETED al agotarse, se queda en ACTIVE para siempre.
+      const active = list.filter(
+        (p: any) => p.status !== 'CANCELLED' && p.sessionsPaid - p.sessionsUsed > 0,
+      );
       if (!active.length) continue;
       const total = active.reduce((acc: number, p: any) => acc + p.sessionsPaid, 0);
       const used = active.reduce((acc: number, p: any) => acc + p.sessionsUsed, 0);
