@@ -453,6 +453,8 @@ model Appointment {
   /// pending | confirmed | cancelled | completed
   status         String        @default("confirmed")
   isTrial        Boolean       @default(false)
+  /// Recupero: la alumna repone una clase a la que no pudo asistir.
+  isMakeup       Boolean       @default(false)
   googleEventId  String?
   notes          String?
   metadata       Json?

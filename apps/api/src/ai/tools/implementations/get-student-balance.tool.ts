@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import type { AgentTool, ToolContext, ToolResult } from '../agent-tool.interface';
+import { MakeupService } from '../../../packs/makeup.service';
 import { PackBalanceService } from '../../../packs/pack-balance.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 
@@ -14,13 +15,14 @@ const schema = z.object({
 export class GetStudentBalanceTool implements AgentTool {
   readonly name = 'consultar_saldo_clases';
   readonly description =
-    'Consulta cuántas clases disponibles tiene un alumno. Fuente de verdad: sistema de packs/créditos, no calendario. Usalo antes de confirmar una reserva. Si es ALUMNO sin clases, no ofrezcas prueba gratuita, informa que debe renovar.';
+    'Consulta cuántas clases disponibles tiene un alumno. Fuente de verdad: sistema de packs/créditos, no calendario. Usalo antes de confirmar una reserva. Devuelve además makeupsThisMonth: cuántos recuperos lleva la alumna este mes (informativo, no hay tope). Si es ALUMNO sin clases, no ofrezcas prueba gratuita, informa que debe renovar.';
   readonly schema = schema;
   readonly risk = 'READ' as const;
 
   constructor(
     private readonly packs: PackBalanceService,
     private readonly prisma: PrismaService,
+    private readonly makeup: MakeupService,
   ) {}
 
   async execute(input: unknown, context: ToolContext): Promise<ToolResult> {
@@ -64,10 +66,16 @@ export class GetStudentBalanceTool implements AgentTool {
 
     try {
       const balance = await this.packs.getBalance(context.businessId, userId);
+      const makeupsThisMonth = await this.makeup.countForMonth(
+        context.businessId,
+        userId,
+        new Date(),
+      );
       return {
         success: true,
         data: {
           studentId: balance.studentId,
+          makeupsThisMonth,
           studentName: balance.studentName,
           availableClasses: balance.availableClasses,
           hasAvailableClasses: balance.hasAvailableClasses,

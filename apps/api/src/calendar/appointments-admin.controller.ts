@@ -25,6 +25,11 @@ const createSchema = z.object({
   startsAt: z.string().datetime({ offset: true }),
   notes: z.string().optional(),
   isTrial: z.boolean().optional(),
+  isMakeup: z.boolean().optional(),
+});
+
+const makeupSchema = z.object({
+  isMakeup: z.boolean(),
 });
 
 const cancelSchema = z.object({
@@ -136,6 +141,16 @@ export class AppointmentsAdminController {
       startsAt: new Date(body.startsAt),
       timezone: business.timezone,
     });
+  }
+
+  @Patch(':id/makeup')
+  async makeup(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(makeupSchema))
+    body: z.infer<typeof makeupSchema>,
+  ) {
+    const businessId = await this.businesses.getCurrentId();
+    return this.appointments.setMakeup(businessId, id, body.isMakeup);
   }
 
   @Patch(':id/cancel')

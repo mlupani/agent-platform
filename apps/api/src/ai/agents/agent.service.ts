@@ -913,21 +913,26 @@ export class AgentService {
     relationshipStatus: string;
     student?: { name: string | null } | null;
     availableClasses?: number | null;
+    makeupsThisMonth?: number | null;
     hasTrialAlreadyUsed?: boolean;
     found?: boolean;
   }): string {
     const name = sc.student?.name || 'sin nombre';
     const avail = sc.availableClasses ?? 'null';
     const trial = sc.hasTrialAlreadyUsed ? 'sí' : 'no';
+    const recuperos =
+      typeof sc.makeupsThisMonth === 'number'
+        ? ` Lleva ${sc.makeupsThisMonth} recupero(s) este mes (informativo, no hay tope).`
+        : '';
     switch (sc.relationshipStatus) {
       case 'PROSPECT':
         return `Contexto del alumno (fuente de verdad): PROSPECT (persona nueva, no existe como alumna). No tiene saldo ni pack. Si pide clase, ofrecer prueba solo si hasTrialAlreadyUsed=no (${trial}). No asumir servicio. Usá consultar_contexto_alumno si necesitas confirmar.`;
       case 'ACTIVE_STUDENT':
-        return `Contexto del alumno: ACTIVE_STUDENT ${name} con ${avail} clases disponibles (hasTrialAlreadyUsed=${trial}). Tiene pack activo. Antes de reservar, verifica saldo con consultar_saldo_clases y disponibilidad. No ofrecer prueba gratuita.`;
+        return `Contexto del alumno: ACTIVE_STUDENT ${name} con ${avail} clases disponibles (hasTrialAlreadyUsed=${trial}). Tiene pack activo. Antes de reservar, verifica saldo con consultar_saldo_clases y disponibilidad. No ofrecer prueba gratuita.${recuperos}`;
       case 'STUDENT_WITHOUT_CREDITS':
-        return `Contexto del alumno: STUDENT_WITHOUT_CREDITS ${name} con 0 clases disponibles (hasTrialAlreadyUsed=${trial}). Es alumna existente sin saldo. NO ofrecer prueba gratuita ni tratarla como prospect. Informar que debe renovar pack y ofrecer renovación. Si pregunta cuántas le quedan, usa consultar_saldo_clases.`;
+        return `Contexto del alumno: STUDENT_WITHOUT_CREDITS ${name} con 0 clases disponibles (hasTrialAlreadyUsed=${trial}). Es alumna existente sin saldo. NO ofrecer prueba gratuita ni tratarla como prospect. Informar que debe renovar pack y ofrecer renovación. Si pregunta cuántas le quedan, usa consultar_saldo_clases.${recuperos}`;
       case 'INACTIVE_STUDENT':
-        return `Contexto del alumno: INACTIVE_STUDENT ${name} (fue alumna, sin pack activo, 0 clases, trial=${trial}). No ofrecer prueba automática como si fuera nueva. Reconocer historial y ofrecer retomar.`;
+        return `Contexto del alumno: INACTIVE_STUDENT ${name} (fue alumna, sin pack activo, 0 clases, trial=${trial}). No ofrecer prueba automática como si fuera nueva. Reconocer historial y ofrecer retomar.${recuperos}`;
       default:
         return `Contexto del alumno: ${sc.relationshipStatus} ${name} available=${avail} trial=${trial}`;
     }

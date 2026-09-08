@@ -95,4 +95,38 @@ describe('CreateAppointmentTool', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('pasa el recupero al servicio de citas', async () => {
+    appointments.create.mockResolvedValue({
+      id: 'apt-recupero',
+      startsAt: new Date('2026-08-23T13:00:00.000Z'),
+      endsAt: new Date('2026-08-23T14:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      status: 'confirmed',
+      service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60 },
+      contactName: 'Ana',
+      contactPhone: '54911',
+      contactEmail: null,
+    });
+
+    const result = await tool.execute(
+      {
+        startsAt: '2026-08-23T10:00:00-03:00',
+        contactName: 'Ana',
+        contactPhone: '54911',
+        isMakeup: true,
+      },
+      {
+        businessId: 'biz-1',
+        conversationId: 'conv-1',
+        channel: 'PLAYGROUND',
+        enabledTools: ['createAppointment'],
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(appointments.create).toHaveBeenCalledWith(
+      expect.objectContaining({ isMakeup: true }),
+    );
+  });
 });

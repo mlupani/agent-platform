@@ -39,4 +39,6 @@ export interface CreateAppointmentInput {
   notes?: string;
   status?: string;
   isTrial?: boolean;
+  /** Recupero: la alumna repone una clase a la que no pudo asistir. */
+  isMakeup?: boolean;
 }

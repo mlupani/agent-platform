@@ -10,9 +10,15 @@ describe('StudentContextService', () => {
   const packs: any = {
     getBalance: jest.fn(),
   };
-  const service = new StudentContextService(prisma, packs);
+  const makeup: any = {
+    countForMonth: jest.fn().mockResolvedValue(0),
+  };
+  const service = new StudentContextService(prisma, packs, makeup);
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    makeup.countForMonth.mockResolvedValue(0);
+  });
 
   it('PROSPECT: persona nueva no existe', async () => {
     prisma.user.findFirst.mockResolvedValue(null);
@@ -54,5 +60,25 @@ describe('StudentContextService', () => {
     prisma.appointment.count.mockResolvedValue(1); // has trial appointment
     const ctx = await service.resolveStudentContext({ businessId: 'b1', phone: '5491130000001' });
     expect(ctx.hasTrialAlreadyUsed).toBe(true);
+  });
+
+  it('expone los recuperos del mes de la alumna', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u1', name: 'Ana', phone: '5491130000001', hasUsedTrial: false });
+    packs.getBalance.mockResolvedValue({ availableClasses: 2, activePacks: [{ id: 'p1' }], allPacks: [{ id: 'p1', status: 'ACTIVE' }] });
+    prisma.appointment.count.mockResolvedValue(0);
+    makeup.countForMonth.mockResolvedValue(2);
+
+    const ctx = await service.resolveStudentContext({ businessId: 'b1', phone: '5491130000001' });
+
+    expect(ctx.makeupsThisMonth).toBe(2);
+  });
+
+  it('deja los recuperos en null para alguien que no es alumna', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    const ctx = await service.resolveStudentContext({ businessId: 'b1', phone: '5491199999999' });
+
+    expect(ctx.makeupsThisMonth).toBeNull();
+    expect(makeup.countForMonth).not.toHaveBeenCalled();
   });
 });

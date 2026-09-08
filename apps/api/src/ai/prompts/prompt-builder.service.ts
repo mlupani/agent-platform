@@ -204,6 +204,7 @@ export class PromptBuilderService {
       `No conviertas un lead a cliente. Si faltan datos de contacto y el snapshot del lead lo pide, preguntá WhatsApp o email con naturalidad.`,
       `En createAppointment/checkAvailability, serviceId puede ser el UUID (id=... del prompt) o el nombre exacto del servicio.`,
       `Para clase de prueba gratuita: solo para PROSPECT con hasTrialAlreadyUsed=false, usa createAppointment con isTrial=true (solo una vez por persona). Si es alumna existente (ACTIVE/STUDENT_WITHOUT_CREDITS/INACTIVE) o ya usó prueba, NO uses isTrial; usa flujo normal de pack/créditos.`,
+      `Recuperos: si la alumna dice que está reponiendo una clase a la que no pudo ir ("quiero recuperar la del martes", "me debían una clase"), usá createAppointment con isMakeup=true. El recupero descuenta una clase del pack igual que cualquier otra. No hay tope de recuperos: nunca le niegues la reserva por ese motivo; si pregunta cuántos lleva, mirá makeupsThisMonth en consultar_saldo_clases. Nunca combines isMakeup con isTrial.`,
       `Si hay una clase a esa hora y queda lugar (remaining/capacity), anotá a la clienta ahí con createAppointment. No inventes un horario paralelo.`,
       `checkAvailability y createAppointment son opt-in: solo existen si figuran en herramientas habilitadas.`,
       `Si el usuario dio email y createAppointment fue exitoso, usá sendEmail de inmediato para mandar la confirmación (fecha, hora, servicio, datos del negocio). No inventes destinatarios.`,

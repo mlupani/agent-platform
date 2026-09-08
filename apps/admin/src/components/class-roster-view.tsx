@@ -15,6 +15,8 @@ export interface ClassAttendee {
   status: string;
   notes: string | null;
   isTrial?: boolean | null;
+  isMakeup?: boolean | null;
+  makeupsThisMonth?: number | null;
   classLabel?: string | null;
   packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
 }
@@ -57,8 +59,15 @@ export interface CalendarFeedItem {
   service: { id: string; name: string; durationMinutes?: number } | null;
   userId?: string | null;
   isTrial?: boolean | null;
+  isMakeup?: boolean | null;
+  makeupsThisMonth?: number | null;
   classLabel?: string | null;
   packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
+}
+
+interface ClassFlags {
+  isTrial: boolean;
+  isMakeup: boolean;
 }
 
 function toIsoDate(date: Date) {
@@ -82,21 +91,32 @@ function formatApiError(error: unknown) {
   }
 }
 
+/** Sufijo con el que se indica que la clase es un recupero. */
+export function makeupSuffix(attendee: {
+  isMakeup?: boolean | null;
+  makeupsThisMonth?: number | null;
+}): string {
+  if (!attendee.isMakeup) return '';
+  const count = attendee.makeupsThisMonth ?? 0;
+  return count > 0 ? ` · recupero (${count} este mes)` : ' · recupero';
+}
+
 export function attendeeToItem(
   session: ClassSession,
   attendee: ClassAttendee,
 ): CalendarFeedItem {
   const isTrial = !!attendee.isTrial;
   const name = attendee.contactName || attendee.contactPhone || 'Alumna';
+  const suffix = makeupSuffix(attendee);
   const title = isTrial
     ? `${name} — clase de prueba`
     : attendee.classLabel
-      ? `${name} — ${attendee.classLabel}`
+      ? `${name} — ${attendee.classLabel}${suffix}`
       : attendee.packProgress
-        ? `${name} — clase ${attendee.packProgress.display}`
+        ? `${name} — clase ${attendee.packProgress.display}${suffix}`
         : session.service
-          ? `${session.service.name} · ${name}`
-          : name;
+          ? `${session.service.name} · ${name}${suffix}`
+          : `${name}${suffix}`;
   return {
     id: attendee.id,
     source: 'local',
@@ -115,6 +135,8 @@ export function attendeeToItem(
     service: session.service,
     userId: attendee.userId,
     isTrial,
+    isMakeup: !!attendee.isMakeup,
+    makeupsThisMonth: attendee.makeupsThisMonth ?? null,
     classLabel: attendee.classLabel ?? null,
     packProgress: attendee.packProgress ?? null,
   };
@@ -296,13 +318,15 @@ export function ClassRosterView({
                           const baseName =
                             attendee.contactName || attendee.contactPhone || 'Alumna';
                           const isTrialAttendee = !!attendee.isTrial;
+                          const isMakeupAttendee = !!attendee.isMakeup;
+                          const suffix = makeupSuffix(attendee);
                           const label = isTrialAttendee
                             ? `${baseName} — clase de prueba`
                             : attendee.classLabel
-                              ? `${baseName} — ${attendee.classLabel}`
+                              ? `${baseName} — ${attendee.classLabel}${suffix}`
                               : attendee.packProgress
-                                ? `${baseName} — clase ${attendee.packProgress.display}`
-                                : baseName;
+                                ? `${baseName} — clase ${attendee.packProgress.display}${suffix}`
+                                : `${baseName}${suffix}`;
                           const personTarget: PersonTarget = {
                             userId: attendee.userId,
                             contactName: attendee.contactName,
@@ -358,6 +382,18 @@ export function ClassRosterView({
                                     <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
                                       <path d="M6 6l12 12M18 6L6 18" />
                                     </svg>
+                                  </span>
+                                ) : null}
+                                {isMakeupAttendee ? (
+                                  <span
+                                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-violet-500 text-white text-[8px] font-bold"
+                                    title={
+                                      attendee.makeupsThisMonth
+                                        ? `Recupero — ${attendee.makeupsThisMonth} este mes`
+                                        : 'Recupero'
+                                    }
+                                  >
+                                    R
                                   </span>
                                 ) : null}
                                 <span className="truncate">{label}</span>
@@ -604,7 +640,7 @@ function AddStudentDialog({
   });
 
   const maxSelectable = Math.max(0, session.capacity - session.booked);
-  const [selected, setSelected] = useState<Map<string, boolean>>(new Map());
+  const [selected, setSelected] = useState<Map<string, ClassFlags>>(new Map());
   const attendeeIds = new Set(session.attendees.map((a) => a.userId).filter(Boolean));
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -612,23 +648,29 @@ function AddStudentDialog({
       if (next.has(id)) next.delete(id);
       else {
         if (next.size >= maxSelectable) return prev;
-        next.set(id, false);
+        next.set(id, { isTrial: false, isMakeup: false });
       }
       return next;
     });
   };
-  const toggleTrial = (id: string) => {
+  // Prueba y recupero son excluyentes: una clase de prueba no repone nada.
+  const toggleFlag = (id: string, flag: keyof ClassFlags) => {
     setSelected((prev) => {
+      const current = prev.get(id);
+      if (!current) return prev;
       const next = new Map(prev);
-      if (!next.has(id)) return prev;
-      next.set(id, !next.get(id));
+      const value = !current[flag];
+      next.set(id, {
+        isTrial: flag === 'isTrial' ? value : value ? false : current.isTrial,
+        isMakeup: flag === 'isMakeup' ? value : value ? false : current.isMakeup,
+      });
       return next;
     });
   };
   const addMany = useMutation({
-    mutationFn: async (entries: Array<{ userId: string; isTrial: boolean }>) => {
+    mutationFn: async (entries: Array<{ userId: string } & ClassFlags>) => {
       const results = await Promise.allSettled(
-        entries.map(({ userId, isTrial }) =>
+        entries.map(({ userId, isTrial, isMakeup }) =>
           api('/admin/appointments', {
             method: 'POST',
             body: JSON.stringify({
@@ -636,6 +678,7 @@ function AddStudentDialog({
               userId,
               startsAt: session.startsAt,
               ...(isTrial ? { isTrial: true } : {}),
+              ...(isMakeup ? { isMakeup: true } : {}),
             }),
           }),
         ),
@@ -724,7 +767,7 @@ function AddStudentDialog({
                   : 'Sin pack'
               : 'Sin pack';
             const isSelected = selected.has(client.id);
-            const isTrial = selected.get(client.id) ?? false;
+            const flags = selected.get(client.id) ?? { isTrial: false, isMakeup: false };
             const alreadyIn = attendeeIds.has(client.id);
             const disabled = alreadyIn || (!isSelected && selectedCount >= maxSelectable);
             return (
@@ -758,15 +801,25 @@ function AddStudentDialog({
                     {client.phone || client.email || 'Sin contacto'} · {packLabel}
                   </p>
                 </button>
-                <label className={`flex items-center gap-1 text-xs shrink-0 px-2 py-1 rounded-full border cursor-pointer ${isTrial ? 'bg-amber-500 text-white border-amber-600' : 'bg-panel border-line text-muted'} ${!isSelected ? 'opacity-40 pointer-events-none' : ''}`}>
+                <label className={`flex items-center gap-1 text-xs shrink-0 px-2 py-1 rounded-full border cursor-pointer ${flags.isTrial ? 'bg-amber-500 text-white border-amber-600' : 'bg-panel border-line text-muted'} ${!isSelected ? 'opacity-40 pointer-events-none' : ''}`}>
                   <input
                     type="checkbox"
                     className="h-3 w-3 rounded"
-                    checked={isTrial}
+                    checked={flags.isTrial}
                     disabled={!isSelected}
-                    onChange={() => toggleTrial(client.id)}
+                    onChange={() => toggleFlag(client.id, 'isTrial')}
                   />
                   Prueba
+                </label>
+                <label className={`flex items-center gap-1 text-xs shrink-0 px-2 py-1 rounded-full border cursor-pointer ${flags.isMakeup ? 'bg-violet-500 text-white border-violet-600' : 'bg-panel border-line text-muted'} ${!isSelected ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3 rounded"
+                    checked={flags.isMakeup}
+                    disabled={!isSelected}
+                    onChange={() => toggleFlag(client.id, 'isMakeup')}
+                  />
+                  Recupero
                 </label>
               </li>
             );
@@ -785,7 +838,7 @@ function AddStudentDialog({
             className="btn-primary flex-1 min-h-11"
             disabled={!canAdd || addMany.isPending || maxSelectable === 0}
             onClick={() => {
-              const entries = [...selected.entries()].map(([userId, isTrial]) => ({ userId, isTrial }));
+              const entries = [...selected.entries()].map(([userId, flags]) => ({ userId, ...flags }));
               addMany.mutate(entries);
             }}
           >

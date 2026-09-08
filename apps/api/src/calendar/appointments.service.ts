@@ -10,6 +10,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { LeadConversionService } from '../leads/lead-conversion.service';
 import { AvailabilityService } from './availability.service';
 import { GoogleCalendarService } from './google-calendar.service';
+import { MakeupService, makeupKey } from '../packs/makeup.service';
 import { PackBalanceService } from '../packs/pack-balance.service';
 import { AdminNotifyService } from '../notifications/admin-notify.service';
 import type { CreateAppointmentInput } from './calendar.types';
@@ -24,6 +25,7 @@ export class AppointmentsService {
     private readonly google: GoogleCalendarService,
     private readonly conversions: LeadConversionService,
     private readonly packs: PackBalanceService,
+    private readonly makeup: MakeupService,
     private readonly adminNotify: AdminNotifyService,
   ) {}
 
@@ -88,7 +90,13 @@ export class AppointmentsService {
         const isTrial = !!(item as any).isTrial;
         const contactLabel = item.contactName || item.contactPhone || 'Alumna';
         const progress = item.userId ? progressForFeed.get(item.userId) ?? null : null;
-        const title = this.buildAppointmentTitle(contactLabel, isTrial, progress, item.service?.name);
+        const title = this.buildAppointmentTitle(
+          contactLabel,
+          isTrial,
+          progress,
+          item.service?.name,
+          !!(item as any).isMakeup,
+        );
         return {
           id: item.id,
           source: 'local' as const,
@@ -225,6 +233,8 @@ export class AppointmentsService {
           status: string;
           notes: string | null;
           isTrial?: boolean | null;
+          isMakeup: boolean;
+          makeupsThisMonth: number;
           classLabel?: string | null;
           packProgress?: { total: number; used: number; remaining: number; display: string; packName: string | null } | null;
         }>;
@@ -234,7 +244,10 @@ export class AppointmentsService {
     const keyOf = (startsAt: DateTime) => startsAt.toUTC().toISO()!;
 
     const userIdsForProgress = [...new Set(appointments.map((a) => (a as any).userId).filter(Boolean) as string[])];
-    const progressMap = await this.getPackProgressMap(businessId, userIdsForProgress);
+    const [progressMap, makeupCounts] = await Promise.all([
+      this.getPackProgressMap(businessId, userIdsForProgress),
+      this.makeup.countByUserAndMonth(businessId, userIdsForProgress, rangeStart, rangeEnd),
+    ]);
 
     for (const row of appointments) {
       const startsAt = DateTime.fromJSDate(row.startsAt, {
@@ -246,6 +259,7 @@ export class AppointmentsService {
       const key = keyOf(startsAt);
       const existing = sessions.get(key);
       const isTrial = !!(row as any).isTrial;
+      const isMakeup = !!(row as any).isMakeup;
       const prog = row.userId ? progressMap.get(row.userId) ?? null : null;
       const classLabel = isTrial ? 'clase de prueba' : prog ? `clase ${prog.display}` : null;
       const attendee = {
@@ -257,6 +271,10 @@ export class AppointmentsService {
         status: row.status,
         notes: row.notes,
         isTrial,
+        isMakeup,
+        makeupsThisMonth: row.userId
+          ? makeupCounts.get(makeupKey(row.userId, row.startsAt, zone)) ?? 0
+          : 0,
         classLabel,
         packProgress: prog,
       };
@@ -496,6 +514,12 @@ export class AppointmentsService {
   }
 
   async create(input: CreateAppointmentInput) {
+    if (input.isTrial && input.isMakeup) {
+      throw new BadRequestException(
+        'Una clase de prueba no puede ser además un recupero.',
+      );
+    }
+
     const business = await this.prisma.business.findUniqueOrThrow({
       where: { id: input.businessId },
     });
@@ -649,13 +673,14 @@ export class AppointmentsService {
         summaryProgress = await this.getPackProgressMap(input.businessId, [summaryUserId]).then((m) => m.get(summaryUserId) ?? null);
       }
     }
+    const makeupSuffix = input.isMakeup ? ' · recupero' : '';
     const summary = effectiveIsTrialForSummary
       ? `${contactName ?? 'Alumna'} — clase de prueba`
       : summaryProgress
-        ? `${contactName ?? 'Alumna'} — clase ${summaryProgress.display}`
+        ? `${contactName ?? 'Alumna'} — clase ${summaryProgress.display}${makeupSuffix}`
         : service
-          ? `${contactName ?? 'Alumna'} — ${service.name}`
-          : `Cita — ${contactName ?? 'Alumna'}`;
+          ? `${contactName ?? 'Alumna'} — ${service.name}${makeupSuffix}`
+          : `Cita — ${contactName ?? 'Alumna'}${makeupSuffix}`;
 
     const googleEventId = await this.google.createEvent({
       businessId: input.businessId,
@@ -684,6 +709,7 @@ export class AppointmentsService {
         userId: resolvedUserId || input.userId,
         servicePassId: null,
         isTrial: finalIsTrial,
+        isMakeup: !!input.isMakeup,
         contactName,
         contactPhone,
         contactEmail,
@@ -823,6 +849,31 @@ export class AppointmentsService {
     });
     void this.adminNotify.notifyAppointmentCancelled(cancelled);
     return cancelled;
+  }
+
+  /** Marca o desmarca una cita como recupero (desde el panel del estudio). */
+  async setMakeup(businessId: string, id: string, isMakeup: boolean) {
+    const appointment = await this.get(businessId, id);
+    if (isMakeup && appointment.isTrial) {
+      throw new BadRequestException(
+        'Una clase de prueba no puede ser además un recupero.',
+      );
+    }
+
+    return this.prisma.appointment.update({
+      where: { id },
+      data: { isMakeup },
+      include: {
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            capacity: true,
+          },
+        },
+      },
+    });
   }
 
   async reschedule(businessId: string, id: string, startsAtInput: Date) {
@@ -1558,11 +1609,18 @@ export class AppointmentsService {
     };
   }
 
-  private buildAppointmentTitle(contactLabel: string, isTrial: boolean, progress: { display: string } | null, serviceName?: string | null): string {
+  private buildAppointmentTitle(
+    contactLabel: string,
+    isTrial: boolean,
+    progress: { display: string } | null,
+    serviceName?: string | null,
+    isMakeup = false,
+  ): string {
     if (isTrial) return `${contactLabel} — clase de prueba`;
-    if (progress) return `${contactLabel} — clase ${progress.display}`;
-    if (serviceName) return `${contactLabel} — ${serviceName}`;
-    return `${contactLabel} — clase`;
+    const suffix = isMakeup ? ' · recupero' : '';
+    if (progress) return `${contactLabel} — clase ${progress.display}${suffix}`;
+    if (serviceName) return `${contactLabel} — ${serviceName}${suffix}`;
+    return `${contactLabel} — clase${suffix}`;
   }
 
   /** Cron: completa automáticamente clases que ya terminaron y descuenta del pack. */

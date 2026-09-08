@@ -29,6 +29,10 @@ const schema = z.object({
     .boolean()
     .optional()
     .describe('true si es clase de prueba gratuita para PROSPECT (solo una vez por alumno). No usar para alumna con pack.'),
+  isMakeup: z
+    .boolean()
+    .optional()
+    .describe('true si la alumna está recuperando una clase a la que no pudo asistir. Consume crédito del pack igual que una clase normal. No combinar con isTrial.'),
 });
 
 @Injectable()
@@ -97,6 +101,7 @@ export class CreateAppointmentTool implements AgentTool {
         timezone: business.timezone,
         notes: data.notes,
         isTrial: data.isTrial,
+        isMakeup: data.isMakeup,
       });
 
       const messages = (business.defaultMessages ?? {}) as Record<

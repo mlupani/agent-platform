@@ -24,6 +24,7 @@ describe('AppointmentsService', () => {
   };
   const google = {
     isConnected: jest.fn().mockResolvedValue(false),
+    listEvents: jest.fn().mockResolvedValue([]),
     createEvent: jest.fn().mockResolvedValue('evt-1'),
     updateEvent: jest.fn().mockResolvedValue(true),
     deleteEvent: jest.fn().mockResolvedValue(true),
@@ -32,6 +33,10 @@ describe('AppointmentsService', () => {
   const packs = {
     getBalance: jest.fn().mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5 }),
     consumeCredit: jest.fn(),
+  };
+  const makeup = {
+    countByUserAndMonth: jest.fn().mockResolvedValue(new Map()),
+    countForMonth: jest.fn().mockResolvedValue(0),
   };
   const adminNotify = {
     notifyAppointmentCreated: jest.fn().mockResolvedValue(undefined),
@@ -45,6 +50,7 @@ describe('AppointmentsService', () => {
     google as never,
     conversions as never,
     packs as never,
+    makeup as never,
     adminNotify as never,
   );
 
@@ -59,6 +65,8 @@ describe('AppointmentsService', () => {
     availability.getDayClassStarts.mockResolvedValue([]);
     packs.getBalance.mockResolvedValue({ hasAvailableClasses: true, availableClasses: 5, activePacks: [], allPacks: [] });
     conversions.maybeConvertFromSignal.mockResolvedValue(undefined);
+    makeup.countByUserAndMonth.mockResolvedValue(new Map());
+    google.listEvents.mockResolvedValue([]);
   });
 
   it('checkAvailability uses service duration', async () => {
@@ -222,6 +230,95 @@ describe('AppointmentsService', () => {
     expect(result.id).toBe('apt-new');
   });
 
+  it('create marca la cita como recupero cuando se lo piden', async () => {
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '17:30',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T17:30:00.000-03:00',
+      },
+    ]);
+    prisma.appointment.findFirst.mockResolvedValue(null);
+    prisma.appointment.create.mockImplementation(
+      async ({ data }: { data: unknown }) => ({
+        id: 'apt-recupero',
+        ...(data as object),
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        endsAt: new Date('2099-09-08T20:30:00.000Z'),
+        service: null,
+      }),
+    );
+
+    const result = await service.create({
+      businessId: 'biz-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Julieta',
+      contactPhone: '1164369670',
+      isMakeup: true,
+    });
+
+    expect(result.isMakeup).toBe(true);
+    expect(result.isTrial).toBe(false);
+  });
+
+  it('create deja isMakeup en false si no lo piden', async () => {
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '17:30',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T17:30:00.000-03:00',
+      },
+    ]);
+    prisma.appointment.findFirst.mockResolvedValue(null);
+    prisma.appointment.create.mockImplementation(
+      async ({ data }: { data: unknown }) => ({
+        id: 'apt-normal',
+        ...(data as object),
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        endsAt: new Date('2099-09-08T20:30:00.000Z'),
+        service: null,
+      }),
+    );
+
+    const result = await service.create({
+      businessId: 'biz-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Julieta',
+      contactPhone: '1164369670',
+    });
+
+    expect(result.isMakeup).toBe(false);
+  });
+
+  it('create rechaza una clase que sea prueba y recupero a la vez', async () => {
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '17:30',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T17:30:00.000-03:00',
+      },
+    ]);
+    prisma.appointment.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create({
+        businessId: 'biz-1',
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        timezone: 'America/Argentina/Buenos_Aires',
+        contactName: 'Julieta',
+        contactPhone: '1164369670',
+        isTrial: true,
+        isMakeup: true,
+      }),
+    ).rejects.toThrow(/prueba/i);
+    expect(prisma.appointment.create).not.toHaveBeenCalled();
+  });
+
   it('create stores googleEventId when calendar returns id', async () => {
     prisma.service.findFirst.mockResolvedValue({
       id: 'svc-1',
@@ -308,5 +405,181 @@ describe('AppointmentsService', () => {
       expect.objectContaining({ total: 12, used: 0, remaining: 12 }),
     );
     expect(attendee.classLabel).toBe('clase 1/12');
+  });
+
+  it('listClasses expone el recupero y cuántos lleva la alumna ese mes', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-1',
+        businessId: 'biz-1',
+        userId: 'u1',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: true,
+        contactName: 'Ana',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60, capacity: 6 },
+      },
+    ]);
+    prisma.classTemplate.findMany.mockResolvedValue([]);
+    makeup.countByUserAndMonth.mockResolvedValue(new Map([['u1:2026-09', 2]]));
+
+    const result = await service.listClasses('biz-1', '2026-09-14', '2026-09-21');
+
+    const attendee = result.sessions[0].attendees[0];
+    expect(attendee.isMakeup).toBe(true);
+    expect(attendee.makeupsThisMonth).toBe(2);
+  });
+
+  it('listClasses deja el contador en 0 para quien no tiene recuperos ese mes', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-2',
+        businessId: 'biz-1',
+        userId: 'u2',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: false,
+        contactName: 'Bea',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60, capacity: 6 },
+      },
+    ]);
+    prisma.classTemplate.findMany.mockResolvedValue([]);
+    makeup.countByUserAndMonth.mockResolvedValue(new Map([['u1:2026-09', 2]]));
+
+    const result = await service.listClasses('biz-1', '2026-09-14', '2026-09-21');
+
+    const attendee = result.sessions[0].attendees[0];
+    expect(attendee.isMakeup).toBe(false);
+    expect(attendee.makeupsThisMonth).toBe(0);
+  });
+
+  it('setMakeup marca una cita existente como recupero', async () => {
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'apt-1',
+      businessId: 'biz-1',
+      isTrial: false,
+      isMakeup: false,
+      service: null,
+    });
+    prisma.appointment.update.mockImplementation(
+      async ({ data }: { data: unknown }) => ({ id: 'apt-1', ...(data as object) }),
+    );
+
+    const result = await service.setMakeup('biz-1', 'apt-1', true);
+
+    expect(result.isMakeup).toBe(true);
+  });
+
+  it('setMakeup no deja marcar como recupero una clase de prueba', async () => {
+    prisma.appointment.findFirst.mockResolvedValue({
+      id: 'apt-1',
+      businessId: 'biz-1',
+      isTrial: true,
+      isMakeup: false,
+      service: null,
+    });
+
+    await expect(service.setMakeup('biz-1', 'apt-1', true)).rejects.toThrow(/prueba/i);
+    expect(prisma.appointment.update).not.toHaveBeenCalled();
+  });
+
+  it('listFeed indica en el título que la clase es un recupero', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-1',
+        businessId: 'biz-1',
+        userId: 'u1',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: true,
+        contactName: 'Ana',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        googleEventId: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60 },
+      },
+    ]);
+
+    const feed = await service.listFeed('biz-1', '2026-09-14', '2026-09-21');
+
+    expect(feed.items[0].title).toBe('Ana — Pilates · recupero');
+  });
+
+  it('listFeed deja el título sin recupero en una clase normal', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-1',
+        businessId: 'biz-1',
+        userId: 'u1',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: false,
+        contactName: 'Ana',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        googleEventId: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60 },
+      },
+    ]);
+
+    const feed = await service.listFeed('biz-1', '2026-09-14', '2026-09-21');
+
+    expect(feed.items[0].title).toBe('Ana — Pilates');
+  });
+
+  it('el evento de Google de un recupero lo dice en el título', async () => {
+    prisma.service.findFirst.mockResolvedValue({
+      id: 'svc-1',
+      name: 'Pilates',
+      durationMinutes: 60,
+      capacity: 6,
+    });
+    availability.getAvailableSlots.mockResolvedValue([
+      {
+        start: '17:00',
+        end: '18:00',
+        startIso: '2099-09-08T17:00:00.000-03:00',
+        endIso: '2099-09-08T18:00:00.000-03:00',
+      },
+    ]);
+    prisma.appointment.findFirst.mockResolvedValue(null);
+    prisma.appointment.create.mockImplementation(
+      async ({ data }: { data: unknown }) => ({
+        id: 'apt-recupero',
+        ...(data as object),
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        endsAt: new Date('2099-09-08T21:00:00.000Z'),
+        service: null,
+      }),
+    );
+
+    await service.create({
+      businessId: 'biz-1',
+      serviceId: 'svc-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Ana',
+      isMakeup: true,
+    });
+
+    expect(google.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: 'Ana — Pilates · recupero' }),
+    );
   });
 });

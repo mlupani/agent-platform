@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { MakeupService } from '../packs/makeup.service';
 import { PackBalanceService } from '../packs/pack-balance.service';
 
 export type RelationshipStatus = 'PROSPECT' | 'ACTIVE_STUDENT' | 'STUDENT_WITHOUT_CREDITS' | 'INACTIVE_STUDENT';
@@ -10,6 +11,8 @@ export interface StudentContext {
   relationshipStatus: RelationshipStatus;
   availableClasses: number | null;
   activePackCount: number | null;
+  /** Recuperos usados este mes. null si no es alumna registrada. */
+  makeupsThisMonth: number | null;
   hasTrialAlreadyUsed: boolean;
   found: boolean;
 }
@@ -19,6 +22,7 @@ export class StudentContextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly packs: PackBalanceService,
+    private readonly makeup: MakeupService,
   ) {}
 
   private normalizePhone(phone?: string | null): string | null {
@@ -84,6 +88,7 @@ export class StudentContextService {
         relationshipStatus: 'PROSPECT',
         availableClasses: null,
         activePackCount: null,
+        makeupsThisMonth: null,
         hasTrialAlreadyUsed: false,
         found: false,
       };
@@ -110,6 +115,10 @@ export class StudentContextService {
       status = 'INACTIVE_STUDENT';
     }
 
+    const makeupsThisMonth = await this.makeup
+      .countForMonth(params.businessId, user.id, new Date())
+      .catch(() => 0);
+
     const hasTrial = user.hasUsedTrial || (await this.prisma.appointment.count({ where: { businessId: params.businessId, userId: user.id, isTrial: true } })) > 0;
 
     return {
@@ -118,6 +127,7 @@ export class StudentContextService {
       relationshipStatus: status,
       availableClasses: available,
       activePackCount: activeCount,
+      makeupsThisMonth,
       hasTrialAlreadyUsed: hasTrial,
       found: true,
     };
