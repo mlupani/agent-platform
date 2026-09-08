@@ -582,4 +582,58 @@ describe('AppointmentsService', () => {
       expect.objectContaining({ summary: 'Ana — Pilates · recupero' }),
     );
   });
+
+  it('listFeed expone el recupero y el contador del mes en cada item', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-1',
+        businessId: 'biz-1',
+        userId: 'u1',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: true,
+        contactName: 'Ana',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        googleEventId: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60 },
+      },
+    ]);
+    makeup.countByUserAndMonth.mockResolvedValue(new Map([['u1:2026-09', 3]]));
+
+    const feed = await service.listFeed('biz-1', '2026-09-14', '2026-09-21');
+
+    expect(feed.items[0].isMakeup).toBe(true);
+    expect(feed.items[0].makeupsThisMonth).toBe(3);
+  });
+
+  it('listFeed marca isMakeup false y contador 0 en una clase normal', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'apt-2',
+        businessId: 'biz-1',
+        userId: 'u2',
+        startsAt: new Date('2026-09-15T13:00:00.000Z'),
+        endsAt: new Date('2026-09-15T14:00:00.000Z'),
+        status: 'confirmed',
+        isTrial: false,
+        isMakeup: false,
+        contactName: 'Bea',
+        contactPhone: null,
+        contactEmail: null,
+        notes: null,
+        googleEventId: null,
+        service: { id: 'svc-1', name: 'Pilates', durationMinutes: 60 },
+      },
+    ]);
+    makeup.countByUserAndMonth.mockResolvedValue(new Map([['u1:2026-09', 3]]));
+
+    const feed = await service.listFeed('biz-1', '2026-09-14', '2026-09-21');
+
+    expect(feed.items[0].isMakeup).toBe(false);
+    expect(feed.items[0].makeupsThisMonth).toBe(0);
+  });
 });

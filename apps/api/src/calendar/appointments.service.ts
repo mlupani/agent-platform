@@ -82,12 +82,21 @@ export class AppointmentsService {
     );
 
     const userIdsForFeed = [...new Set(local.map((i) => (i as any).userId).filter(Boolean) as string[])];
-    const progressForFeed = await this.getPackProgressMap(businessId, userIdsForFeed);
+    const [progressForFeed, makeupForFeed, feedBusiness] = await Promise.all([
+      this.getPackProgressMap(businessId, userIdsForFeed),
+      this.makeup.countByUserAndMonth(businessId, userIdsForFeed, fromDate, toDate),
+      this.prisma.business.findUniqueOrThrow({
+        where: { id: businessId },
+        select: { timezone: true },
+      }),
+    ]);
+    const feedZone = feedBusiness.timezone;
 
     const localItems = local
       .filter((item) => item.status !== 'cancelled')
       .map((item) => {
         const isTrial = !!(item as any).isTrial;
+        const isMakeup = !!(item as any).isMakeup;
         const contactLabel = item.contactName || item.contactPhone || 'Alumna';
         const progress = item.userId ? progressForFeed.get(item.userId) ?? null : null;
         const title = this.buildAppointmentTitle(
@@ -95,7 +104,7 @@ export class AppointmentsService {
           isTrial,
           progress,
           item.service?.name,
-          !!(item as any).isMakeup,
+          isMakeup,
         );
         return {
           id: item.id,
@@ -115,6 +124,10 @@ export class AppointmentsService {
           service: item.service,
           userId: (item as any).userId as string | null,
           isTrial: isTrial as boolean | undefined,
+          isMakeup,
+          makeupsThisMonth: item.userId
+            ? makeupForFeed.get(makeupKey(item.userId, item.startsAt, feedZone)) ?? 0
+            : 0,
           classLabel: isTrial ? 'clase de prueba' : progress ? `clase ${progress.display}` : null,
           packProgress: progress,
         };

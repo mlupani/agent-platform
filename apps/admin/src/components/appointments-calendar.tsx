@@ -28,6 +28,8 @@ interface CalendarFeedItem {
   service: { id: string; name: string; durationMinutes?: number } | null;
   userId?: string | null;
   isTrial?: boolean | null;
+  isMakeup?: boolean | null;
+  makeupsThisMonth?: number | null;
 }
 
 interface CalendarFeed {
@@ -904,6 +906,25 @@ function EventModal({
   const isPast = !selected.allDay && new Date(selected.endsAt).getTime() <= Date.now();
   const isCompleted = selected.status === 'completed';
   const isNoShow = selected.status === 'no_show';
+  const [makeupState, setMakeupState] = useState({
+    isMakeup: !!selected.isMakeup,
+    count: selected.makeupsThisMonth ?? 0,
+  });
+  const makeup = useMutation({
+    mutationFn: ({ id, isMakeup }: { id: string; isMakeup: boolean }) =>
+      api(`/admin/appointments/${id}/makeup`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isMakeup }),
+      }),
+    onSuccess: async (_data, variables) => {
+      setMakeupState((prev) => ({
+        isMakeup: variables.isMakeup,
+        count: Math.max(0, prev.count + (variables.isMakeup ? 1 : -1)),
+      }));
+      await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
+      await queryClient.invalidateQueries({ queryKey: ['appointment-classes'] });
+    },
+  });
   const attendance = useMutation({
     mutationFn: ({ id, attended }: { id: string; attended: boolean }) =>
       api(`/admin/appointments/${id}/attendance`, {
@@ -978,7 +999,7 @@ function EventModal({
         ) : null}
         {isLocal && selected.status !== 'cancelled' ? (
           <div
-            className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${
+            className={`rounded-xl border p-3 space-y-3 ${
               isCompleted
                 ? 'border-emerald-200 bg-emerald-50'
                 : isNoShow
@@ -986,6 +1007,7 @@ function EventModal({
                   : 'border-line bg-panel-2/40'
             }`}
           >
+            <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted">Asistencia</p>
               <p
@@ -1024,7 +1046,42 @@ function EventModal({
                 ) : null}
               </div>
             ) : null}
+            </div>
+            {!selected.isTrial ? (
+              <div className="flex items-center justify-between gap-3 border-t border-line/50 pt-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted">Recupero</p>
+                  <p className="text-sm font-medium">
+                    {makeupState.isMakeup
+                      ? `Repone una clase — ${makeupState.count} este mes`
+                      : 'Clase normal'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={makeup.isPending}
+                  aria-pressed={makeupState.isMakeup}
+                  onClick={() =>
+                    makeup.mutate({ id: selected.id, isMakeup: !makeupState.isMakeup })
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shrink-0 disabled:opacity-50 ${
+                    makeupState.isMakeup
+                      ? 'bg-violet-500 text-white hover:bg-violet-600'
+                      : 'border border-line bg-white text-text hover:bg-panel-2'
+                  }`}
+                >
+                  {makeup.isPending
+                    ? 'Guardando…'
+                    : makeupState.isMakeup
+                      ? 'Quitar recupero'
+                      : 'Marcar recupero'}
+                </button>
+              </div>
+            ) : null}
           </div>
+        ) : null}
+        {makeup.isError ? (
+          <p className="text-sm text-rose">{(makeup.error as Error).message}</p>
         ) : null}
         {attendance.isError ? (
           <p className="text-sm text-rose">{(attendance.error as Error).message}</p>
