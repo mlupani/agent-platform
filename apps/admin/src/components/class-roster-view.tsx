@@ -176,6 +176,17 @@ export function ClassRosterView({
       await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
     },
   });
+  const makeup = useMutation({
+    mutationFn: ({ id, isMakeup }: { id: string; isMakeup: boolean }) =>
+      api(`/admin/appointments/${id}/makeup`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isMakeup }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['appointment-classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['appointments-calendar'] });
+    },
+  });
   const byDay = useMemo(() => {
     const map = new Map<string, ClassSession[]>();
     for (const day of days) map.set(toIsoDate(day), []);
@@ -384,18 +395,6 @@ export function ClassRosterView({
                                     </svg>
                                   </span>
                                 ) : null}
-                                {isMakeupAttendee ? (
-                                  <span
-                                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-violet-500 text-white text-[8px] font-bold"
-                                    title={
-                                      attendee.makeupsThisMonth
-                                        ? `Recupero — ${attendee.makeupsThisMonth} este mes`
-                                        : 'Recupero'
-                                    }
-                                  >
-                                    R
-                                  </span>
-                                ) : null}
                                 <span className="truncate">{label}</span>
                               </button>
                               {showToggle ? (
@@ -429,6 +428,34 @@ export function ClassRosterView({
                                       <path d="M6 6l12 12M18 6L6 18" />
                                     </svg>
                                   )}
+                                </button>
+                              ) : null}
+                              {!isTrialAttendee && !isCancelled ? (
+                                <button
+                                  type="button"
+                                  disabled={makeup.isPending}
+                                  aria-pressed={isMakeupAttendee}
+                                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold disabled:opacity-50 ${
+                                    isMakeupAttendee
+                                      ? 'border-violet-600 bg-violet-500 text-white hover:bg-violet-600'
+                                      : 'border-line bg-panel text-muted hover:bg-panel-2'
+                                  }`}
+                                  title={
+                                    isMakeupAttendee
+                                      ? `Quitar recupero${attendee.makeupsThisMonth ? ` — lleva ${attendee.makeupsThisMonth} este mes` : ''}`
+                                      : 'Marcar como recupero'
+                                  }
+                                  aria-label={
+                                    isMakeupAttendee
+                                      ? `Quitar recupero de ${baseName}`
+                                      : `Marcar la clase de ${baseName} como recupero`
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    makeup.mutate({ id: attendee.id, isMakeup: !isMakeupAttendee });
+                                  }}
+                                >
+                                  R
                                 </button>
                               ) : null}
                               <button
