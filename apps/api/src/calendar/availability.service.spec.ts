@@ -5,7 +5,10 @@ describe('AvailabilityService', () => {
   const prisma = {
     businessHour: { findUnique: jest.fn() },
     appointment: { findMany: jest.fn() },
-    classTemplate: { findMany: jest.fn().mockResolvedValue([]) },
+    classTemplate: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
     service: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const google = {
@@ -17,6 +20,7 @@ describe('AvailabilityService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.classTemplate.findMany.mockResolvedValue([]);
+    prisma.classTemplate.count.mockResolvedValue(0);
     prisma.appointment.findMany.mockResolvedValue([]);
     prisma.service.findFirst.mockResolvedValue(null);
     google.getBusyIntervals.mockResolvedValue([]);
@@ -155,6 +159,32 @@ describe('AvailabilityService', () => {
     });
 
     expect(slots.map((s) => s.start)).not.toContain('09:00');
+  });
+
+  it('en un día con grilla de clases fija, solo ofrece los inicios reales de clase (sin relleno cada 30 min)', async () => {
+    const zone = 'America/Argentina/Buenos_Aires';
+    // Estudio abierto 08:00–14:00 pero las clases arrancan solo 08/09/10/11.
+    prisma.businessHour.findUnique.mockResolvedValue({
+      isClosed: false,
+      ranges: [{ start: '08:00', end: '14:00' }],
+    });
+    prisma.classTemplate.count.mockResolvedValue(4);
+    prisma.classTemplate.findMany.mockResolvedValue([
+      { startTime: '08:00', capacity: 5, service: { id: 'svc', capacity: 5, durationMinutes: 50 } },
+      { startTime: '09:00', capacity: 5, service: { id: 'svc', capacity: 5, durationMinutes: 50 } },
+      { startTime: '10:00', capacity: 5, service: { id: 'svc', capacity: 5, durationMinutes: 50 } },
+      { startTime: '11:00', capacity: 5, service: { id: 'svc', capacity: 5, durationMinutes: 50 } },
+    ]);
+    prisma.appointment.findMany.mockResolvedValue([]);
+
+    const slots = await service.getAvailableSlots({
+      businessId: 'biz-1',
+      date: '2027-03-08', // lunes lejano: nada se filtra por "ahora"
+      durationMinutes: 30,
+      timezone: zone,
+    });
+
+    expect(slots.map((s) => s.start)).toEqual(['08:00', '09:00', '10:00', '11:00']);
   });
 
   it('getDayClassStarts includes classes that are already full', async () => {

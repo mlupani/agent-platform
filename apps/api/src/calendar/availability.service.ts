@@ -73,27 +73,38 @@ export class AvailabilityService {
     const dayStart = day.toUTC().toJSDate();
     const dayEnd = day.endOf('day').toUTC().toJSDate();
 
-    const [occupancies, googleBusy, requestedService] = await Promise.all([
-      this.loadOccupancies(
-        params.businessId,
-        day,
-        dayStart,
-        dayEnd,
-        zone,
-        params.excludeAppointmentId,
-      ),
-      this.google.getBusyIntervals(
-        params.businessId,
-        dayStart,
-        dayEnd,
-      ),
-      params.serviceId
-        ? this.prisma.service.findFirst({
-            where: { id: params.serviceId, businessId: params.businessId },
-            select: { id: true, capacity: true, durationMinutes: true },
-          })
-        : Promise.resolve(null),
-    ]);
+    const [occupancies, googleBusy, requestedService, weekdayClassTemplates] =
+      await Promise.all([
+        this.loadOccupancies(
+          params.businessId,
+          day,
+          dayStart,
+          dayEnd,
+          zone,
+          params.excludeAppointmentId,
+        ),
+        this.google.getBusyIntervals(
+          params.businessId,
+          dayStart,
+          dayEnd,
+        ),
+        params.serviceId
+          ? this.prisma.service.findFirst({
+              where: { id: params.serviceId, businessId: params.businessId },
+              select: { id: true, capacity: true, durationMinutes: true },
+            })
+          : Promise.resolve(null),
+        this.prisma.classTemplate.count({
+          where: { businessId: params.businessId, dayOfWeek },
+        }),
+      ]);
+
+    // Negocio con grilla de clases fija ese día (p.ej. estudio de Pilates): solo
+    // se puede reservar en el inicio real de una clase. No generamos horarios
+    // "de relleno" cada `durationMinutes` en los huecos del horario de atención
+    // (esos huecos ofrecían turnos inexistentes tipo 12:00/12:30 cuando la última
+    // clase arranca 11:00 pero el salón cierra 14:00).
+    const fixedClassGridDay = weekdayClassTemplates > 0;
 
     const durationMinutes =
       requestedService?.durationMinutes ?? params.durationMinutes;
@@ -131,13 +142,15 @@ export class AvailabilityService {
     const duration = { minutes: durationMinutes };
     const starts = new Map<number, DateTime>();
 
-    for (const interval of free) {
-      let cursor = interval.start!;
-      while (cursor.plus(duration) <= interval.end!) {
-        if (cursor.plus(duration) > now) {
-          starts.set(cursor.toMillis(), cursor);
+    if (!fixedClassGridDay) {
+      for (const interval of free) {
+        let cursor = interval.start!;
+        while (cursor.plus(duration) <= interval.end!) {
+          if (cursor.plus(duration) > now) {
+            starts.set(cursor.toMillis(), cursor);
+          }
+          cursor = cursor.plus(duration);
         }
-        cursor = cursor.plus(duration);
       }
     }
 
