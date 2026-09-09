@@ -10,9 +10,15 @@ import {
   SocialRateLimitError,
   safeSocialMessage,
 } from '../social.errors';
-import { parseAttachments } from '../../ai/transcription/inbound-audio';
 import {
+  isAudioAttachment,
+  isRenderableAttachment,
+  parseAttachments,
+} from '../../ai/transcription/inbound-audio';
+import {
+  CONTACT_PREFIX,
   formatSharedContactMessage,
+  isContactAttachment,
   parseSharedContact,
 } from '../../ai/transcription/parse-shared-contact';
 import type {
@@ -397,23 +403,43 @@ export class ZernioSocialProvider implements SocialProvider {
   private mapInboxMessage(
     row: Record<string, unknown>,
   ): SocialInboxMessage | null {
-    const attachments = row.attachments;
-    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
-    const sharedContact = hasAttachments
-      ? (attachments as unknown[])
-          .map((att) => parseSharedContact(att))
-          .find((contact) => contact !== null)
-      : undefined;
+    const attachments = Array.isArray(row.attachments) ? row.attachments : [];
+    const attRecords = attachments
+      .map((att) => asRecord(att))
+      .filter((rec): rec is Record<string, unknown> => rec !== null);
+    const sharedContact = attRecords
+      .map((att) => parseSharedContact(att))
+      .find((contact) => contact !== null);
+    const contactAttachment =
+      !sharedContact && attRecords.some((rec) => isContactAttachment(rec));
+    // Ver isRenderableAttachment: descartar entidades de Meta sin media real
+    // (p.ej. la tarjeta "Número de teléfono" auto-detectada del texto).
+    const hasRenderableAttachment = attRecords.some(isRenderableAttachment);
     const text =
       stringOf(row.message) ??
       stringOf(row.text) ??
       (sharedContact
         ? formatSharedContactMessage(sharedContact)
-        : hasAttachments
-          ? '[Adjunto]'
-          : undefined);
+        : contactAttachment
+          ? CONTACT_PREFIX
+          : hasRenderableAttachment
+            ? '[Adjunto]'
+            : undefined);
     const id = stringOf(row.id) ?? stringOf(row.messageId);
-    if (!id || !text) return null;
+    const isAudio = parseAttachments(attachments).some(isAudioAttachment);
+    if (!id || !text) {
+      if (id && attRecords.length && !isAudio) {
+        const types = attRecords.map((a) => stringOf(a.type) ?? '?').join(',');
+        this.logger.warn(
+          `Zernio msg ${id} descartado (sin media): tipos=[${types}]`,
+        );
+      }
+      return null;
+    }
+    if (text === '[Adjunto]' && !isAudio) {
+      const types = attRecords.map((a) => stringOf(a.type) ?? '?').join(',');
+      this.logger.warn(`Zernio msg ${id} solo adjunto: tipos=[${types}]`);
+    }
     const direction = stringOf(row.direction);
     return {
       id,

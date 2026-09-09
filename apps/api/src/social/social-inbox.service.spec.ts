@@ -71,6 +71,41 @@ describe('parseInboxEvent', () => {
     );
   });
 
+  it('ignora un mensaje que es sólo una entidad de Instagram sin media (tarjeta de teléfono auto-detectada)', () => {
+    const inbound = parseInboxEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_card',
+        conversationId: 'conv_1',
+        attachments: [
+          {
+            type: 'template',
+            payload: { title: 'Número de teléfono', subtitle: '011 6882-2662' },
+          },
+        ],
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+    expect(inbound).toBeNull();
+  });
+
+  it('trata un archivo de contacto (.vcf) como [Contacto], no como [Adjunto]', () => {
+    const inbound = parseInboxEvent({
+      event: 'message.received',
+      message: {
+        id: 'msg_vcf',
+        conversationId: 'conv_1',
+        attachments: [
+          { type: 'file', filename: 'Ana.vcf', url: 'https://cdn.example/a' },
+        ],
+        sender: { id: 'ig_user' },
+      },
+      account: { accountId: 'acc_ig', platform: 'instagram' },
+    });
+    expect(inbound?.text).toBe('[Contacto]');
+  });
+
   it('expone adjuntos de audio para transcribir', () => {
     const inbound = parseInboxEvent({
       event: 'message.received',

@@ -210,6 +210,55 @@ describe('ZernioSocialProvider', () => {
     );
   });
 
+  it('descarta un mensaje que es sólo una entidad de Instagram sin media', async () => {
+    mockSdk.messages.getInboxConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            id: 'msg_card',
+            conversationId: 'conv_1',
+            direction: 'incoming',
+            attachments: [
+              {
+                type: 'template',
+                payload: { title: 'Número de teléfono', subtitle: '011 6882-2662' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const provider = new ZernioSocialProvider(config as never);
+    const messages = await provider.listInboxMessages({
+      accountId: 'acc_ig',
+      conversationId: 'conv_1',
+    });
+    expect(messages).toEqual([]);
+  });
+
+  it('mapea un archivo de contacto (.vcf) a [Contacto], no a [Adjunto]', async () => {
+    mockSdk.messages.getInboxConversationMessages.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            id: 'msg_vcf',
+            conversationId: 'conv_1',
+            direction: 'incoming',
+            attachments: [
+              { type: 'file', filename: 'Ana.vcf', url: 'https://cdn.example/a' },
+            ],
+          },
+        ],
+      },
+    });
+    const provider = new ZernioSocialProvider(config as never);
+    const messages = await provider.listInboxMessages({
+      accountId: 'acc_ig',
+      conversationId: 'conv_1',
+    });
+    expect(messages[0].text).toBe('[Contacto]');
+  });
+
   it('envía un DM de Instagram al inbox de Zernio', async () => {
     mockSdk.messages.sendInboxMessage.mockResolvedValue({
       data: { data: { messageId: 'mid_1' } },

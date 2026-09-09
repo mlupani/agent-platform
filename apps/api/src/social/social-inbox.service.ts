@@ -6,11 +6,14 @@ import {
   formatVoiceMessage,
   isAudioAttachment,
   isPlaceholderCaption,
+  isRenderableAttachment,
   parseAttachments,
   type SocialAudioAttachment,
 } from '../ai/transcription/inbound-audio';
 import {
+  CONTACT_PREFIX,
   formatSharedContactMessage,
+  isContactAttachment,
   parseSharedContact,
 } from '../ai/transcription/parse-shared-contact';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -137,6 +140,35 @@ export class SocialInboxService {
 
   async handleMessageEvent(payload: unknown): Promise<boolean> {
     const inbound = parseInboxEvent(payload);
+
+    // Sin texto usable (descartado, o placeholder no-audio): registrar el shape
+    // real del adjunto/metadata para diagnosticar (Instagram/Messenger reenvían
+    // como "adjunto" tarjetas y entidades que arma Meta sola).
+    const placeholder =
+      !inbound ||
+      ((inbound.text === '[Adjunto]' || inbound.text === CONTACT_PREFIX) &&
+        !(inbound.attachments ?? []).some(isAudioAttachment));
+    if (placeholder) {
+      const msg =
+        asRecord(asRecord(payload)?.message) ??
+        asRecord(asRecord(asRecord(payload)?.data)?.message);
+      const attachments = Array.isArray(msg?.attachments)
+        ? (msg.attachments as unknown[])
+        : [];
+      if (attachments.length) {
+        const types = attachments
+          .map((a) => stringOf(asRecord(a)?.type) ?? '?')
+          .join(',');
+        const metaKeys = Object.keys(
+          asRecord(asRecord(payload)?.metadata) ?? {},
+        ).join(',');
+        this.logger.warn(
+          `Inbound social sin texto usable (${inbound?.text ?? 'descartado'}) ` +
+            `adjuntos=[${types}] metadata=[${metaKeys}]`,
+        );
+      }
+    }
+
     if (!inbound) return false;
 
     const connection = await this.prisma.socialConnection.findUnique({
@@ -1329,18 +1361,28 @@ export function parseInboxEvent(payload: unknown): SocialInboxInbound | null {
     ? (message?.attachments as unknown[])
     : [];
   const parsedAttachments = parseAttachments(message?.attachments);
-  const hasAttachments = parsedAttachments.length > 0;
   const sharedContact = rawAttachments
     .map((att) => parseSharedContact(att))
     .find((contact) => contact !== null);
+  const attRecords = rawAttachments
+    .map((att) => asRecord(att))
+    .filter((rec): rec is Record<string, unknown> => rec !== null);
+  const contactAttachment =
+    !sharedContact && attRecords.some((rec) => isContactAttachment(rec));
+  // Un mensaje que sólo trae una entidad de Meta (p.ej. la tarjeta "Número de
+  // teléfono" que arma sola cuando el cliente escribe su número) no tiene media
+  // real: se ignora para no disparar un "no puedo ver adjuntos" redundante.
+  const hasRenderableAttachment = attRecords.some(isRenderableAttachment);
   const text =
     stringOf(message?.text) ??
     stringOf(message?.message) ??
     (sharedContact
       ? formatSharedContactMessage(sharedContact)
-      : hasAttachments
-        ? '[Adjunto]'
-        : undefined);
+      : contactAttachment
+        ? CONTACT_PREFIX
+        : hasRenderableAttachment
+          ? '[Adjunto]'
+          : undefined);
   if (!text) return null;
 
   const direction = stringOf(message?.direction);

@@ -148,7 +148,12 @@ export function formatSharedContactMessage(
   caption?: string | null,
 ): string {
   const cap = caption?.trim();
-  const capPrefix = cap && cap !== CONTACT_PREFIX ? `${cap}\n` : '';
+  // WAHA entrega la vCard cruda en `payload.body`, que se pasa como caption:
+  // nunca la antepongas al `[Contacto]` o el mensaje deja de empezar con el
+  // placeholder y el modelo lo trata como un adjunto ilegible.
+  const realCaption =
+    cap && cap !== CONTACT_PREFIX && !/BEGIN:VCARD/i.test(cap) ? cap : '';
+  const capPrefix = realCaption ? `${realCaption}\n` : '';
 
   if (!contact || (!contact.name && contact.phones.length === 0)) {
     return `${capPrefix}${CONTACT_PREFIX}`.trim();
@@ -191,14 +196,30 @@ export function extractWahaVcards(payload: Record<string, unknown>): unknown {
   return null;
 }
 
-/** Instagram/Facebook (Zernio): ¿el attachment es una tarjeta de contacto? */
-export function isContactAttachment(attachment: {
-  type?: string;
-  mimeType?: string;
-}): boolean {
-  const type = (attachment.type ?? '').toLowerCase();
-  const mime = (attachment.mimeType ?? '').toLowerCase();
+const CONTACT_FILE_RE = /\.(vcf|vcard)$/i;
+
+/**
+ * Instagram/Facebook (Zernio): ¿el attachment es una tarjeta de contacto?
+ * Cubre el `type: 'contact'` sintético, mime vCard y un archivo `.vcf`/`.vcard`
+ * compartido (Instagram/Messenger sólo exponen tipos image/video/audio/file/
+ * sticker/share: una tarjeta de contacto llega como `file` con ese nombre).
+ */
+export function isContactAttachment(
+  attachment: Record<string, unknown>,
+): boolean {
+  const nested = asRecord(attachment.payload) ?? {};
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const value = stringOf(attachment[k]) ?? stringOf(nested[k]);
+      if (value) return value;
+    }
+    return '';
+  };
+  const type = pick('type').toLowerCase();
+  const mime = pick('mimeType', 'mimetype').toLowerCase();
+  const filename = pick('filename', 'name');
   if (CONTACT_TYPES.has(type)) return true;
+  if (CONTACT_FILE_RE.test(filename)) return true;
   return (
     type.includes('contact') ||
     mime.includes('vcard') ||

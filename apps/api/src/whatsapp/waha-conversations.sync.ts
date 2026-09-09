@@ -593,12 +593,17 @@ export class WahaConversationsSyncService {
 
   private messageContent(item: WahaChatMessage): string | null {
     const body = typeof item.body === 'string' ? item.body.trim() : '';
+    const hasVcards = Array.isArray(item.vCards) && item.vCards.length > 0;
+    // Tarjeta de contacto: WAHA la deja en `vCards` o cruda en `body`.
+    // Nunca guardar la vCard cruda como contenido/preview.
+    if (hasVcards || /^BEGIN:VCARD/i.test(body)) {
+      return formatSharedContactMessage(
+        parseSharedContact(hasVcards ? item.vCards : body),
+      );
+    }
     if (body) return body;
     if (item.hasMedia) return '[Media]';
     if (item.location) return '[Ubicación]';
-    if (item.vCards && item.vCards.length > 0) {
-      return formatSharedContactMessage(parseSharedContact(item.vCards));
-    }
     return null;
   }
 

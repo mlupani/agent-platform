@@ -3,6 +3,7 @@ import {
   formatVoiceMessage,
   isAudioAttachment,
   isPlaceholderCaption,
+  isRenderableAttachment,
   isWahaAudioPayload,
   rewriteWahaFileUrl,
   transcriptionLanguage,
@@ -66,5 +67,28 @@ describe('inbound-audio', () => {
   it('normalizes language to ISO-639-1', () => {
     expect(transcriptionLanguage('es-AR')).toBe('es');
     expect(transcriptionLanguage('')).toBeUndefined();
+  });
+
+  describe('isRenderableAttachment', () => {
+    it('is true for known media types or anything with a url', () => {
+      expect(isRenderableAttachment({ type: 'image' })).toBe(true);
+      expect(isRenderableAttachment({ type: 'video', url: 'https://cdn/v.mp4' })).toBe(
+        true,
+      );
+      expect(
+        isRenderableAttachment({ type: 'weird', payload: { url: 'https://cdn/x' } }),
+      ).toBe(true);
+      expect(isRenderableAttachment({ type: 'share' })).toBe(true);
+    });
+
+    it('is false for a Meta UI entity with no media (auto-detected phone card)', () => {
+      expect(
+        isRenderableAttachment({
+          type: 'template',
+          payload: { title: 'Número de teléfono', subtitle: '011 6882-2662' },
+        }),
+      ).toBe(false);
+      expect(isRenderableAttachment({ type: 'unsupported' })).toBe(false);
+    });
   });
 });

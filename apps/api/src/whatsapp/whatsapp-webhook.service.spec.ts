@@ -422,6 +422,74 @@ describe('WhatsAppWebhookService (WAHA)', () => {
     );
   });
 
+  it('parsea la tarjeta de contacto cuando la vCard llega en body (no la trata como adjunto)', async () => {
+    config.findBySessionName.mockResolvedValue({
+      businessId: 'biz-1',
+      sessionName: 'default',
+      enabled: true,
+    });
+    redis.acquireLock.mockResolvedValue(true);
+    prisma.message.findFirst.mockResolvedValue(null);
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.conversation.findMany.mockResolvedValue([
+      {
+        id: 'conv-1',
+        status: 'AI',
+        hiddenAt: null,
+        metadata: {},
+        externalId: '5491164369670@c.us',
+        contactPhone: '5491164369670',
+        contactName: null,
+      },
+    ]);
+    prisma.conversation.update.mockResolvedValue({
+      id: 'conv-1',
+      status: 'AI',
+      hiddenAt: null,
+      metadata: {},
+      externalId: '5491164369670@c.us',
+    });
+    prisma.conversation.findUnique.mockResolvedValue({
+      unreadCount: 1,
+      lastMessageAt: new Date(),
+    });
+    prisma.conversation.updateMany.mockResolvedValue({ count: 0 });
+    agent.run.mockResolvedValue({ status: 'AI', message: 'Gracias Julieta' });
+    providers.getForBusiness.mockResolvedValue({
+      sendText: jest.fn().mockResolvedValue({ externalId: 'out-1' }),
+    });
+
+    const vcard = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'FN:Julieta Lujan Da Silva',
+      'TEL;type=CELL;waid=5491164369670:+54 9 11 6436-9670',
+      'END:VCARD',
+    ].join('\n');
+
+    const result = await service.handleWahaEvent({
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: 'false_5491164369670@c.us_VCARDBODY1',
+        from: '5491164369670@c.us',
+        fromMe: false,
+        body: vcard,
+        type: 'vcard',
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toEqual({ processed: 1 });
+    expect(agent.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessId: 'biz-1',
+        channel: 'WHATSAPP',
+        message: '[Contacto] Julieta Lujan Da Silva · +54 9 11 6436-9670',
+      }),
+    );
+  });
+
   it('reabrir un chat oculto que estaba en WAITING_HUMAN no reactiva el bot', async () => {
     config.findBySessionName.mockResolvedValue({
       businessId: 'biz-1',

@@ -95,6 +95,15 @@ describe('formatSharedContactMessage', () => {
     expect(formatSharedContactMessage(null)).toBe('[Contacto]');
     expect(formatSharedContactMessage({ name: null, phones: [] })).toBe('[Contacto]');
   });
+
+  it('ignores a caption that is itself a raw vCard (WAHA pone la vCard en body)', () => {
+    expect(
+      formatSharedContactMessage(
+        { name: 'Julieta Lujan Da Silva', phones: ['+54 9 11 6436-9670'] },
+        VCARD,
+      ),
+    ).toBe('[Contacto] Julieta Lujan Da Silva · +54 9 11 6436-9670');
+  });
 });
 
 describe('isWahaContactPayload / extractWahaVcards', () => {
@@ -124,5 +133,13 @@ describe('isContactAttachment', () => {
     expect(isContactAttachment({ type: 'contact' })).toBe(true);
     expect(isContactAttachment({ type: 'file', mimeType: 'text/vcard' })).toBe(true);
     expect(isContactAttachment({ type: 'image', mimeType: 'image/jpeg' })).toBe(false);
+  });
+
+  it('detects a shared .vcf/.vcard file by its filename', () => {
+    expect(isContactAttachment({ type: 'file', filename: 'Julieta.vcf' })).toBe(true);
+    expect(isContactAttachment({ type: 'file', name: 'contacto.vcard' })).toBe(true);
+    expect(isContactAttachment({ type: 'file', filename: 'presupuesto.pdf' })).toBe(
+      false,
+    );
   });
 });

@@ -138,6 +138,60 @@ export function parseAttachments(value: unknown): SocialAudioAttachment[] {
     .filter((item): item is SocialAudioAttachment => Boolean(item));
 }
 
+const RENDERABLE_ATTACHMENT_TYPES = [
+  'image',
+  'photo',
+  'video',
+  'audio',
+  'voice',
+  'ptt',
+  'file',
+  'document',
+  'sticker',
+  'share',
+  'reel',
+  'story',
+  'animated_image',
+  'gif',
+  'location',
+];
+
+/**
+ * ¿El adjunto es algo real que el usuario mandó (foto, video, archivo, sticker,
+ * post compartido…) y no una tarjeta/entidad que arma Meta sola?
+ *
+ * Instagram/Messenger reenvían como "adjunto" cosas que NO son archivos: p.ej.
+ * cuando el cliente escribe su teléfono, Meta lo auto-detecta y manda una
+ * tarjeta "Número de teléfono" con botones. Ese mensaje no tiene media y no
+ * debería disparar una respuesta ("no puedo ver adjuntos") — el dato ya vino
+ * en el texto del cliente.
+ */
+export function isRenderableAttachment(
+  attachment: Record<string, unknown>,
+): boolean {
+  const nested =
+    asRecord(attachment.payload) ??
+    asRecord(attachment.media) ??
+    asRecord(attachment.file) ??
+    {};
+  const url =
+    stringOf(attachment.url) ??
+    stringOf(attachment.mediaUrl) ??
+    stringOf(attachment.src) ??
+    stringOf(attachment.href) ??
+    stringOf(nested.url) ??
+    stringOf(nested.mediaUrl) ??
+    stringOf(nested.src);
+  if (url) return true;
+  const type = (
+    stringOf(attachment.type) ??
+    stringOf(nested.type) ??
+    ''
+  ).toLowerCase();
+  if (!type) return false;
+  return RENDERABLE_ATTACHMENT_TYPES.some((t) => type.includes(t));
+}
+
 export function isPlaceholderCaption(text?: string | null): boolean {
   const value = (text ?? '').trim();
   return (
