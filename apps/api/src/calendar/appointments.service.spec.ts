@@ -636,4 +636,132 @@ describe('AppointmentsService', () => {
     expect(feed.items[0].isMakeup).toBe(false);
     expect(feed.items[0].makeupsThisMonth).toBe(0);
   });
+
+  describe('avisos por email según el origen de la acción', () => {
+    const futureSlot = {
+      start: '17:00',
+      end: '17:30',
+      startIso: '2099-09-08T17:00:00.000-03:00',
+      endIso: '2099-09-08T17:30:00.000-03:00',
+    };
+
+    const mockCreateHappyPath = () => {
+      availability.getAvailableSlots.mockResolvedValue([futureSlot]);
+      prisma.appointment.findFirst.mockResolvedValue(null);
+      prisma.appointment.create.mockImplementation(
+        async ({ data }: { data: object }) => ({
+          id: 'apt-src',
+          ...(data as object),
+          startsAt: new Date('2099-09-08T20:00:00.000Z'),
+          endsAt: new Date('2099-09-08T20:30:00.000Z'),
+          status: 'confirmed',
+          service: null,
+        }),
+      );
+    };
+
+    const baseCreateInput = {
+      businessId: 'biz-1',
+      startsAt: new Date('2099-09-08T20:00:00.000Z'),
+      timezone: 'America/Argentina/Buenos_Aires',
+      contactName: 'Julieta',
+      contactPhone: '1164369670',
+    };
+
+    const mockCancelHappyPath = () => {
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'apt-1',
+        businessId: 'biz-1',
+        status: 'confirmed',
+        googleEventId: null,
+        notes: null,
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        service: null,
+      });
+      prisma.appointment.update.mockResolvedValue({
+        id: 'apt-1',
+        status: 'cancelled',
+        service: null,
+      });
+    };
+
+    const mockRescheduleHappyPath = () => {
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'apt-1',
+        businessId: 'biz-1',
+        status: 'confirmed',
+        googleEventId: null,
+        serviceId: null,
+        timezone: 'America/Argentina/Buenos_Aires',
+        startsAt: new Date('2099-09-08T20:00:00.000Z'),
+        endsAt: new Date('2099-09-08T20:30:00.000Z'),
+        service: null,
+      });
+      availability.getAvailableSlots.mockResolvedValue([futureSlot]);
+      prisma.appointmentReminderLog.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.appointment.update.mockResolvedValue({
+        id: 'apt-1',
+        status: 'confirmed',
+        service: null,
+      });
+    };
+
+    it('create con source assistant dispara el aviso de clase agendada', async () => {
+      mockCreateHappyPath();
+
+      await service.create({ ...baseCreateInput, source: 'assistant' });
+
+      expect(adminNotify.notifyAppointmentCreated).toHaveBeenCalledTimes(1);
+    });
+
+    it('create manual (sin source) no dispara el aviso de clase agendada', async () => {
+      mockCreateHappyPath();
+
+      await service.create({ ...baseCreateInput });
+
+      expect(adminNotify.notifyAppointmentCreated).not.toHaveBeenCalled();
+    });
+
+    it('cancel con source assistant dispara el aviso de clase cancelada', async () => {
+      mockCancelHappyPath();
+
+      await service.cancel('biz-1', 'apt-1', 'motivo', 'assistant');
+
+      expect(adminNotify.notifyAppointmentCancelled).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancel manual no dispara el aviso de clase cancelada', async () => {
+      mockCancelHappyPath();
+
+      await service.cancel('biz-1', 'apt-1', 'motivo', 'manual');
+
+      expect(adminNotify.notifyAppointmentCancelled).not.toHaveBeenCalled();
+    });
+
+    it('reschedule con source assistant dispara el aviso de clase reprogramada', async () => {
+      mockRescheduleHappyPath();
+
+      await service.reschedule(
+        'biz-1',
+        'apt-1',
+        new Date('2099-09-08T20:00:00.000Z'),
+        'assistant',
+      );
+
+      expect(adminNotify.notifyAppointmentRescheduled).toHaveBeenCalledTimes(1);
+    });
+
+    it('reschedule manual no dispara el aviso de clase reprogramada', async () => {
+      mockRescheduleHappyPath();
+
+      await service.reschedule(
+        'biz-1',
+        'apt-1',
+        new Date('2099-09-08T20:00:00.000Z'),
+        'manual',
+      );
+
+      expect(adminNotify.notifyAppointmentRescheduled).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -102,6 +102,7 @@ export class CreateAppointmentTool implements AgentTool {
         notes: data.notes,
         isTrial: data.isTrial,
         isMakeup: data.isMakeup,
+        source: 'assistant',
       });
 
       const messages = (business.defaultMessages ?? {}) as Record<

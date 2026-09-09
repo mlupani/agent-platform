@@ -29,6 +29,7 @@ export class RescheduleAppointmentTool implements AgentTool {
         context.businessId,
         data.appointmentId,
         new Date(data.startsAt),
+        'assistant',
       );
       return {
         success: true,

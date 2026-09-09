@@ -54,6 +54,7 @@ export class CancelAppointmentTool implements AgentTool {
         context.businessId,
         id,
         data.reason,
+        'assistant',
       );
       const business = await this.prisma.business.findUniqueOrThrow({
         where: { id: context.businessId },

@@ -140,6 +140,7 @@ export class AppointmentsAdminController {
       ...body,
       startsAt: new Date(body.startsAt),
       timezone: business.timezone,
+      source: 'manual',
     });
   }
 
@@ -160,7 +161,7 @@ export class AppointmentsAdminController {
     body: z.infer<typeof cancelSchema>,
   ) {
     const businessId = await this.businesses.getCurrentId();
-    return this.appointments.cancel(businessId, id, body.reason);
+    return this.appointments.cancel(businessId, id, body.reason, 'manual');
   }
 
   @Patch(':id/reschedule')
@@ -174,6 +175,7 @@ export class AppointmentsAdminController {
       businessId,
       id,
       new Date(body.startsAt),
+      'manual',
     );
   }
 

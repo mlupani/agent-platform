@@ -13,7 +13,10 @@ import { GoogleCalendarService } from './google-calendar.service';
 import { MakeupService, makeupKey } from '../packs/makeup.service';
 import { PackBalanceService } from '../packs/pack-balance.service';
 import { AdminNotifyService } from '../notifications/admin-notify.service';
-import type { CreateAppointmentInput } from './calendar.types';
+import type {
+  AppointmentActionSource,
+  CreateAppointmentInput,
+} from './calendar.types';
 
 @Injectable()
 export class AppointmentsService {
@@ -427,7 +430,7 @@ export class AppointmentsService {
       return { ok: true, source: 'google' as const };
     }
 
-    await this.cancel(businessId, id, 'Eliminado desde el calendario');
+    await this.cancel(businessId, id, 'Eliminado desde el calendario', 'manual');
     return { ok: true, source: 'local' as const };
   }
 
@@ -745,7 +748,10 @@ export class AppointmentsService {
       },
     });
 
-    void this.adminNotify.notifyAppointmentCreated(created);
+    // Solo el asistente dispara el aviso por email; las altas manuales del panel no.
+    if (input.source === 'assistant') {
+      void this.adminNotify.notifyAppointmentCreated(created);
+    }
 
     if ((created.status ?? 'confirmed') === 'confirmed') {
       await this.conversions.maybeConvertFromSignal({
@@ -772,7 +778,12 @@ export class AppointmentsService {
     return created;
   }
 
-  async cancel(businessId: string, id: string, reason?: string) {
+  async cancel(
+    businessId: string,
+    id: string,
+    reason?: string,
+    source?: AppointmentActionSource,
+  ) {
     const appointment = await this.get(businessId, id);
     if (appointment.status === 'cancelled') return appointment;
 
@@ -829,7 +840,9 @@ export class AppointmentsService {
           });
         });
         const refunded = await this.get(businessId, id);
-        void this.adminNotify.notifyAppointmentCancelled(refunded);
+        if (source === 'assistant') {
+          void this.adminNotify.notifyAppointmentCancelled(refunded);
+        }
         return refunded;
       } catch (error) {
         this.logger.warn(
@@ -860,7 +873,10 @@ export class AppointmentsService {
         },
       },
     });
-    void this.adminNotify.notifyAppointmentCancelled(cancelled);
+    // Solo el asistente dispara el aviso por email; las bajas manuales del panel no.
+    if (source === 'assistant') {
+      void this.adminNotify.notifyAppointmentCancelled(cancelled);
+    }
     return cancelled;
   }
 
@@ -889,7 +905,12 @@ export class AppointmentsService {
     });
   }
 
-  async reschedule(businessId: string, id: string, startsAtInput: Date) {
+  async reschedule(
+    businessId: string,
+    id: string,
+    startsAtInput: Date,
+    source?: AppointmentActionSource,
+  ) {
     const appointment = await this.get(businessId, id);
     if (appointment.status === 'cancelled') {
       throw new BadRequestException('La cita ya está cancelada');
@@ -958,10 +979,13 @@ export class AppointmentsService {
         },
       },
     });
-    void this.adminNotify.notifyAppointmentRescheduled({
-      ...updated,
-      previousStartsAt,
-    });
+    // Solo el asistente dispara el aviso por email; las reprogramaciones manuales del panel no.
+    if (source === 'assistant') {
+      void this.adminNotify.notifyAppointmentRescheduled({
+        ...updated,
+        previousStartsAt,
+      });
+    }
     return updated;
   }
 

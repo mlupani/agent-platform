@@ -25,6 +25,12 @@ export interface AvailableSlot {
   serviceId?: string;
 }
 
+/**
+ * Quién originó la acción sobre la cita. Solo `'assistant'` dispara los avisos
+ * por email al estudio; las acciones manuales desde el panel no notifican.
+ */
+export type AppointmentActionSource = 'assistant' | 'manual';
+
 export interface CreateAppointmentInput {
   businessId: string;
   serviceId?: string;
@@ -41,4 +47,6 @@ export interface CreateAppointmentInput {
   isTrial?: boolean;
   /** Recupero: la alumna repone una clase a la que no pudo asistir. */
   isMakeup?: boolean;
+  /** Origen de la acción. Sin especificar se trata como `'manual'` (no notifica). */
+  source?: AppointmentActionSource;
 }
